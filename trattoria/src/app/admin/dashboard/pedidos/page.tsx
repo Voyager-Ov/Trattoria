@@ -8,31 +8,24 @@ import {
     ChefHat,
     XCircle,
     Search,
-    Filter,
-    MoreVertical,
     Eye,
-    Calendar,
     ShoppingBag,
     User,
-    ArrowRight,
     Plus,
     RefreshCw,
-    AlertCircle,
     Banknote,
     CreditCard,
     ChevronUp,
     ChevronDown,
     MapPin,
     Phone,
-    Package
+    type LucideIcon
 } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuTrigger,
-    DropdownMenuSeparator,
-    DropdownMenuLabel
+    DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +33,50 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { updateOrderStatus, toggleOrderPayment } from "./actions";
 import { toast } from "sonner";
+import {
+    Sheet,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+    SheetDescription,
+    SheetFooter,
+} from "@/components/ui/sheet";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { EstadoPedido } from "@prisma/client";
+
+interface OrderItem {
+    id: string;
+    nombreProduct: string;
+    cantidad: number;
+    precioUnitario: number | string;
+    subtotal: number | string;
+}
+
+interface Order {
+    id: string;
+    numero: string;
+    origen: string;
+    clienteNombre: string | null;
+    clienteTelefono: string | null;
+    clienteDireccion: string | null;
+    recibidoEn: string;
+    estado: EstadoPedido;
+    cobrado: boolean;
+    total: number | string;
+    items: OrderItem[];
+    customer?: {
+        nombre: string;
+    } | null;
+}
 
 // Native formatter for local dates
 const formatDate = (date: string | Date) => {
@@ -52,14 +88,22 @@ const formatDate = (date: string | Date) => {
     }).format(new Date(date));
 };
 
-const STATUS_CONFIG: Record<string, { label: string, color: string, icon: any, border: string, bg: string, variant: string }> = {
+const STATUS_CONFIG: Record<string, { label: string, color: string, icon: LucideIcon, border: string, bg: string, variant: string }> = {
     RECIBIDO: {
-        label: "Recibido",
+        label: "Recibido (Web)",
         color: "text-blue-600",
         border: "border-blue-100",
         bg: "bg-blue-50/50",
-        icon: Clock,
+        icon: ShoppingBag,
         variant: "info"
+    },
+    PENDIENTE: {
+        label: "Pendiente (Caja)",
+        color: "text-amber-600",
+        border: "border-amber-100",
+        bg: "bg-amber-50/50",
+        icon: Clock,
+        variant: "warning"
     },
     EN_PREPARACION: {
         label: "Cocina",
@@ -97,9 +141,8 @@ const STATUS_CONFIG: Record<string, { label: string, color: string, icon: any, b
 
 export default function PedidosPage() {
     const router = useRouter();
-    const [orders, setOrders] = useState<any[]>([]);
+    const [orders, setOrders] = useState<Order[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("TODOS");
 
@@ -113,55 +156,116 @@ export default function PedidosPage() {
     const [orderBy, setOrderBy] = useState("recibidoEn");
     const [orderDir, setOrderDir] = useState<'asc' | 'desc'>("desc");
 
-    const fetchOrders = useCallback(async () => {
-        setIsLoading(true);
-        setError(null);
+    // Cancellation Sheet State
+    const [isCancelSheetOpen, setIsCancelSheetOpen] = useState(false);
+    const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+    const [cancelMotive, setCancelMotive] = useState("");
+    const [isCancelling, setIsCancelling] = useState(false);
+
+    // Payment Sheet State
+    const [isPaymentSheetOpen, setIsPaymentSheetOpen] = useState(false);
+    const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null);
+    const [paymentMethod, setPaymentMethod] = useState("EFECTIVO");
+    const [isSavingPayment, setIsSavingPayment] = useState(false);
+
+    const fetchOrders = useCallback(async (silent = false) => {
+        if (!silent) setIsLoading(true);
         try {
-            const params = new URLSearchParams();
-            if (statusFilter !== "TODOS") params.append("status", statusFilter);
-            if (searchQuery) params.append("search", searchQuery);
-            params.append("page", page.toString());
-            params.append("limit", limit.toString());
-            params.append("orderBy", orderBy);
-            params.append("orderDir", orderDir);
-
-            const res = await fetch(`/api/admin/dashboard/pedidos?${params.toString()}`);
-            if (!res.ok) throw new Error("Error al obtener pedidos");
-
+            const queryParams = new URLSearchParams({
+                status: statusFilter,
+                search: searchQuery,
+                page: page.toString(),
+                limit: limit.toString(), // Added limit back as it was in original and is needed
+                orderBy,
+                orderDir,
+            });
+            const res = await fetch(`/api/admin/dashboard/pedidos?${queryParams}`);
             const data = await res.json();
-            setOrders(data.orders);
-            setTotal(data.total);
-            setTotalPages(data.totalPages);
-        } catch (err) {
-            setError("No se pudieron cargar los pedidos. Intenta de nuevo.");
-            toast.error("Error de conexión");
+            if (data.orders) {
+                setOrders(data.orders);
+                setTotalPages(data.totalPages);
+                setTotal(data.total);
+            }
+        } catch {
+            toast.error("Error al cargar pedidos");
         } finally {
-            setIsLoading(false);
+            if (!silent) setIsLoading(false);
         }
     }, [statusFilter, searchQuery, page, limit, orderBy, orderDir]);
 
     useEffect(() => {
         fetchOrders();
+        // Set up polling for real-time updates - Silent refresh doesn't flash the UI
+        const interval = setInterval(() => fetchOrders(true), 10000);
+        return () => clearInterval(interval);
     }, [fetchOrders]);
 
-    const handleStatusUpdate = async (id: string, newStatus: any) => {
+    const handleStatusUpdate = async (id: string, newStatus: EstadoPedido) => {
+        if (newStatus === 'CANCELADO') {
+            setCancellingOrderId(id);
+            setCancelMotive("");
+            setIsCancelSheetOpen(true);
+            return;
+        }
+
         const result = await updateOrderStatus(id, newStatus);
         if (result.success) {
             toast.success("Estado actualizado");
-            fetchOrders();
+            fetchOrders(true); // Silent update
         } else {
             toast.error(result.error || "Error al actualizar");
         }
     };
 
-    const handleTogglePayment = async (id: string, currentCobrado: boolean) => {
-        const result = await toggleOrderPayment(id, !currentCobrado);
+    const handleConfirmCancel = async () => {
+        if (!cancellingOrderId || !cancelMotive.trim()) {
+            toast.error("Debes ingresar un motivo");
+            return;
+        }
+
+        setIsCancelling(true);
+        const result = await updateOrderStatus(cancellingOrderId, 'CANCELADO', cancelMotive);
         if (result.success) {
-            toast.success(currentCobrado ? "Marcado como pendiente" : "Pedido cobrado");
+            toast.success("Pedido cancelado");
+            setIsCancelSheetOpen(false);
+            fetchOrders();
+        } else {
+            toast.error(result.error || "Error al cancelar");
+        }
+        setIsCancelling(false);
+    };
+
+    const handleTogglePayment = async (id: string, currentCobrado: boolean) => {
+        if (!currentCobrado) {
+            // Opening payment selector
+            setPaymentOrderId(id);
+            setPaymentMethod("EFECTIVO");
+            setIsPaymentSheetOpen(true);
+            return;
+        }
+
+        const result = await toggleOrderPayment(id, false);
+        if (result.success) {
+            toast.success("Marcado como pendiente");
             fetchOrders();
         } else {
             toast.error(result.error || "Error al actualizar pago");
         }
+    };
+
+    const handleConfirmPayment = async () => {
+        if (!paymentOrderId) return;
+
+        setIsSavingPayment(true);
+        const result = await toggleOrderPayment(paymentOrderId, true, paymentMethod);
+        if (result.success) {
+            toast.success("Pedido cobrado");
+            setIsPaymentSheetOpen(false);
+            fetchOrders();
+        } else {
+            toast.error(result.error || "Error al registrar pago");
+        }
+        setIsSavingPayment(false);
     };
 
     const handleSort = (field: string) => {
@@ -203,7 +307,7 @@ export default function PedidosPage() {
                 {/* Filters Row - Refactored for Stability and Premium Look */}
                 <div className="mt-8 flex flex-col md:flex-row gap-4 items-end md:items-center justify-between">
                     <div className="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-[1.5rem] border border-zinc-200 shadow-sm">
-                        {["TODOS", "RECIBIDO", "EN_PREPARACION", "LISTO", "FINALIZADO"].map((s) => (
+                        {["TODOS", "RECIBIDO", "PENDIENTE", "EN_PREPARACION", "LISTO", "FINALIZADO"].map((s) => (
                             <button
                                 key={s}
                                 onClick={() => setStatusFilter(s)}
@@ -284,7 +388,7 @@ export default function PedidosPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-zinc-50">
-                                {isLoading ? (
+                                {isLoading && orders.length === 0 ? (
                                     Array(limit).fill(0).map((_, i) => (
                                         <tr key={i} className="animate-pulse">
                                             <td colSpan={7} className="px-8 py-8 h-20 bg-zinc-50/10" />
@@ -317,7 +421,10 @@ export default function PedidosPage() {
                                         const Icon = config.icon;
 
                                         return (
-                                            <tr key={order.id} className="group hover:bg-zinc-50/50 transition-colors duration-200">
+                                            <tr
+                                                key={order.id}
+                                                className="group hover:bg-zinc-50/50 transition-colors duration-200 animate-in fade-in slide-in-from-top-1 duration-500"
+                                            >
                                                 <td className="px-8 py-6">
                                                     <div className="flex items-center gap-3">
                                                         <div className="h-10 w-10 rounded-2xl bg-zinc-900 flex items-center justify-center text-white font-black text-[10px] shadow-lg shadow-zinc-200">
@@ -341,6 +448,12 @@ export default function PedidosPage() {
                                                         </span>
                                                         <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wide">
                                                             Recibido {formatDate(order.recibidoEn)}
+                                                            {/* New indicator for orders created in the last minute */}
+                                                            {new Date().getTime() - new Date(order.recibidoEn).getTime() < 60000 && (
+                                                                <span className="ml-2 inline-flex items-center gap-1 bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
+                                                                    NUEVO
+                                                                </span>
+                                                            )}
                                                         </span>
                                                     </div>
                                                 </td>
@@ -365,15 +478,16 @@ export default function PedidosPage() {
                                                 </td>
                                                 <td className="px-8 py-6">
                                                     <div className="flex flex-col gap-1">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <Package size={14} className="text-zinc-300" />
-                                                            <span className="text-xs font-bold text-zinc-600">
-                                                                {order.items.length} {order.items.length === 1 ? 'Producto' : 'Productos'}
-                                                            </span>
-                                                        </div>
-                                                        <p className="text-[10px] text-zinc-400 font-medium line-clamp-1 max-w-[150px]">
-                                                            {order.items.map((item: any) => `${item.cantidad}x ${item.nombreProduct}`).join(', ')}
-                                                        </p>
+                                                        {order.items.map((item: OrderItem) => (
+                                                            <div key={item.id} className="flex items-center gap-1.5 min-w-[150px]">
+                                                                <div className="h-5 w-5 rounded-md bg-zinc-100 flex items-center justify-center text-[10px] font-black text-zinc-500 shrink-0">
+                                                                    {Number(item.cantidad)}
+                                                                </div>
+                                                                <span className="text-[11px] font-bold text-zinc-600 line-clamp-1">
+                                                                    {item.nombreProduct}
+                                                                </span>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </td>
                                                 <td className="px-8 py-6">
@@ -394,7 +508,7 @@ export default function PedidosPage() {
                                                                 {Object.keys(STATUS_CONFIG).map((status) => (
                                                                     <DropdownMenuItem
                                                                         key={status}
-                                                                        onClick={() => handleStatusUpdate(order.id, status)}
+                                                                        onClick={() => handleStatusUpdate(order.id, status as EstadoPedido)}
                                                                         className="flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer"
                                                                     >
                                                                         {React.createElement(STATUS_CONFIG[status].icon, { size: 14, className: STATUS_CONFIG[status].color })}
@@ -427,38 +541,34 @@ export default function PedidosPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-8 py-6">
-                                                    <div className="flex items-center justify-center">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" className="h-10 w-10 p-0 rounded-2xl hover:bg-white hover:border border-zinc-100 shadow-sm transition-all duration-200 group-hover:bg-white">
-                                                                    <MoreVertical className="h-4 w-4 text-zinc-400" />
-                                                                </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end" className="w-[220px] p-2 rounded-3xl border-zinc-100 shadow-2xl">
-                                                                <DropdownMenuLabel className="px-4 py-3 text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">Acciones</DropdownMenuLabel>
-                                                                <DropdownMenuItem className="flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer group">
-                                                                    <div className="h-8 w-8 rounded-xl bg-zinc-50 flex items-center justify-center group-hover:bg-zinc-900 group-hover:text-white transition-colors">
-                                                                        <Eye size={16} />
-                                                                    </div>
-                                                                    <span className="font-bold text-zinc-600 group-hover:text-zinc-900">Ver Detalles</span>
-                                                                </DropdownMenuItem>
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        {/* View Button */}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => router.push(`/admin/dashboard/pedidos/${order.id}`)}
+                                                            className="h-9 px-3 rounded-xl hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 border border-transparent hover:border-zinc-200 transition-all active:scale-95 gap-2"
+                                                            title="Ver Detalles"
+                                                        >
+                                                            <Eye size={14} />
+                                                            <span className="text-[10px] font-black uppercase tracking-widest hidden lg:inline">Detalles</span>
+                                                        </Button>
 
-                                                                <DropdownMenuItem
-                                                                    className="flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer group"
-                                                                    onClick={() => handleTogglePayment(order.id, order.cobrado)}
-                                                                >
-                                                                    <div className={cn(
-                                                                        "h-8 w-8 rounded-xl flex items-center justify-center transition-colors",
-                                                                        order.cobrado ? "bg-amber-50 text-amber-500 group-hover:bg-amber-500 group-hover:text-white" : "bg-emerald-50 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white"
-                                                                    )}>
-                                                                        <Banknote size={16} />
-                                                                    </div>
-                                                                    <span className="font-bold text-zinc-600 group-hover:text-zinc-900">
-                                                                        {order.cobrado ? "Marcar como Pendiente" : "Marcar como Cobrado"}
-                                                                    </span>
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
+                                                        {/* Single "Cobrar" Button outside menu */}
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            disabled={order.cobrado}
+                                                            onClick={() => handleTogglePayment(order.id, order.cobrado)}
+                                                            className={cn(
+                                                                "h-9 px-4 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-sm",
+                                                                order.cobrado
+                                                                    ? "bg-zinc-50 text-zinc-300 border-zinc-100 cursor-not-allowed"
+                                                                    : "bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-600 hover:text-white hover:border-emerald-600"
+                                                            )}
+                                                        >
+                                                            {order.cobrado ? "Cobrado" : "Cobrar"}
+                                                        </Button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -515,6 +625,95 @@ export default function PedidosPage() {
                     )}
                 </Card>
             </div>
+            {/* Cancellation Sheet */}
+            <Sheet open={isCancelSheetOpen} onOpenChange={setIsCancelSheetOpen}>
+                <SheetContent className="sm:max-w-md">
+                    <SheetHeader>
+                        <SheetTitle className="text-2xl font-black uppercase tracking-tight text-red-600">Cancelar Pedido</SheetTitle>
+                        <SheetDescription className="font-medium">
+                            Por favor ingresa el motivo de la cancelación. Esta acción es definitiva.
+                        </SheetDescription>
+                    </SheetHeader>
+                    <div className="py-6 space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="motive" className="text-xs font-bold uppercase text-zinc-400 tracking-wider text-left block">
+                                Motivo de Cancelación
+                            </Label>
+                            <Textarea
+                                id="motive"
+                                placeholder="Ej: Error en el pedido, Cliente canceló, Sin stock..."
+                                className="min-h-[120px] rounded-2xl border-zinc-200 focus:ring-red-500"
+                                value={cancelMotive}
+                                onChange={(e) => setCancelMotive(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <SheetFooter className="flex-col sm:flex-col gap-2">
+                        <Button
+                            onClick={handleConfirmCancel}
+                            disabled={isCancelling || !cancelMotive.trim()}
+                            className="bg-red-600 hover:bg-red-700 text-white rounded-2xl w-full h-12 font-black uppercase tracking-wider shadow-lg shadow-red-100"
+                        >
+                            {isCancelling ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+                            Confirmar Cancelación
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            onClick={() => setIsCancelSheetOpen(false)}
+                            className="rounded-2xl w-full h-12 font-bold text-zinc-400"
+                        >
+                            Volver
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
+
+            {/* Payment Sheet */}
+            <Sheet open={isPaymentSheetOpen} onOpenChange={setIsPaymentSheetOpen}>
+                <SheetContent className="sm:max-w-md">
+                    <SheetHeader>
+                        <SheetTitle className="text-2xl font-black uppercase tracking-tight text-emerald-600">Cobrar Pedido</SheetTitle>
+                        <SheetDescription className="font-medium">
+                            Selecciona el método de pago utilizado para este pedido.
+                        </SheetDescription>
+                    </SheetHeader>
+                    <div className="py-6 space-y-4">
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase text-zinc-400 tracking-wider text-left block">
+                                Método de Pago
+                            </Label>
+                            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                                <SelectTrigger className="h-12 rounded-2xl border-zinc-200 font-bold focus:ring-emerald-500">
+                                    <SelectValue placeholder="Selecciona un método" />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-2xl border-zinc-100 shadow-xl">
+                                    <SelectItem value="EFECTIVO" className="rounded-xl font-bold py-3 text-emerald-600">Efectivo</SelectItem>
+                                    <SelectItem value="TRANSFERENCIA" className="rounded-xl font-bold py-3 text-blue-600">Transferencia</SelectItem>
+                                    <SelectItem value="TARJETA" className="rounded-xl font-bold py-3 text-purple-600">Tarjeta Débito/Crédito</SelectItem>
+                                    <SelectItem value="MERCADOPAGO" className="rounded-xl font-bold py-3 text-sky-500">Mercado Pago</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <SheetFooter className="flex-col sm:flex-col gap-2">
+                        <Button
+                            onClick={handleConfirmPayment}
+                            disabled={isSavingPayment}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl w-full h-12 font-black uppercase tracking-wider shadow-lg shadow-emerald-100"
+                        >
+                            {isSavingPayment ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                            Marcar como Cobrado
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            onClick={() => setIsPaymentSheetOpen(false)}
+                            className="rounded-2xl w-full h-12 font-bold text-zinc-400"
+                        >
+                            Cancelar
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
         </div>
     );
 }

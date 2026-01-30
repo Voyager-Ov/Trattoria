@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serializePrisma } from "@/lib/utils";
+import { Prisma, EstadoPedido } from "@prisma/client";
 
 export async function GET(request: Request) {
     try {
@@ -15,12 +16,12 @@ export async function GET(request: Request) {
         const skip = (page - 1) * limit;
 
         // Construir filtros
-        const where: any = {
+        const where: Prisma.OrderWhereInput = {
             deletedAt: null,
         };
 
         if (status && status !== "TODOS") {
-            where.estado = status;
+            where.estado = status as EstadoPedido;
         }
 
         if (search) {

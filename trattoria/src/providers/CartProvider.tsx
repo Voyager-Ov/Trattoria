@@ -25,15 +25,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
     // Initialize cart from localStorage
     useEffect(() => {
-        const savedCart = localStorage.getItem('trattoria-cart');
-        if (savedCart) {
-            try {
-                setItems(JSON.parse(savedCart));
-            } catch (error) {
-                console.error("Error parsing saved cart:", error);
+        const initCart = () => {
+            const savedCart = localStorage.getItem('trattoria-cart');
+            if (savedCart) {
+                try {
+                    setItems(JSON.parse(savedCart));
+                } catch (error) {
+                    console.error("Error parsing saved cart:", error);
+                }
             }
-        }
-        setIsInitialized(true);
+            setIsInitialized(true);
+        };
+
+        setTimeout(initCart, 0);
     }, []);
 
     // Save cart to localStorage whenever it changes

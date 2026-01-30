@@ -6,16 +6,19 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Helper to serialize Prisma Decimal objects and others not supported by Client Components
-export function serializePrisma(obj: any): any {
+export function serializePrisma(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
 
   // Handle Decimal objects (Prisma/Decimal.js) structural check
-  if (typeof obj === 'object' && (
-    obj.constructor?.name === 'Decimal' ||
-    obj._isDecimal === true ||
-    (obj.s !== undefined && obj.d !== undefined && typeof obj.toString === 'function')
-  )) {
-    return Number(obj.toString());
+  if (typeof obj === 'object' && obj !== null) {
+    const maybeDecimal = obj as Record<string, unknown>;
+    if (
+      (maybeDecimal.constructor && maybeDecimal.constructor.name === 'Decimal') ||
+      maybeDecimal._isDecimal === true ||
+      (maybeDecimal.s !== undefined && maybeDecimal.d !== undefined && typeof maybeDecimal.toString === 'function')
+    ) {
+      return Number(maybeDecimal.toString());
+    }
   }
 
   // Handle Dates
@@ -29,11 +32,12 @@ export function serializePrisma(obj: any): any {
   }
 
   // Handle Objects
-  if (typeof obj === 'object') {
-    const serialized: any = {};
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        const value = obj[key];
+  if (typeof obj === 'object' && obj !== null) {
+    const serialized: Record<string, unknown> = {};
+    const objDict = obj as Record<string, unknown>;
+    for (const key in objDict) {
+      if (Object.prototype.hasOwnProperty.call(objDict, key)) {
+        const value = objDict[key];
         // Skip functions as they can't be passed to Client Components
         if (typeof value === 'function') continue;
         serialized[key] = serializePrisma(value);

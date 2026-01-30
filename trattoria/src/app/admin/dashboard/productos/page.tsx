@@ -10,12 +10,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { getProducts, getCategories, toggleProductAvailability, softDeleteProduct, createProduct, updateProduct, createPromotion } from "./actions";
-import { Prisma } from "@prisma/client";
+import { getProducts, getCategories, toggleProductAvailability, softDeleteProduct, createProduct, updateProduct, createPromotion, deletePromotion } from "./actions";
+import { Prisma, UnidadMedida } from "@prisma/client";
 import { toast } from "sonner";
 
 // Unified Menu Item type
-type MenuItem = {
+interface MenuItem {
     id: string;
     type: 'PRODUCTO' | 'PROMOCION';
     nombre: string;
@@ -26,13 +26,16 @@ type MenuItem = {
     categoryId: string;
     activo: boolean;
     disponible: boolean;
-    unidad: string;
+    unidad: UnidadMedida;
     createdAt: Date;
+    updatedAt?: Date;
+    deletedAt?: Date | null;
+    costoUnitario?: number;
     // Original Prisma objects for actions if needed
     category?: Category;
 };
 
-type Category = Prisma.CategoryGetPayload<{}>;
+type Category = Prisma.CategoryGetPayload<{ select: { id: true; nombre: true } }>;
 
 
 // Mock products with all fields
@@ -125,11 +128,12 @@ export default function ProductosPage() {
         include: { category: true }
     }>;
 
-    const handleDuplicate = async (product: any) => {
+    const handleDuplicate = async (product: MenuItem) => {
         setIsSubmitting(true);
         const { id, createdAt, updatedAt, deletedAt, category, ...rest } = product;
         const res = await createProduct({
             ...rest,
+            descripcion: rest.descripcion ?? undefined,
             nombre: `${rest.nombre} (Copia)`,
         });
         if (res.success) {
@@ -155,7 +159,13 @@ export default function ProductosPage() {
                 toast.error(res.error || "Error al eliminar");
             }
         } else {
-            toast.info("Funcionalidad de eliminación de promociones en desarrollo");
+            const res = await deletePromotion(item.id);
+            if (res.success) {
+                toast.success("Promoción eliminada");
+                refreshData();
+            } else {
+                toast.error(res.error || "Error al eliminar");
+            }
         }
     };
 
@@ -173,7 +183,7 @@ export default function ProductosPage() {
 
     // Filter & sort logic
     const filteredAndSortedItems = useMemo(() => {
-        let filtered = menuItems.filter((item) => {
+        const filtered = menuItems.filter((item) => {
             const matchesSearch =
                 searchQuery === "" ||
                 item.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -211,13 +221,13 @@ export default function ProductosPage() {
                     break;
                 case "costo":
                     // Promotions might not have cost, use 0
-                    const costoA = (a as any).costoUnitario || 0;
-                    const costoB = (b as any).costoUnitario || 0;
+                    const costoA = a.costoUnitario || 0;
+                    const costoB = b.costoUnitario || 0;
                     compareValue = Number(costoA) - Number(costoB);
                     break;
                 case "margen": {
-                    const costoA = (a as any).costoUnitario || 0;
-                    const costoB = (b as any).costoUnitario || 0;
+                    const costoA = a.costoUnitario || 0;
+                    const costoB = b.costoUnitario || 0;
                     const marginA = costoA
                         ? ((Number(a.precio) - Number(costoA)) / Number(a.precio)) * 100
                         : 0;
@@ -563,16 +573,16 @@ export default function ProductosPage() {
                                             <span className="font-bold text-zinc-900 text-sm">${Number(item.precio).toFixed(2)}</span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            {(item as any).costoUnitario ? (
-                                                <span className="text-xs text-zinc-400">${Number((item as any).costoUnitario).toFixed(2)}</span>
+                                            {item.costoUnitario ? (
+                                                <span className="text-xs text-zinc-400">${Number(item.costoUnitario).toFixed(2)}</span>
                                             ) : (
                                                 <span className="text-xs text-zinc-300">-</span>
                                             )}
                                         </td>
                                         <td className="px-6 py-4">
-                                            {(item as any).costoUnitario ? (
+                                            {item.costoUnitario ? (
                                                 <span className="text-xs font-bold text-zinc-500 bg-zinc-50 px-2 py-1 rounded-md">
-                                                    {calculateMargin(Number(item.precio), Number((item as any).costoUnitario)).toFixed(1)}%
+                                                    {calculateMargin(Number(item.precio), Number(item.costoUnitario)).toFixed(1)}%
                                                 </span>
                                             ) : (
                                                 <span className="text-xs text-zinc-300">-</span>
@@ -613,8 +623,14 @@ export default function ProductosPage() {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="w-48 rounded-2xl p-2 shadow-xl border-zinc-100">
-                                                    <DropdownMenuItem className="rounded-xl my-0.5" disabled={item.type === 'PROMOCION'}>
-                                                        <Link href={`/admin/dashboard/productos/${item.id}`} className="w-full">
+                                                    <DropdownMenuItem className="rounded-xl my-0.5">
+                                                        <Link
+                                                            href={item.type === 'PRODUCTO'
+                                                                ? `/admin/dashboard/productos/${item.id}`
+                                                                : `/admin/dashboard/productos/promociones/${item.id}`
+                                                            }
+                                                            className="w-full"
+                                                        >
                                                             Ver detalles
                                                         </Link>
                                                     </DropdownMenuItem>
@@ -630,7 +646,7 @@ export default function ProductosPage() {
                                                         </Link>
                                                     </DropdownMenuItem>
                                                     {item.type === 'PRODUCTO' && (
-                                                        <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => handleDuplicate(item as any)}>Duplicar</DropdownMenuItem>
+                                                        <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => handleDuplicate(item)}>Duplicar</DropdownMenuItem>
                                                     )}
                                                     <DropdownMenuSeparator className="bg-zinc-50" />
                                                     {item.type === 'PRODUCTO' && (

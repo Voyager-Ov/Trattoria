@@ -10,6 +10,7 @@ import { Search, ShoppingCart, User, Menu, Pizza, Coffee, IceCream, Plus, Loader
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import { Category, Product } from "@prisma/client";
+import { MenuSkeleton } from "@/components/menu/MenuSkeleton";
 
 export default function CatalogPage() {
     const [categories, setCategories] = useState<Category[]>([]);
@@ -56,14 +57,7 @@ export default function CatalogPage() {
     };
 
     if (isLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-background">
-                <div className="text-center space-y-4">
-                    <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-                    <p className="text-muted-foreground font-medium">Cargando el menú...</p>
-                </div>
-            </div>
-        );
+        return <MenuSkeleton />;
     }
 
     return (

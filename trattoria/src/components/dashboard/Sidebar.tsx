@@ -9,7 +9,6 @@ import {
     Users,
     UtensilsCrossed,
     Settings,
-    Menu,
     LogOut,
     ChevronLeft,
     ChevronRight,
@@ -19,7 +18,6 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
     Tooltip,
     TooltipContent,

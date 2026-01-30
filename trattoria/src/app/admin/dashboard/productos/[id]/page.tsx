@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useState, useEffect, useCallback, useMemo, use } from "react";
+import { useRouter } from "next/navigation";
 import {
     ChevronLeft,
     Edit3,
@@ -23,10 +23,9 @@ import { getProductById, softDeleteProduct } from "../actions";
 import Link from "next/link";
 import Image from "next/image";
 
-export default function ProductDetailPage() {
+export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params);
     const router = useRouter();
-    const params = useParams();
-    const id = params.id as string;
 
     const [loading, setLoading] = useState(true);
     const [product, setProduct] = useState<any>(null);

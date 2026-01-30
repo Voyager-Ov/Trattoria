@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useState, useEffect, useCallback, use } from "react";
+import { useRouter } from "next/navigation";
 import {
     ChevronLeft,
     Save,
@@ -42,8 +42,9 @@ import {
     SheetTrigger,
 } from "@/components/ui/sheet";
 
-type Category = Prisma.CategoryGetPayload<{}>;
-type Supply = Prisma.SupplyGetPayload<{}>;
+type Category = Prisma.CategoryGetPayload<{ select: { id: true; nombre: true; esPromocion: true } }>;
+type Supply = Prisma.SupplyGetPayload<{ select: { id: true; ean: true; nombre: true; descripcion: true; costoUnitario: true; unidad: true; stockActual: true; stockMinimo: true; createdAt: true; updatedAt: true; deletedAt: true } }>;
+type Product = Prisma.ProductGetPayload<{ include: { category: true; recipeItems: { include: { supply: true } } } }>;
 
 interface RecipeItem {
     supplyId: string;
@@ -53,10 +54,9 @@ interface RecipeItem {
     costoUnitarioIndividual?: number;
 }
 
-export default function EditarProductoPage() {
+export default function EditarProductoPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params);
     const router = useRouter();
-    const params = useParams();
-    const id = params.id as string;
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
@@ -109,11 +109,11 @@ export default function EditarProductoPage() {
             }
 
             if (supRes.success && supRes.data) {
-                setSupplies(supRes.data);
+                setSupplies(supRes.data as Supply[]);
             }
 
             if (prodRes.success && prodRes.data) {
-                const p = prodRes.data;
+                const p = prodRes.data as Product;
                 setFormData({
                     nombre: p.nombre,
                     descripcion: p.descripcion || "",
@@ -123,7 +123,7 @@ export default function EditarProductoPage() {
                     imagen: p.imagen || null,
                 });
 
-                const loadedRecipe: RecipeItem[] = p.recipeItems.map((ri: any) => ({
+                const loadedRecipe: RecipeItem[] = p.recipeItems.map((ri) => ({
                     supplyId: ri.supplyId,
                     qtyPerUnit: Number(ri.qtyPerUnit),
                     unidad: ri.supply.unidad,

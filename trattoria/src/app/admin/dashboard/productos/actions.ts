@@ -2,8 +2,49 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { UnidadMedida } from "@prisma/client";
+import { UnidadMedida, Prisma, DiscountType } from "@prisma/client";
 import { serializePrisma } from "@/lib/utils";
+
+type ProductActionData = {
+    nombre: string;
+    descripcion?: string;
+    precio: string | number;
+    costoUnitario?: string | number | null;
+    categoryId: string;
+    imagen?: string | null;
+    stockActual?: string | number;
+    stockMinimo?: string | number;
+    stockMaximo?: string | number;
+    unidad?: UnidadMedida;
+};
+
+type CategoryCreateData = {
+    nombre: string;
+    activo?: boolean;
+    esPromocion?: boolean;
+    orden?: number;
+};
+
+type CategoryUpdateData = {
+    nombre?: string;
+    activo?: boolean;
+    esPromocion?: boolean;
+    orden?: number;
+};
+
+type PromotionActionData = {
+    name: string;
+    description?: string;
+    discountType: string;
+    discountValue: string | number;
+    daysOfWeek?: string | null;
+    imagen?: string | null;
+    isActive?: boolean;
+    startDate?: string | Date | null;
+    endDate?: string | Date | null;
+    items?: { productId: string; quantity: string | number }[];
+    categoryIds?: string[];
+};
 
 export async function getCategories() {
     try {
@@ -91,31 +132,35 @@ export async function softDeleteProduct(id: string) {
         return { success: true };
     } catch (error) {
         console.error("Error deleting product:", error);
-        return { success: false, error: "Error al eliminar el producto" };
+        return { success: false, error: "Error al eliminar the producto" };
     }
 }
 
-export async function createProduct(data: any) {
+export async function createProduct(data: ProductActionData) {
     try {
         const product = await prisma.product.create({
             data: {
-                ...data,
-                precio: parseFloat(data.precio),
-                costoUnitario: data.costoUnitario ? parseFloat(data.costoUnitario) : null,
-                stockActual: parseInt(data.stockActual) || 0,
-                stockMinimo: parseInt(data.stockMinimo) || 0,
-                stockMaximo: parseInt(data.stockMaximo) || 0,
+                nombre: data.nombre,
+                descripcion: data.descripcion,
+                precio: Number(data.precio),
+                costoUnitario: data.costoUnitario ? Number(data.costoUnitario) : null,
+                categoryId: data.categoryId,
+                imagen: data.imagen,
+                unidad: data.unidad || "UNIDAD",
+                stockActual: Number(data.stockActual) || 0,
+                stockMinimo: Number(data.stockMinimo) || 0,
+                stockMaximo: Number(data.stockMaximo) || 0,
             },
         });
         revalidatePath("/admin/dashboard/productos");
         return { success: true, data: serializePrisma(product) };
     } catch (error) {
         console.error("Error creating product:", error);
-        return { success: false, error: "Error al crear el producto" };
+        return { success: false, error: "Error al crear the producto" };
     }
 }
 
-export async function createCategory(data: any) {
+export async function createCategory(data: CategoryCreateData) {
     try {
         const slug = data.nombre
             .toLowerCase()
@@ -126,7 +171,10 @@ export async function createCategory(data: any) {
 
         const category = await prisma.category.create({
             data: {
-                ...data,
+                nombre: data.nombre,
+                activo: data.activo,
+                esPromocion: data.esPromocion,
+                orden: data.orden,
                 slug,
             },
         });
@@ -138,33 +186,37 @@ export async function createCategory(data: any) {
         return { success: false, error: "Error al crear la categoría" };
     }
 }
-export async function updateProduct(id: string, data: any) {
+export async function updateProduct(id: string, data: ProductActionData) {
     try {
         const product = await prisma.product.update({
             where: { id },
             data: {
-                ...data,
-                precio: parseFloat(data.precio),
-                costoUnitario: data.costoUnitario ? parseFloat(data.costoUnitario) : null,
-                stockActual: parseInt(data.stockActual) || 0,
-                stockMinimo: parseInt(data.stockMinimo) || 0,
-                stockMaximo: parseInt(data.stockMaximo) || 0,
+                nombre: data.nombre,
+                descripcion: data.descripcion,
+                precio: Number(data.precio),
+                costoUnitario: data.costoUnitario ? Number(data.costoUnitario) : null,
+                categoryId: data.categoryId,
+                imagen: data.imagen,
+                unidad: data.unidad || "UNIDAD",
+                stockActual: Number(data.stockActual) || 0,
+                stockMinimo: Number(data.stockMinimo) || 0,
+                stockMaximo: Number(data.stockMaximo) || 0,
             },
         });
         revalidatePath("/admin/dashboard/productos");
         return { success: true, data: serializePrisma(product) };
     } catch (error) {
         console.error("Error updating product:", error);
-        return { success: false, error: "Error al actualizar el producto" };
+        return { success: false, error: "Error al actualizar the producto" };
     }
 }
-export async function createPromotion(data: any) {
+export async function createPromotion(data: PromotionActionData) {
     try {
-        const promotionData: any = {
+        const promotionData: Prisma.PromotionCreateInput = {
             name: data.name,
             description: data.description || "",
-            discountType: data.discountType,
-            discountValue: parseFloat(data.discountValue),
+            discountType: data.discountType as DiscountType,
+            discountValue: Number(data.discountValue),
             daysOfWeek: data.daysOfWeek || null,
             imagen: data.imagen || null,
             isActive: data.isActive !== undefined ? data.isActive : true,
@@ -188,16 +240,16 @@ export async function createPromotion(data: any) {
         // Build relations
         if (data.items && Array.isArray(data.items) && data.items.length > 0) {
             promotionData.items = {
-                create: data.items.map((item: any) => ({
+                create: (data.items || []).map((item) => ({
                     productId: item.productId,
-                    quantity: parseInt(item.quantity) || 1
+                    quantity: Number(item.quantity) || 1
                 }))
             };
         }
 
         if (data.categoryIds && Array.isArray(data.categoryIds) && data.categoryIds.length > 0) {
             promotionData.categories = {
-                connect: data.categoryIds.map((id: string) => ({ id }))
+                connect: data.categoryIds.map((catId: string) => ({ id: catId }))
             };
         }
 
@@ -210,17 +262,117 @@ export async function createPromotion(data: any) {
         });
 
         revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/admin/dashboard/productos/promociones");
         return { success: true, data: serializePrisma(promotion) };
-    } catch (error: any) {
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Error al crear la promoción";
         console.error("Error creating promotion:", error);
-        return { success: false, error: error.message || "Error al crear la promoción" };
+        return { success: false, error: message };
     }
 }
-export async function updateCategory(id: string, data: any) {
+
+export async function getPromotionById(id: string) {
+    try {
+        const promotion = await prisma.promotion.findUnique({
+            where: { id, deletedAt: null },
+            include: {
+                items: {
+                    include: {
+                        product: true
+                    }
+                },
+                categories: true
+            }
+        });
+
+        if (!promotion) {
+            return { success: false, error: "Promoción no encontrada" };
+        }
+
+        return { success: true, data: serializePrisma(promotion) };
+    } catch (error) {
+        console.error("Error fetching promotion:", error);
+        return { success: false, error: "Error al obtener la promoción" };
+    }
+}
+
+export async function updatePromotion(id: string, data: PromotionActionData) {
+    try {
+        const promotionUpdateData: Prisma.PromotionUpdateInput = {
+            name: data.name,
+            description: data.description || "",
+            discountType: data.discountType as DiscountType,
+            discountValue: Number(data.discountValue),
+            daysOfWeek: data.daysOfWeek || null,
+            imagen: data.imagen || null,
+            isActive: data.isActive !== undefined ? data.isActive : true,
+        };
+
+        if (data.startDate) promotionUpdateData.startDate = new Date(data.startDate);
+        if (data.endDate) promotionUpdateData.endDate = new Date(data.endDate);
+
+        // Update with transaction to handle relations
+        const promotion = await prisma.$transaction(async (tx) => {
+            // Clear existing relations
+            await tx.promotionProduct.deleteMany({ where: { promotionId: id } });
+
+            // Update the promotion
+            return await tx.promotion.update({
+                where: { id },
+                data: {
+                    ...promotionUpdateData,
+                    items: {
+                        create: (data.items || []).map((item) => ({
+                            productId: item.productId,
+                            quantity: Number(item.quantity) || 1
+                        }))
+                    },
+                    categories: {
+                        set: data.categoryIds?.map((catId: string) => ({ id: catId })) || []
+                    }
+                },
+                include: {
+                    items: true,
+                    categories: true
+                }
+            });
+        });
+
+        revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/admin/dashboard/productos/promociones");
+        revalidatePath(`/admin/dashboard/productos/promociones/${id}`);
+        return { success: true, data: serializePrisma(promotion) };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Error al actualizar la promoción";
+        console.error("Error updating promotion:", error);
+        return { success: false, error: message };
+    }
+}
+
+export async function deletePromotion(id: string) {
+    try {
+        await prisma.promotion.update({
+            where: { id },
+            data: { deletedAt: new Date() }
+        });
+        revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/admin/dashboard/productos/promociones");
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting promotion:", error);
+        return { success: false, error: "Error al eliminar la promoción" };
+    }
+}
+export async function updateCategory(id: string, data: CategoryUpdateData) {
     try {
         const category = await prisma.category.update({
             where: { id },
-            data,
+            data: {
+                nombre: data.nombre,
+                activo: data.activo,
+                esPromocion: data.esPromocion,
+                orden: data.orden,
+            },
         });
         revalidatePath("/admin/dashboard/productos");
         revalidatePath("/admin/dashboard/productos/categorias");
@@ -298,7 +450,7 @@ export async function getSupplies() {
     }
 }
 
-export async function createProductWithRecipe(productData: any, recipeItems: { supplyId: string; qtyPerUnit: number; unidad: UnidadMedida }[]) {
+export async function createProductWithRecipe(productData: ProductActionData, recipeItems: { supplyId: string; qtyPerUnit: number; unidad: UnidadMedida }[]) {
     try {
         const result = await prisma.$transaction(async (tx) => {
             // Create product
@@ -307,8 +459,8 @@ export async function createProductWithRecipe(productData: any, recipeItems: { s
                     nombre: productData.nombre,
                     descripcion: productData.descripcion,
                     imagen: productData.imagen,
-                    precio: parseFloat(productData.precio),
-                    costoUnitario: productData.costoUnitario ? parseFloat(productData.costoUnitario) : null,
+                    precio: Number(productData.precio),
+                    costoUnitario: productData.costoUnitario ? Number(productData.costoUnitario) : null,
                     categoryId: productData.categoryId,
                     unidad: productData.unidad || "UNIDAD",
                 },
@@ -334,14 +486,14 @@ export async function createProductWithRecipe(productData: any, recipeItems: { s
 
         revalidatePath("/admin/dashboard/productos");
         return { success: true, data: serializePrisma(result) };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error creating product with recipe:", error);
-        if (error.code === 'P2002') return { success: false, error: "Ya existe un producto con ese nombre" };
-        return { success: false, error: "Error al crear el producto" };
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') return { success: false, error: "Ya existe un producto con ese nombre" };
+        return { success: false, error: "Error al crear the producto" };
     }
 }
 
-export async function updateProductWithRecipe(id: string, productData: any, recipeItems: { supplyId: string; qtyPerUnit: number; unidad: UnidadMedida }[]) {
+export async function updateProductWithRecipe(id: string, productData: ProductActionData, recipeItems: { supplyId: string; qtyPerUnit: number; unidad: UnidadMedida }[]) {
     try {
         const result = await prisma.$transaction(async (tx) => {
             // Update product
@@ -351,10 +503,10 @@ export async function updateProductWithRecipe(id: string, productData: any, reci
                     nombre: productData.nombre,
                     descripcion: productData.descripcion,
                     imagen: productData.imagen,
-                    precio: parseFloat(productData.precio),
-                    costoUnitario: productData.costoUnitario ? parseFloat(productData.costoUnitario) : null,
+                    precio: Number(productData.precio),
+                    costoUnitario: productData.costoUnitario ? Number(productData.costoUnitario) : null,
                     categoryId: productData.categoryId,
-                    unidad: productData.unidad,
+                    unidad: productData.unidad || "UNIDAD",
                 },
             });
 
@@ -385,6 +537,6 @@ export async function updateProductWithRecipe(id: string, productData: any, reci
         return { success: true, data: serializePrisma(result) };
     } catch (error) {
         console.error("Error updating product with recipe:", error);
-        return { success: false, error: "Error al actualizar el producto" };
+        return { success: false, error: "Error al actualizar the producto" };
     }
 }

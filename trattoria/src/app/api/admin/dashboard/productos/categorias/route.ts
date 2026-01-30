@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 
 import { serializePrisma } from '@/lib/utils';
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
     try {
         const categories = await prisma.category.findMany({
             where: {

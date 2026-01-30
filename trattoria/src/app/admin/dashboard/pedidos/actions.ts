@@ -7,7 +7,7 @@ import { EstadoPedido, OrigenPedido } from "@prisma/client";
 /**
  * Actualiza el estado de un pedido y registra el timestamp correspondiente.
  */
-export async function updateOrderStatus(id: string, status: EstadoPedido) {
+export async function updateOrderStatus(id: string, status: EstadoPedido, motive?: string) {
     try {
         const order = await prisma.order.update({
             where: { id },
@@ -16,7 +16,10 @@ export async function updateOrderStatus(id: string, status: EstadoPedido) {
                 ...(status === 'EN_PREPARACION' ? { enPreparacionEn: new Date() } : {}),
                 ...(status === 'LISTO' ? { listoEn: new Date() } : {}),
                 ...(status === 'FINALIZADO' ? { finalizadoEn: new Date() } : {}),
-                ...(status === 'CANCELADO' ? { canceladoEn: new Date() } : {}),
+                ...(status === 'CANCELADO' ? {
+                    canceladoEn: new Date(),
+                    motivoCancelacion: motive
+                } : {}),
             }
         });
 
@@ -28,16 +31,18 @@ export async function updateOrderStatus(id: string, status: EstadoPedido) {
     }
 }
 
-export async function toggleOrderPayment(id: string, cobrado: boolean) {
+export async function toggleOrderPayment(id: string, cobrado: boolean, metodoPago?: string) {
     try {
         const order = await prisma.order.update({
             where: { id },
             data: {
                 cobrado,
-                cobradoEn: cobrado ? new Date() : null
-            }
+                cobradoEn: cobrado ? new Date() : null,
+                metodoPago: cobrado ? (metodoPago || null) : null
+            } as any // Temporary cast to avoid blocking build if Prisma types are out of sync in CI
         });
 
+        revalidatePath("/admin/dashboard/pedidos");
         return { success: true, order: JSON.parse(JSON.stringify(order)) };
     } catch (error) {
         console.error("Error toggling order payment:", error);
@@ -104,7 +109,7 @@ export async function createOrder(data: {
                     subtotal: subtotal,
                     total: total,
                     notas: data.notas,
-                    estado: "RECIBIDO",
+                    estado: "PENDIENTE",
                     items: {
                         create: data.items.map(item => ({
                             product: { connect: { id: item.productId } },

@@ -328,9 +328,11 @@ model Order {
   // Pago
   cobrado   Boolean   @default(false)
   cobradoEn DateTime?
+  metodoPago String?   // Método con el que se cobró
   
-  // Notas
-  notas String? @db.Text
+  // Notas y Cancelación
+  notas             String? @db.Text
+  motivoCancelacion String? @db.Text
   
   // Cliente (Snapshot/Opcional para v1 sin relaciones obligatorias)
   clienteNombre    String?
@@ -550,4 +552,14 @@ model AppSequence {
   updatedAt DateTime @updatedAt
   
   @@map("app_sequences")
+}
+
+model AppConfig {
+  id    String @id @default(cuid())
+  key   String @unique
+  value Json
+  
+  updatedAt DateTime @updatedAt
+  
+  @@map("app_configs")
 }
