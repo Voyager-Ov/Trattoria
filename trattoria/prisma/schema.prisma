@@ -1,0 +1,553 @@
+// Trattoria - Single-Tenant Restaurant Management System
+// Prisma Schema v1.0
+// Based on Alquimia patterns but WITHOUT multi-tenant (no tenantId)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // directUrl = env("DIRECT_URL") // For Neon migrations
+}
+
+// =============================================================================
+// ENUMS - Domain Value Objects  
+// =============================================================================
+
+enum Rol {
+  ADMIN
+  EMPLEADO
+}
+
+enum EstadoUsuario {
+  ACTIVO
+  INACTIVO
+  SUSPENDIDO
+}
+
+enum OrigenPedido {
+  INTERNO     // Pedido creado desde el sistema interno
+  CATALOGO    // Pedido desde catálogo público / WhatsApp
+}
+
+enum EstadoPedido {
+  RECIBIDO
+  PENDIENTE
+  EN_PREPARACION
+  LISTO
+  FINALIZADO
+  CANCELADO
+}
+
+enum UnidadMedida {
+  UNIDAD
+  KILOGRAMO
+  GRAMO
+  LITRO
+  MILILITRO
+  PORCION
+}
+
+enum TipoMovimientoStock {
+  IN          // Entrada (compra, abastecimiento)
+  OUT         // Salida (consumo por pedido)
+  AJUSTE      // Ajuste manual (merma, corrección)
+}
+
+enum TipoAuditAction {
+  // Usuarios
+  LOGIN
+  LOGOUT
+  CREATE_USER
+  UPDATE_USER
+  DELETE_USER
+  CHANGE_PASSWORD
+  
+  // Productos y Catálogo
+  CREATE_PRODUCT
+  UPDATE_PRODUCT
+  DELETE_PRODUCT
+  CREATE_CATEGORY
+  UPDATE_CATEGORY
+  DELETE_CATEGORY
+  
+  // Pedidos
+  CREATE_ORDER
+  UPDATE_ORDER
+  CANCEL_ORDER
+  FINALIZE_ORDER
+  CHANGE_ORDER_STATUS
+  
+  // Stock
+  CREATE_STOCK_MOVEMENT
+  ADJUST_STOCK
+  UPDATE_SUPPLY
+  
+  // Sistema
+  SYSTEM_ERROR
+  UNAUTHORIZED_ACCESS
+}
+
+// =============================================================================
+// USUARIOS Y SEGURIDAD - Single Tenant
+// =============================================================================
+
+/// Usuario - Cuenta de acceso al sistema (sin tenant)
+/// Vinculado a Firebase Auth via firebaseUid
+model User {
+  id String @id @default(cuid())
+  
+  // Firebase Auth
+  firebaseUid String  @unique
+  email       String  @unique
+  displayName String?
+  phone       String?
+  avatarUrl   String?
+  
+  // Rol y estado
+  rol    Rol           @default(EMPLEADO)
+  estado EstadoUsuario @default(ACTIVO)
+  
+  // Información adicional
+  notas String? @db.Text
+  
+  // Auditoría
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft-delete
+  
+  // Relaciones
+  ordersCreated     Order[]          @relation("OrderCreatedBy")
+  ordersUpdated     Order[]          @relation("OrderUpdatedBy")
+  stockMovements    StockMovement[]
+  auditLogs         AuditLog[]
+  
+  @@index([rol, estado])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// =============================================================================
+// CLIENTES - Contactos de pedidos
+// =============================================================================
+
+/// Customer - Cliente que realiza pedidos (para pedidos de catálogo/WhatsApp)
+model Customer {
+  id String @id @default(cuid())
+  
+  // Datos de contacto
+  nombre    String
+  telefono  String?
+  email     String?
+  direccion String?
+  
+  // Notas
+  notas String? @db.Text
+  
+  // Estado
+  activo Boolean @default(true)
+  
+  // Auditoría
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft-delete
+  
+  // Relaciones
+  orders Order[]
+  
+  @@index([activo])
+  @@index([deletedAt])
+  @@map("customers")
+}
+
+// =============================================================================
+// CATÁLOGO - Categorías y Productos
+// =============================================================================
+
+/// Category - Categoría de productos
+model Category {
+  id String @id @default(uuid())
+  
+  // Datos
+  nombre      String  @unique
+  descripcion String? @db.Text
+  slug        String    @unique
+  imagen      String?
+  orden       Int     @default(0) // Para ordenamiento en UI
+  
+  // Estado
+  activo      Boolean @default(true) // Helper to hide/show category
+  esPromocion Boolean @default(false) // FR-CAT-03: Tipificación de categoría
+  
+  // Auditoría
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  
+  // Relaciones
+  products    Product[]
+  promotions  Promotion[]
+  
+  @@index([deletedAt])
+  @@map("categories")
+}
+
+/// Promotion - Promociones y descuentos
+model Promotion {
+  id            String       @id @default(uuid())
+  name          String
+  description   String?
+  code          String?      @unique
+  discountType  DiscountType
+  discountValue Float
+  startDate     DateTime?
+  endDate       DateTime?
+  daysOfWeek    String?      // Días activos: "L,M,X,J,V,S,D"
+  isActive      Boolean      @default(true)
+  imagen        String?      // URL o path de imagen
+  
+  // Relaciones
+  items         PromotionProduct[]
+  categories    Category[]
+
+  // Auditoría
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  deletedAt     DateTime?
+
+  @@index([deletedAt])
+  @@index([isActive, deletedAt])
+  @@index([startDate, endDate, deletedAt])
+  @@map("promotions")
+}
+
+/// PromotionProduct - Relación muchos-a-muchos explícita con cantidad
+model PromotionProduct {
+  id          String    @id @default(cuid())
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity    Int       @default(1)
+
+  @@unique([promotionId, productId])
+  @@index([promotionId])
+  @@index([productId])
+  @@map("promotion_products")
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+/// Product - Producto del menú/catálogo
+model Product {
+  id String @id @default(cuid())
+  
+  // Relación con categoría
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  
+  // Datos del producto
+  nombre      String  @unique
+  descripcion String? @db.Text
+  imagen      String? // URL o path de imagen
+  
+  // Precio
+  precio Decimal @db.Decimal(10, 2)
+  
+  // Costo (opcional, para cálculo de rentabilidad)
+  // Se puede calcular desde receta o ingresar manualmente
+  costoUnitario Decimal? @db.Decimal(10, 2)
+  
+  // Unidad de medida
+  unidad UnidadMedida @default(UNIDAD)
+  
+  // Disponibilidad
+  activo     Boolean @default(true)
+  disponible Boolean @default(true) // Para marcar como "agotado" temporalmente
+  
+  // Stock
+  stockActual Int @default(0)
+  stockMinimo Int @default(0)
+  stockMaximo Int @default(0)
+  
+  // Orden en menú
+  orden Int @default(0)
+  
+  // Auditoría
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft-delete
+  
+  // Relaciones
+  orderItems  OrderItem[]
+  recipeItems ProductRecipeItem[] // Receta (insumos requeridos)
+  promotions  PromotionProduct[]
+  
+  @@index([categoryId, activo])
+  @@index([activo, disponible])
+  @@index([deletedAt])
+  @@map("products")
+}
+
+// =============================================================================
+// PEDIDOS - Ciclo de vida de órdenes
+// =============================================================================
+
+/// Order - Pedido de cliente
+model Order {
+  id String @id @default(cuid())
+  
+  // Número de orden legible (P-001, P-002, etc.)
+  numero String @unique
+  
+  // Origen y cliente (opcional para pedidos internos)
+  origen     OrigenPedido
+  customerId String?
+  customer   Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  
+  // Estado
+  estado EstadoPedido @default(RECIBIDO)
+  
+  // Timestamps de flujo
+  recibidoEn       DateTime  @default(now())
+  enPreparacionEn  DateTime?
+  listoEn          DateTime?
+  finalizadoEn     DateTime?
+  canceladoEn      DateTime?
+  
+  // Totales
+  subtotal  Decimal @default(0) @db.Decimal(10, 2)
+  descuento Decimal @default(0) @db.Decimal(10, 2)
+  total     Decimal @default(0) @db.Decimal(10, 2)
+  
+  // Pago
+  cobrado   Boolean   @default(false)
+  cobradoEn DateTime?
+  
+  // Notas
+  notas String? @db.Text
+  
+  // Cliente (Snapshot/Opcional para v1 sin relaciones obligatorias)
+  clienteNombre    String?
+  clienteTelefono  String?
+  clienteDireccion String?
+  
+  // Auditoría
+  createdBy     String?
+  createdByUser User?    @relation("OrderCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  updatedAt     DateTime @updatedAt
+  updatedBy     String?
+  updatedByUser User?    @relation("OrderUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+  deletedAt     DateTime? // Soft-delete (solo para cancelados)
+  
+  // Relaciones
+  items OrderItem[]
+  
+  @@index([estado, updatedAt(sort: Desc)])
+  @@index([createdBy, recibidoEn(sort: Desc)])
+  @@index([recibidoEn(sort: Desc)])
+  @@index([deletedAt])
+  @@map("orders")
+}
+
+/// OrderItem - Línea de pedido con snapshot de producto
+model OrderItem {
+  id String @id @default(cuid())
+  
+  // Relación con pedido
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  // Producto (snapshot para inmutabilidad)
+  productId     String
+  product       Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  nombreProduct String // Snapshot del nombre
+  
+  // Cantidad y precio
+  cantidad       Decimal @db.Decimal(10, 3)
+  precioUnitario Decimal @db.Decimal(10, 2)
+  subtotal       Decimal @db.Decimal(10, 2)
+  
+  // Notas específicas del ítem (ej: "sin cebolla")
+  notas String?
+  
+  // Orden dentro del pedido
+  orden Int @default(0)
+  
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+// =============================================================================
+// STOCK E INSUMOS - Gestión de inventario
+// =============================================================================
+
+/// Supply - Insumo para preparación de productos
+model Supply {
+  id String @id @default(cuid())
+  
+  // Datos del insumo
+  nombre      String  @unique
+  descripcion String? @db.Text
+  
+  // Unidad de medida
+  unidad UnidadMedida
+  
+  // Stock actual
+  stockActual Decimal @default(0) @db.Decimal(10, 3)
+  
+  // Stock mínimo (opcional, para alertas)
+  stockMinimo Decimal? @db.Decimal(10, 3)
+  
+  // Costo unitario (opcional)
+  costoUnitario Decimal? @db.Decimal(10, 2)
+  
+  // Estado
+  activo Boolean @default(true)
+  
+  // Auditoría
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft-delete
+  
+  // Relaciones
+  movements   StockMovement[]
+  recipeItems ProductRecipeItem[]
+  
+  @@index([activo])
+  @@index([stockActual]) // Para detectar bajos stocks
+  @@index([deletedAt])
+  @@map("supplies")
+}
+
+/// StockMovement - Movimiento de stock (entrada, salida, ajuste)
+/// Tabla INMUTABLE (append-only para auditabilidad)
+model StockMovement {
+  id String @id @default(cuid())
+  
+  // Insumo afectado
+  supplyId String
+  supply   Supply @relation(fields: [supplyId], references: [id], onDelete: Restrict)
+  
+  // Tipo de movimiento
+  tipo TipoMovimientoStock
+  
+  // Cantidad (siempre positiva, el tipo indica si suma o resta)
+  cantidad Decimal @db.Decimal(10, 3)
+  
+  // Stock resultante DESPUÉS del movimiento (snapshot)
+  stockResultante Decimal @db.Decimal(10, 3)
+  
+  // Referencia a pedido (si es OUT por finalización de pedido)
+  orderId String?
+  
+  // Motivo/descripción
+  motivo String? @db.Text
+  
+  // Auditoría
+  createdAt DateTime @default(now())
+  createdBy String?  // User.id
+  createdByUser User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  
+  @@index([supplyId, createdAt(sort: Desc)])
+  @@index([tipo, createdAt(sort: Desc)])
+  @@index([orderId])
+  @@map("stock_movements")
+}
+
+/// ProductRecipeItem - Receta de producto (bill of materials)
+/// Define qué insumos y en qué cantidad se necesitan por unidad de producto
+model ProductRecipeItem {
+  id String @id @default(cuid())
+  
+  // Producto al que pertenece la receta
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  // Insumo requerido
+  supplyId String
+  supply   Supply @relation(fields: [supplyId], references: [id], onDelete: Restrict)
+  
+  // Cantidad de insumo por 1 unidad de producto
+  // Ej: 1 pizza requiere 0.3 kg de harina
+  qtyPerUnit Decimal @db.Decimal(10, 3)
+  
+  // Unidad (debe coincidir con supply.unidad para consistencia)
+  unidad UnidadMedida
+  
+  // Auditoría
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([productId, supplyId]) // Un producto no puede tener el mismo insumo duplicado
+  @@index([productId])
+  @@index([supplyId])
+  @@map("product_recipe_items")
+}
+
+// =============================================================================
+// AUDITORÍA - Logs de acciones críticas
+// =============================================================================
+
+/// AuditLog - Registro append-only de acciones críticas
+/// NO se modifica ni elimina nunca
+model AuditLog {
+  id String @id @default(cuid())
+  
+  // Actor (quién)
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorRole String? // Snapshot del rol en el momento de la acción
+  
+  // Acción (qué)
+  action     TipoAuditAction
+  objectType String // "product", "order", "user", "supply", etc.
+  objectId   String
+  
+  // Cambios (diff JSON con PII mínima)
+  before Json?
+  after  Json?
+  
+  // Origen
+  origin    String? // "WEB", "API", "SYSTEM"
+  ip        String?
+  userAgent String? @db.Text
+  
+  // Metadata adicional
+  requestId String?
+  reason    String? // Justificación para acciones sensibles
+  notes     String? @db.Text
+  
+  // Timestamp (inmutable)
+  createdAt DateTime @default(now())
+  
+  @@index([createdAt(sort: Desc)])
+  @@index([objectType, objectId, createdAt(sort: Desc)])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+// =============================================================================
+// UTILIDADES - Secuencias y helpers
+// =============================================================================
+
+/// AppSequence - Generador de números legibles únicos
+/// Para números de pedido, etc.
+model AppSequence {
+  id      String @id @default(cuid())
+  tipo    String @unique // "order"
+  prefijo String? // "P-", "ORD-"
+  ultimo  Int    @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("app_sequences")
+}
