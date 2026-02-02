@@ -12,16 +12,77 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { createPublicOrder } from "@/app/actions/orders";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
+import { getConfigs } from "@/app/actions/configActions";
+import { getStoreStatus, StoreStatus } from "@/lib/openingHours";
+import { Store } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
 
 export function CartDrawer() {
     const { items, removeItem, updateQuantity, totalPrice, totalItems, clearCart } = useCart();
     const [step, setStep] = useState<'cart' | 'checkout'>('cart');
     const [formData, setFormData] = useState({
         nombre: '',
+        telefono: '',
         direccion: '',
-        metodoPago: 'Transferencia'
+        metodoPago: '',
+        tipoEntrega: 'envio' as 'envio' | 'retiro',
+        pagaCon: ''
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [configs, setConfigs] = useState<any>(null);
+    const [storeStatus, setStoreStatus] = useState<StoreStatus>({ isOpen: true });
+
+    useEffect(() => {
+        async function fetchConfigs() {
+            const res = await getConfigs([
+                "whatsapp.settings",
+                "payments.methods",
+                "delivery.settings",
+                "business.hours",
+                "business.closedDays"
+            ]);
+            if (res.success && res.data) {
+                const data = res.data;
+                setConfigs(data);
+                // Set default payment method if available
+                const methods = (data["payments.methods"]?.length > 0)
+                    ? data["payments.methods"]
+                    : DEFAULT_PAYMENT_METHODS;
+
+                const firstEnabled = methods.find((m: any) => m.enabled);
+
+                setFormData(prev => ({
+                    ...prev,
+                    metodoPago: firstEnabled ? firstEnabled.id : prev.metodoPago,
+                }));
+
+                const dSettings = data["delivery.settings"];
+                if (dSettings) {
+                    if (!dSettings.allowDelivery && dSettings.allowPickup) {
+                        setFormData(prev => ({ ...prev, tipoEntrega: 'retiro' }));
+                    } else if (dSettings.allowDelivery && !dSettings.allowPickup) {
+                        setFormData(prev => ({ ...prev, tipoEntrega: 'envio' }));
+                    }
+                }
+
+                const status = getStoreStatus(
+                    data["business.hours"] || {},
+                    data["business.closedDays"] || []
+                );
+                setStoreStatus(status);
+            }
+        }
+        fetchConfigs();
+    }, []);
+
+    const deliverySettings = configs?.["delivery.settings"];
+    const deliveryFee = formData.tipoEntrega === 'envio' ? (deliverySettings?.deliveryFee || 0) : 0;
+
+    const finalTotal = totalPrice + deliveryFee;
+    const isMinPurchaseMet = (formData.tipoEntrega === 'envio' && deliverySettings) ? totalPrice >= deliverySettings.minPurchase : true;
+
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
@@ -36,9 +97,10 @@ export function CartDrawer() {
             // 1. Create order in database
             const result = await createPublicOrder({
                 clienteNombre: formData.nombre,
-                clienteDireccion: formData.direccion,
+                clienteTelefono: formData.telefono,
+                clienteDireccion: formData.tipoEntrega === 'envio' ? formData.direccion : 'Retiro en Local',
                 metodoPago: formData.metodoPago,
-                total: totalPrice,
+                total: finalTotal, // Use finalTotal which includes delivery if applicable
                 items: items.map(item => ({
                     productId: item.id,
                     cantidad: item.quantity,
@@ -52,31 +114,73 @@ export function CartDrawer() {
                 return;
             }
 
-            // WhatsApp notification number
-            const WHATSAPP_NUMBER = "5493886033878";
+            // 2. Prepare WhatsApp message
+            const whatsappSettings = configs?.["whatsapp.settings"];
+            if (!whatsappSettings?.phoneNumber || !whatsappSettings?.enabled) {
+                toast.error("El pedido se guardó, pero la notificación por WhatsApp no está disponible en este momento.");
+                // Clean up anyway
+                clearCart();
+                setStep('cart');
+                return;
+            }
 
-            const cartItemsText = items.map(item =>
+            const WHATSAPP_NUMBER = whatsappSettings.phoneNumber.replace(/\D/g, '');
+            let message = whatsappSettings.templateMessage || "Hola {nombre}, recibimos tu pedido #{id}.";
+
+            const itemsText = items.map(item =>
                 `• ${item.nombre} x${item.quantity} - $${(Number(item.precio) * item.quantity).toLocaleString('es-CL')}`
             ).join('\n');
 
-            const message = `*NUEVO PEDIDO #${result.orderNumber} - TRATTORIA*\n\n` +
-                `*Datos del Cliente:*\n` +
-                `👤 Nombre: ${formData.nombre}\n` +
-                `📍 Dirección: ${formData.direccion}\n` +
-                `💳 Pago: ${formData.metodoPago}\n\n` +
-                `*Pedido:*\n${cartItemsText}\n\n` +
-                `*TOTAL: $${totalPrice.toLocaleString('es-CL')}*\n\n` +
-                `Por favor, confirma recepción.`;
+            const allMethods = (configs?.["payments.methods"]?.length > 0)
+                ? configs["payments.methods"]
+                : DEFAULT_PAYMENT_METHODS;
+
+            const pagoMethod = allMethods.find((m: any) => m.id === formData.metodoPago)?.label || formData.metodoPago;
+
+            // Replace variables
+            message = message
+                .replace(/{id}/g, result.orderNumber?.toString() || '')
+                .replace(/{nombre}/g, formData.nombre)
+                .replace(/{direccion}/g, formData.tipoEntrega === 'envio' ? formData.direccion : 'Retiro en Local')
+                .replace(/{metodoPago}/g, pagoMethod)
+                .replace(/{items}/g, itemsText)
+                .replace(/{total}/g, `$${finalTotal.toLocaleString('es-CL')}`);
+
+            // Add delivery type and payment details
+            const entregaLabel = formData.tipoEntrega === 'envio' ? "Delivery 🛵" : "Retiro en Local 🍕";
+            message += `\n\n📌 *Tipo de entrega:* ${entregaLabel}`;
+
+            if (formData.metodoPago === 'EFECTIVO' && formData.pagaCon) {
+                const pagaConNum = Number(formData.pagaCon);
+                const vuelto = pagaConNum - finalTotal;
+                message += `\n💰 *Paga con:* $${pagaConNum.toLocaleString('es-CL')}`;
+                message += `\n💵 *Vuelto:* $${vuelto.toLocaleString('es-CL')}`;
+            }
+
+            if (formData.telefono) {
+                message += `\n📞 *Teléfono:* ${formData.telefono}`;
+            }
 
             const encodedMessage = encodeURIComponent(message);
             const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
 
-            window.open(whatsappUrl, '_blank');
+            window.location.assign(whatsappUrl);
 
             // Clear cart and reset state
             clearCart();
             setStep('cart');
-            setFormData({ nombre: '', direccion: '', metodoPago: 'Transferencia' });
+            const finalMethods = (configs?.["payments.methods"]?.length > 0)
+                ? configs["payments.methods"]
+                : DEFAULT_PAYMENT_METHODS;
+
+            setFormData({
+                nombre: '',
+                telefono: '',
+                direccion: '',
+                metodoPago: finalMethods.find((m: any) => m.enabled)?.id || '',
+                tipoEntrega: 'envio',
+                pagaCon: ''
+            });
             toast.success("¡Pedido enviado con éxito!");
         } catch (error) {
             console.error(error);
@@ -133,6 +237,18 @@ export function CartDrawer() {
                             : 'Completa la información para tu pedido'}
                     </p>
                 </SheetHeader>
+
+                {!storeStatus.isOpen && (
+                    <div className="mx-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center text-red-500 shadow-sm shrink-0">
+                            <Store className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-0.5">
+                            <h4 className="text-sm font-black uppercase tracking-tight text-red-600">Local Cerrado</h4>
+                            <p className="text-xs text-red-500 font-medium leading-tight">{storeStatus.message || "Por el momento no estamos recibiendo pedidos."}</p>
+                        </div>
+                    </div>
+                )}
 
                 <div className="flex-1 overflow-y-auto px-6 my-4 scrollbar-hide">
                     {items.length === 0 ? (
@@ -193,98 +309,208 @@ export function CartDrawer() {
                                 ))
                             ) : (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="nombre">Tu Nombre</Label>
-                                        <Input
-                                            id="nombre"
-                                            name="nombre"
-                                            placeholder="Ej. Juan Pérez"
-                                            value={formData.nombre}
-                                            onChange={handleInputChange}
-                                            className="rounded-xl h-12"
-                                        />
+                                    {(deliverySettings?.allowDelivery !== false || deliverySettings?.allowPickup !== false) && (
+                                        <div className="flex p-1 bg-secondary/50 rounded-2xl mb-6">
+                                            {deliverySettings?.allowDelivery !== false && (
+                                                <button
+                                                    onClick={() => setFormData(prev => ({ ...prev, tipoEntrega: 'envio' }))}
+                                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all font-bold ${formData.tipoEntrega === 'envio' ? 'bg-background shadow-md text-primary scale-100' : 'text-muted-foreground scale-95 opacity-70 hover:opacity-100'}`}
+                                                >
+                                                    <ShoppingBag className="h-4 w-4" />
+                                                    <span>Delivery</span>
+                                                </button>
+                                            )}
+                                            {deliverySettings?.allowPickup !== false && (
+                                                <button
+                                                    onClick={() => setFormData(prev => ({ ...prev, tipoEntrega: 'retiro' }))}
+                                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all font-bold ${formData.tipoEntrega === 'retiro' ? 'bg-background shadow-md text-primary scale-100' : 'text-muted-foreground scale-95 opacity-70 hover:opacity-100'}`}
+                                                >
+                                                    <Store className="h-4 w-4" />
+                                                    <span>Retiro</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="nombre">Tu Nombre</Label>
+                                            <Input
+                                                id="nombre"
+                                                name="nombre"
+                                                placeholder="Ej. Juan"
+                                                value={formData.nombre}
+                                                onChange={handleInputChange}
+                                                className="rounded-xl h-12"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="telefono">Teléfono</Label>
+                                            <Input
+                                                id="telefono"
+                                                name="telefono"
+                                                placeholder="Ej. +569..."
+                                                value={formData.telefono}
+                                                onChange={handleInputChange}
+                                                className="rounded-xl h-12"
+                                            />
+                                        </div>
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="direccion">Dirección de Entrega</Label>
-                                        <Input
-                                            id="direccion"
-                                            name="direccion"
-                                            placeholder="Calle, Número, Departamento"
-                                            value={formData.direccion}
-                                            onChange={handleInputChange}
-                                            className="rounded-xl h-12"
-                                        />
-                                    </div>
+
+                                    {formData.tipoEntrega === 'envio' && (
+                                        <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
+                                            <Label htmlFor="direccion">Dirección de Entrega</Label>
+                                            <Input
+                                                id="direccion"
+                                                name="direccion"
+                                                placeholder="Calle, Número, Depto"
+                                                value={formData.direccion}
+                                                onChange={handleInputChange}
+                                                className="rounded-xl h-12"
+                                            />
+                                        </div>
+                                    )}
+
                                     <div className="space-y-3">
-                                        <Label>Método de Pago</Label>
+                                        <Label className="text-sm font-black text-zinc-900 uppercase tracking-tight">Método de Pago</Label>
                                         <RadioGroup
                                             value={formData.metodoPago}
-                                            onValueChange={(val: string) => setFormData(prev => ({ ...prev, metodoPago: val }))}
-                                            className="flex flex-col gap-2"
+                                            onValueChange={(v) => setFormData(prev => ({ ...prev, metodoPago: v }))}
+                                            className="grid grid-cols-1 gap-2"
                                         >
-                                            <div className="flex items-center space-x-3 p-3 rounded-xl border border-border bg-card">
-                                                <RadioGroupItem value="Transferencia" id="transferencia" />
-                                                <Label htmlFor="transferencia" className="flex-1 cursor-pointer">Transferencia Electrónica</Label>
-                                            </div>
-                                            <div className="flex items-center space-x-3 p-3 rounded-xl border border-border bg-card">
-                                                <RadioGroupItem value="Efectivo" id="efectivo" />
-                                                <Label htmlFor="efectivo" className="flex-1 cursor-pointer">Efectivo al recibir</Label>
-                                            </div>
+                                            {((configs?.["payments.methods"]?.length > 0)
+                                                ? configs["payments.methods"]
+                                                : DEFAULT_PAYMENT_METHODS
+                                            ).filter((m: any) => m.enabled).map((method: any) => (
+                                                <div
+                                                    key={method.id}
+                                                    onClick={() => setFormData(prev => ({ ...prev, metodoPago: method.id }))}
+                                                    className={cn(
+                                                        "relative flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer",
+                                                        formData.metodoPago === method.id
+                                                            ? "border-emerald-500 bg-emerald-50/50"
+                                                            : "border-zinc-100 hover:border-zinc-200 bg-white"
+                                                    )}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={cn(
+                                                            "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+                                                            formData.metodoPago === method.id
+                                                                ? "border-emerald-500"
+                                                                : "border-zinc-300"
+                                                        )}>
+                                                            {formData.metodoPago === method.id && (
+                                                                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-in zoom-in duration-300" />
+                                                            )}
+                                                        </div>
+                                                        <span className={cn(
+                                                            "font-bold transition-colors",
+                                                            formData.metodoPago === method.id ? "text-emerald-900" : "text-zinc-600"
+                                                        )}>
+                                                            {method.label}
+                                                        </span>
+                                                    </div>
+                                                    <RadioGroupItem value={method.id} id={method.id} className="sr-only" />
+                                                </div>
+                                            ))}
                                         </RadioGroup>
                                     </div>
+
+                                    {/* Cash Payment Input (Conditional) */}
+                                    {formData.metodoPago === 'EFECTIVO' && (
+                                        <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
+                                            <Label htmlFor="pagaCon">¿Con cuánto vas a pagar? (Opcional)</Label>
+                                            <div className="relative">
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                                                <Input
+                                                    id="pagaCon"
+                                                    name="pagaCon"
+                                                    type="number"
+                                                    placeholder="Ej. 10000"
+                                                    value={formData.pagaCon}
+                                                    onChange={handleInputChange}
+                                                    className="rounded-xl h-12 pl-8"
+                                                />
+                                            </div>
+                                            <p className="text-[10px] text-muted-foreground italic pl-1">
+                                                {formData.tipoEntrega === 'envio'
+                                                    ? 'Para que el repartidor lleve el vuelto justo.'
+                                                    : 'Para agilizar tu pago en el local.'}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
                     )}
                 </div>
 
-                {items.length > 0 && (
-                    <div className="p-6 bg-secondary/30 rounded-t-[2.5rem] space-y-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-                        <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Productos ({totalItems})</span>
-                                <span>${totalPrice.toLocaleString('es-CL')}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Envío</span>
-                                <span className="text-green-600 font-medium">Gratis</span>
-                            </div>
-                            <Separator className="bg-border/50 my-2" />
-                            <div className="flex justify-between items-end">
-                                <span className="text-lg font-bold">Total</span>
-                                <span className="text-2xl font-bold font-outfit text-primary">${totalPrice.toLocaleString('es-CL')}</span>
-                            </div>
-                        </div>
-
-                        {step === 'cart' ? (
-                            <Button
-                                onClick={() => setStep('checkout')}
-                                className="w-full h-14 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-lg shadow-xl shadow-primary/20 transition-all active:scale-[0.98]"
-                            >
-                                Continuar Pedido
-                            </Button>
-                        ) : (
-                            <Button
-                                onClick={handleConfirmOrder}
-                                disabled={!formData.nombre || !formData.direccion || isSubmitting}
-                                className="w-full h-14 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-bold text-lg shadow-xl shadow-green-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-                            >
-                                {isSubmitting ? (
-                                    <>
-                                        <Loader2 className="h-5 w-5 animate-spin" />
-                                        Procesando...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Send className="h-5 w-5" />
-                                        Confirmar vía WhatsApp
-                                    </>
+                {
+                    items.length > 0 && (
+                        <div className="p-6 bg-secondary/30 rounded-t-[2.5rem] space-y-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+                            <div className="space-y-2">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">Productos ({totalItems})</span>
+                                    <span>${totalPrice.toLocaleString('es-CL')}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">Envío</span>
+                                    <span className={deliveryFee > 0 ? "text-foreground" : "text-green-600 font-medium"}>
+                                        {deliveryFee > 0 ? `$${deliveryFee.toLocaleString('es-CL')}` : "Gratis"}
+                                    </span>
+                                </div>
+                                {deliverySettings?.minPurchase > 0 && (
+                                    <div className="flex justify-between text-[10px]">
+                                        <span className="text-muted-foreground italic">Compra mínima para delivery</span>
+                                        <span className={isMinPurchaseMet ? "text-green-600" : "text-destructive font-bold"}>
+                                            ${deliverySettings.minPurchase.toLocaleString('es-CL')}
+                                        </span>
+                                    </div>
                                 )}
-                            </Button>
-                        )}
-                    </div>
-                )}
-            </SheetContent>
-        </Sheet>
+                                <Separator className="bg-border/50 my-2" />
+                                <div className="flex justify-between items-end">
+                                    <span className="text-lg font-bold">Total</span>
+                                    <span className="text-2xl font-bold font-outfit text-primary">${finalTotal.toLocaleString('es-CL')}</span>
+                                </div>
+                            </div>
+
+                            {step === 'cart' ? (
+                                <Button
+                                    onClick={() => setStep('checkout')}
+                                    disabled={!storeStatus.isOpen}
+                                    className="w-full h-14 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-lg shadow-xl shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Continuar Pedido
+                                </Button>
+                            ) : (
+                                <Button
+                                    onClick={handleConfirmOrder}
+                                    disabled={
+                                        !formData.nombre ||
+                                        !formData.telefono ||
+                                        (formData.tipoEntrega === 'envio' && (!formData.direccion || !formData.metodoPago || !isMinPurchaseMet)) ||
+                                        isSubmitting ||
+                                        !storeStatus.isOpen
+                                    }
+                                    className="w-full h-14 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-bold text-lg shadow-xl shadow-green-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                            Procesando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="h-5 w-5" />
+                                            Confirmar vía WhatsApp
+                                        </>
+                                    )}
+                                </Button>
+                            )}
+                        </div>
+                    )
+                }
+            </SheetContent >
+        </Sheet >
     );
 }

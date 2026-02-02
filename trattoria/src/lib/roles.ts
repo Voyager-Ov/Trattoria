@@ -12,44 +12,18 @@ export type Rol = 'ADMIN' | 'EMPLEADO';
 export type AccessResult =
     | 'ALLOW'
     | 'REDIRECT_LOGIN'
-    | 'REDIRECT_HOME';
+    | 'REDIRECT_HOME'
+    | 'DENY';
 
 /**
- * Route patterns for different roles
+ * Route patterns por rol
+ * Usa regex para match flexible con paths dinámicos
  */
 export const ROUTES = {
-    PUBLIC: [
-        '/',
-        '/login',
-    ],
-    EMPLEADO: [
-        '/dashboard',
-        '/pedidos',
-        '/cocina',
-    ],
-    ADMIN: [
-        '/admin',
-        '/productos',
-        '/categorias',
-        '/insumos',
-        '/recetas',
-        '/reportes',
-        '/usuarios',
-    ],
+    PUBLIC: /^\/($|login|register)/,
+    ADMIN: /^\/admin(\/|$)/,
+    EMPLEADO: /^\/empleado(\/|$)/,
 } as const;
-
-/**
- * Check if a route matches a pattern
- */
-function matchesRoute(pathname: string, patterns: readonly string[]): boolean {
-    return patterns.some(pattern => {
-        // Exact match
-        if (pathname === pattern) return true;
-        // Starts with pattern (for nested routes like /productos/nuevo)
-        if (pathname.startsWith(pattern + '/')) return true;
-        return false;
-    });
-}
 
 /**
  * Determine if user has access to a route
@@ -61,33 +35,30 @@ export function routeAccess(
     rol: Rol | null,
     pathname: string
 ): AccessResult {
-    // Public routes - always allow
-    if (matchesRoute(pathname, ROUTES.PUBLIC)) {
+    // 1. Public routes - always allow
+    if (ROUTES.PUBLIC.test(pathname)) {
         return 'ALLOW';
     }
 
-    // No role = not authenticated
+    // 2. User is authenticated (middleware verified session) but has NO ROLE
+    // Strict requirement: Users without roles should not access any protected route
     if (!rol) {
-        return 'REDIRECT_LOGIN';
+        return 'DENY';
     }
 
-    // ADMIN has access to everything
-    if (rol === 'ADMIN') {
-        return 'ALLOW';
+    // 3. Admin Routes - STRICT: Only ADMIN
+    if (ROUTES.ADMIN.test(pathname)) {
+        return rol === 'ADMIN' ? 'ALLOW' : 'REDIRECT_HOME';
     }
 
-    // EMPLEADO can access employee routes
-    if (rol === 'EMPLEADO') {
-        // Check if route is in EMPLEADO allowed routes
-        if (matchesRoute(pathname, ROUTES.EMPLEADO)) {
-            return 'ALLOW';
-        }
-        // Empleado trying to access admin route
-        return 'REDIRECT_HOME';
+    // 4. Employee Routes - STRICT: Only EMPLEADO
+    // Admin cannot access employee portal (per strict request)
+    if (ROUTES.EMPLEADO.test(pathname)) {
+        return rol === 'EMPLEADO' ? 'ALLOW' : 'REDIRECT_HOME';
     }
 
-    // Fallback: deny access
-    return 'REDIRECT_LOGIN';
+    // Default to allow (e.g. static assets, public pages not caught by PUBLIC)
+    return 'ALLOW';
 }
 
 /**

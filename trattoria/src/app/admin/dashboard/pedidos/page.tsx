@@ -22,6 +22,10 @@ import {
     type LucideIcon
 } from "lucide-react";
 import {
+    RadioGroup,
+    RadioGroupItem
+} from "@/components/ui/radio-group";
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -52,6 +56,8 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { EstadoPedido } from "@prisma/client";
+import { getConfigs } from "@/app/actions/configActions";
+import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
 
 interface OrderItem {
     id: string;
@@ -167,6 +173,7 @@ export default function PedidosPage() {
     const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null);
     const [paymentMethod, setPaymentMethod] = useState("EFECTIVO");
     const [isSavingPayment, setIsSavingPayment] = useState(false);
+    const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
 
     const fetchOrders = useCallback(async (silent = false) => {
         if (!silent) setIsLoading(true);
@@ -194,6 +201,25 @@ export default function PedidosPage() {
     }, [statusFilter, searchQuery, page, limit, orderBy, orderDir]);
 
     useEffect(() => {
+        const loadConfigs = async () => {
+            const res = await getConfigs(["payments.methods"]);
+            let methods = DEFAULT_PAYMENT_METHODS;
+
+            if (res.success && res.data && res.data["payments.methods"]) {
+                const dbMethods = res.data["payments.methods"] as any[];
+                if (dbMethods.length > 0) {
+                    methods = dbMethods;
+                }
+            }
+
+            const activeMethods = methods.filter(m => m.enabled);
+            setPaymentMethods(activeMethods);
+
+            if (activeMethods.length > 0 && !activeMethods.find(m => m.id === "EFECTIVO")) {
+                setPaymentMethod(activeMethods[0].id);
+            }
+        };
+        loadConfigs();
         fetchOrders();
         // Set up polling for real-time updates - Silent refresh doesn't flash the UI
         const interval = setInterval(() => fetchOrders(true), 10000);
@@ -670,50 +696,115 @@ export default function PedidosPage() {
 
             {/* Payment Sheet */}
             <Sheet open={isPaymentSheetOpen} onOpenChange={setIsPaymentSheetOpen}>
-                <SheetContent className="sm:max-w-md">
-                    <SheetHeader>
-                        <SheetTitle className="text-2xl font-black uppercase tracking-tight text-emerald-600">Cobrar Pedido</SheetTitle>
-                        <SheetDescription className="font-medium">
-                            Selecciona el método de pago utilizado para este pedido.
-                        </SheetDescription>
-                    </SheetHeader>
-                    <div className="py-6 space-y-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase text-zinc-400 tracking-wider text-left block">
-                                Método de Pago
-                            </Label>
-                            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                                <SelectTrigger className="h-12 rounded-2xl border-zinc-200 font-bold focus:ring-emerald-500">
-                                    <SelectValue placeholder="Selecciona un método" />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-2xl border-zinc-100 shadow-xl">
-                                    <SelectItem value="EFECTIVO" className="rounded-xl font-bold py-3 text-emerald-600">Efectivo</SelectItem>
-                                    <SelectItem value="TRANSFERENCIA" className="rounded-xl font-bold py-3 text-blue-600">Transferencia</SelectItem>
-                                    <SelectItem value="TARJETA" className="rounded-xl font-bold py-3 text-purple-600">Tarjeta Débito/Crédito</SelectItem>
-                                    <SelectItem value="MERCADOPAGO" className="rounded-xl font-bold py-3 text-sky-500">Mercado Pago</SelectItem>
-                                </SelectContent>
-                            </Select>
+                <SheetContent className="sm:max-w-md p-0 overflow-hidden rounded-l-[2rem] border-none shadow-2xl">
+                    <div className="absolute top-0 left-0 w-full h-1.5 bg-emerald-500" />
+
+                    <div className="p-8">
+                        <SheetHeader className="mb-8">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-sm">
+                                    <Banknote size={24} />
+                                </div>
+                                <SheetTitle className="text-3xl font-black uppercase tracking-tighter text-zinc-900">Cobrar Pedido</SheetTitle>
+                            </div>
+                            <SheetDescription className="font-medium text-zinc-500">
+                                Selecciona el método de pago utilizado para este pedido.
+                            </SheetDescription>
+                        </SheetHeader>
+
+                        <div className="space-y-6">
+                            <div className="space-y-3">
+                                <Label className="text-[11px] font-black uppercase text-zinc-400 tracking-[0.2em] ml-1">
+                                    Método de Pago
+                                </Label>
+
+                                {paymentMethods.length > 0 ? (
+                                    <RadioGroup
+                                        value={paymentMethod}
+                                        onValueChange={setPaymentMethod}
+                                        className="grid grid-cols-1 gap-3"
+                                    >
+                                        {paymentMethods.map((method) => (
+                                            <div
+                                                key={method.id}
+                                                onClick={() => setPaymentMethod(method.id)}
+                                                className={cn(
+                                                    "relative flex items-center justify-between p-5 rounded-[1.5rem] border-2 transition-all duration-300 cursor-pointer group",
+                                                    paymentMethod === method.id
+                                                        ? "border-emerald-500 bg-emerald-50/50 shadow-lg shadow-emerald-500/10 scale-[1.02]"
+                                                        : "border-zinc-100 hover:border-zinc-200 bg-white"
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <div className={cn(
+                                                        "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+                                                        paymentMethod === method.id
+                                                            ? "border-emerald-500 bg-white"
+                                                            : "border-zinc-200 group-hover:border-zinc-300"
+                                                    )}>
+                                                        {paymentMethod === method.id && (
+                                                            <div className="w-3 h-3 rounded-full bg-emerald-500 animate-in zoom-in duration-300" />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className={cn(
+                                                            "font-black text-sm uppercase tracking-tight transition-colors",
+                                                            paymentMethod === method.id ? "text-emerald-900" : "text-zinc-600"
+                                                        )}>
+                                                            {method.label}
+                                                        </span>
+                                                        <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">
+                                                            Pago Instantáneo
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <div className={cn(
+                                                    "p-2 rounded-xl transition-all duration-300",
+                                                    paymentMethod === method.id ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/20" : "bg-zinc-50 text-zinc-300"
+                                                )}>
+                                                    <CreditCard size={16} />
+                                                </div>
+
+                                                <RadioGroupItem value={method.id} id={`modal-${method.id}`} className="sr-only" />
+                                            </div>
+                                        ))}
+                                    </RadioGroup>
+                                ) : (
+                                    <div className="p-8 text-center bg-zinc-50 rounded-3xl border-2 border-dashed border-zinc-100">
+                                        <p className="text-zinc-400 font-bold uppercase text-[10px] tracking-widest">No hay métodos configurados</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="mt-12 space-y-3">
+                            <Button
+                                onClick={handleConfirmPayment}
+                                disabled={isSavingPayment || paymentMethods.length === 0}
+                                className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-[1.25rem] w-full h-14 font-black uppercase tracking-[0.1em] shadow-xl shadow-zinc-200 transition-all active:scale-[0.98] disabled:opacity-50"
+                            >
+                                {isSavingPayment ? (
+                                    <RefreshCw className="h-5 w-5 animate-spin" />
+                                ) : (
+                                    <div className="flex items-center justify-center gap-2">
+                                        <CheckCircle2 size={20} />
+                                        Confirmar Cobro
+                                    </div>
+                                )}
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                onClick={() => setIsPaymentSheetOpen(false)}
+                                className="rounded-[1.25rem] w-full h-12 font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50 transition-colors"
+                            >
+                                Volver Atrás
+                            </Button>
                         </div>
                     </div>
-                    <SheetFooter className="flex-col sm:flex-col gap-2">
-                        <Button
-                            onClick={handleConfirmPayment}
-                            disabled={isSavingPayment}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl w-full h-12 font-black uppercase tracking-wider shadow-lg shadow-emerald-100"
-                        >
-                            {isSavingPayment ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                            Marcar como Cobrado
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            onClick={() => setIsPaymentSheetOpen(false)}
-                            className="rounded-2xl w-full h-12 font-bold text-zinc-400"
-                        >
-                            Cancelar
-                        </Button>
-                    </SheetFooter>
                 </SheetContent>
             </Sheet>
+
         </div>
     );
 }

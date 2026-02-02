@@ -1,14 +1,45 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, Search, Bell } from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { Menu, Bell, LogOut, Settings, User as UserIcon } from "lucide-react";
 import { Sidebar } from "./Sidebar";
-import { Input } from "@/components/ui/input";
+import { HeaderSearch } from "./HeaderSearch";
 import { DynamicBreadcrumb } from "./DynamicBreadcrumb";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { getCurrentUserProfile } from "@/app/admin/dashboard/userActions";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function Header() {
+    const { logout } = useAuth();
+    const [profile, setProfile] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchProfile = async () => {
+            const result = await getCurrentUserProfile();
+            if (result.success) {
+                setProfile(result.data);
+            }
+            setLoading(false);
+        };
+
+        fetchProfile();
+    }, []);
+
+    const userDisplayName = profile?.displayName || profile?.email?.split('@')[0] || "Usuario";
+    const userInitials = userDisplayName.substring(0, 2).toUpperCase();
+
     return (
         <header className="sticky top-0 z-30 flex h-20 items-center gap-4 bg-white/80 backdrop-blur-md px-6 border-b border-zinc-100 shadow-sm">
             {/* Mobile Menu Trigger */}
@@ -32,14 +63,8 @@ export function Header() {
                 <DynamicBreadcrumb />
             </div>
 
-            {/* Search Bar (Optional) */}
-            <div className="hidden md:flex relative w-full max-w-sm items-center ml-auto mr-4">
-                <Search className="absolute left-3 h-4 w-4 text-zinc-400" />
-                <Input
-                    placeholder="Buscar..."
-                    className="pl-9 rounded-2xl bg-zinc-50 border-zinc-200 focus-visible:ring-primary/20 text-zinc-800 placeholder:text-zinc-400 h-10"
-                />
-            </div>
+            {/* Global Search Bar */}
+            <HeaderSearch />
 
             {/* User & Actions */}
             <div className="flex items-center gap-3 ml-auto md:ml-0">
@@ -51,13 +76,54 @@ export function Header() {
 
                 <div className="flex items-center gap-3">
                     <div className="text-right hidden md:block">
-                        <p className="text-sm font-semibold text-zinc-800 leading-none">Admin User</p>
-                        <p className="text-xs text-muted-foreground">Gerente</p>
+                        {loading ? (
+                            <>
+                                <Skeleton className="h-4 w-24 mb-1" />
+                                <Skeleton className="h-3 w-16 ml-auto" />
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm font-semibold text-zinc-800 leading-none">{userDisplayName}</p>
+                                <p className="text-xs text-muted-foreground capitalize">{profile?.rol?.toLowerCase() || "Empleado"}</p>
+                            </>
+                        )}
                     </div>
-                    <Avatar className="h-10 w-10 border-2 border-white shadow-sm cursor-pointer hover:scale-105 transition-transform">
-                        <AvatarImage src="https://github.com/shadcn.png" />
-                        <AvatarFallback className="bg-primary/10 text-primary font-bold">CN</AvatarFallback>
-                    </Avatar>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Avatar className="h-10 w-10 border-2 border-white shadow-sm cursor-pointer hover:scale-105 transition-transform">
+                                <AvatarImage src={profile?.avatarUrl || ""} />
+                                <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                                    {loading ? "..." : userInitials}
+                                </AvatarFallback>
+                            </Avatar>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 border-zinc-100 shadow-xl">
+                            <DropdownMenuLabel className="font-normal p-3">
+                                <div className="flex flex-col gap-1">
+                                    <p className="text-sm font-semibold text-zinc-800">{userDisplayName}</p>
+                                    <p className="text-xs text-zinc-500 truncate">{profile?.email}</p>
+                                </div>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator className="bg-zinc-50" />
+                            <DropdownMenuItem className="rounded-xl p-3 focus:bg-zinc-50 cursor-pointer gap-2">
+                                <UserIcon size={16} className="text-zinc-500" />
+                                <span className="text-sm font-medium">Mi Perfil</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="rounded-xl p-3 focus:bg-zinc-50 cursor-pointer gap-2">
+                                <Settings size={16} className="text-zinc-500" />
+                                <span className="text-sm font-medium">Configuración</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-zinc-50" />
+                            <DropdownMenuItem
+                                className="rounded-xl p-3 focus:bg-rose-50 text-rose-600 focus:text-rose-600 cursor-pointer gap-2"
+                                onClick={() => logout()}
+                            >
+                                <LogOut size={16} />
+                                <span className="text-sm font-medium">Cerrar Sesión</span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
         </header>

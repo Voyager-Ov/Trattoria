@@ -2,7 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { EstadoPedido, OrigenPedido } from "@prisma/client";
+import { EstadoPedido } from "@prisma/client";
+import { getSessionCookie, verifySessionCookie } from "@/lib/auth";
 
 /**
  * Actualiza el estado de un pedido y registra el timestamp correspondiente.
@@ -24,6 +25,8 @@ export async function updateOrderStatus(id: string, status: EstadoPedido, motive
         });
 
         // Convert Decimal to plain number for serialization
+        revalidatePath("/admin/dashboard/pedidos");
+        revalidatePath("/empleado/pedidos");
         return { success: true, order: JSON.parse(JSON.stringify(order)) };
     } catch (error) {
         console.error("Error updating order status:", error);
@@ -39,10 +42,11 @@ export async function toggleOrderPayment(id: string, cobrado: boolean, metodoPag
                 cobrado,
                 cobradoEn: cobrado ? new Date() : null,
                 metodoPago: cobrado ? (metodoPago || null) : null
-            } as any // Temporary cast to avoid blocking build if Prisma types are out of sync in CI
+            }
         });
 
         revalidatePath("/admin/dashboard/pedidos");
+        revalidatePath("/empleado/pedidos");
         return { success: true, order: JSON.parse(JSON.stringify(order)) };
     } catch (error) {
         console.error("Error toggling order payment:", error);
@@ -68,24 +72,48 @@ export async function searchCustomers(query: string) {
         });
         return { success: true, data: customers };
     } catch (error) {
+        console.error("Error searching customers:", error);
         return { success: false, error: "Error al buscar clientes" };
     }
 }
 
 /**
- * Crea un nuevo pedido con sus ítems
+ * Crea un nuevo pedido con sus ítems y registra quién lo creó
  */
 export async function createOrder(data: {
     customerId?: string | null;
     clienteNombre?: string;
     clienteTelefono?: string;
     clienteDireccion?: string;
-    items: { productId: string, cantidad: number, precioUnitario: number, nombreProduct: string }[];
+    items: { productId: string, type?: 'PRODUCTO' | 'PROMOCION', cantidad: number, precioUnitario: number, nombreProduct: string }[];
     notas?: string;
 }) {
     try {
+        // Identify Creator
+        let createdByUserId = null;
+        try {
+            const session = await getSessionCookie();
+            if (session) {
+                const claims = await verifySessionCookie(session);
+                // Find user in DB to get the internal UUID
+                if (claims && claims.uid) {
+                    const user = await prisma.user.findUnique({
+                        where: { firebaseUid: claims.uid },
+                        select: { id: true }
+                    });
+                    if (user) {
+                        createdByUserId = user.id;
+                    }
+                }
+            }
+        } catch (authError) {
+            console.warn("Could not identify user for order creation (likely guest or error):", authError);
+            // Proceed without throwing, creating as guest/system
+        }
+
         const subtotal = data.items.reduce((acc, item) => acc + (item.cantidad * item.precioUnitario), 0);
         const total = subtotal;
+
         // 1. Obtener o generar siguiente número de orden
         // Usamos AppSequence si existe
         let numeroOrden = "";
@@ -110,14 +138,23 @@ export async function createOrder(data: {
                     total: total,
                     notas: data.notas,
                     estado: "PENDIENTE",
+                    createdBy: createdByUserId, // <--- Link to Creator
                     items: {
-                        create: data.items.map(item => ({
-                            product: { connect: { id: item.productId } },
-                            nombreProduct: item.nombreProduct,
-                            cantidad: item.cantidad,
-                            precioUnitario: item.precioUnitario,
-                            subtotal: item.cantidad * item.precioUnitario
-                        }))
+                        create: data.items.map(item => {
+                            // Hardened check: use explicit type if available, fallback to ID format (UUIDs for promos have dashes, CUIDs for products don't)
+                            const isPromotion = item.type === 'PROMOCION' || (!!item.productId && item.productId.includes('-'));
+
+                            return {
+                                ...(isPromotion
+                                    ? { promotion: { connect: { id: item.productId } } }
+                                    : { product: { connect: { id: item.productId } } }
+                                ),
+                                nombreProduct: item.nombreProduct,
+                                cantidad: item.cantidad,
+                                precioUnitario: item.precioUnitario,
+                                subtotal: item.cantidad * item.precioUnitario
+                            };
+                        })
                     }
                 },
                 include: {
@@ -129,6 +166,7 @@ export async function createOrder(data: {
         });
 
         revalidatePath("/admin/dashboard/pedidos");
+        revalidatePath("/empleado/pedidos");
         return { success: true, data: JSON.parse(JSON.stringify(newOrder)) };
     } catch (error) {
         console.error("Error creating order:", error);

@@ -1,0 +1,239 @@
+"use server";
+
+import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+import { UnidadMedida, TipoMovimientoStock, CategoriaEgreso } from "@prisma/client";
+
+// Helper to serialize Prisma Decimal objects
+function serializePrisma(obj: any): any {
+    if (obj === null || obj === undefined) return obj;
+
+    if (typeof obj === 'object' && (
+        obj.constructor?.name === 'Decimal' ||
+        obj._isDecimal === true ||
+        (obj.s !== undefined && obj.d !== undefined && typeof obj.toString === 'function')
+    )) {
+        return Number(obj.toString());
+    }
+
+    if (obj instanceof Date) return obj;
+
+    if (Array.isArray(obj)) {
+        return obj.map(serializePrisma);
+    }
+
+    if (typeof obj === 'object') {
+        const serialized: any = {};
+        for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                const value = obj[key];
+                if (typeof value === 'function') continue;
+                serialized[key] = serializePrisma(value);
+            }
+        }
+        return serialized;
+    }
+
+    return obj;
+}
+
+export async function getSupplies() {
+    try {
+        const supplies = await prisma.supply.findMany({
+            where: {
+                deletedAt: null,
+            },
+            orderBy: {
+                nombre: "asc",
+            },
+        });
+        return { success: true, data: serializePrisma(supplies) };
+    } catch (error) {
+        console.error("Error fetching supplies:", error);
+        return { success: false, error: "Error al obtener los insumos" };
+    }
+}
+
+export async function createSupply(data: {
+    nombre: string;
+    unidad: UnidadMedida;
+    stockMinimo?: number;
+    costoUnitario?: number;
+    activo?: boolean;
+}) {
+    try {
+        const supply = await prisma.supply.create({
+            data: {
+                ...data,
+                stockActual: 0,
+                stockMinimo: data.stockMinimo || 0,
+                costoUnitario: data.costoUnitario || 0,
+            },
+        });
+        revalidatePath("/empleado/insumos");
+        return { success: true, data: serializePrisma(supply) };
+    } catch (error) {
+        console.error("Error creating supply:", error);
+        return { success: false, error: "Error al crear el insumo" };
+    }
+}
+
+export async function registerStockEntry(data: {
+    supplyId: string;
+    cantidad: number;
+    costoUnitario: number;
+    motivo?: string;
+}) {
+    try {
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Get current supply
+            const supply = await tx.supply.findUnique({
+                where: { id: data.supplyId }
+            });
+
+            if (!supply) throw new Error("Insumo no encontrado");
+
+            const currentStock = Number(supply.stockActual);
+            const currentAvgCost = Number(supply.costoUnitario || 0);
+            const newQuantity = data.cantidad;
+            const newCost = data.costoUnitario;
+
+            // 2. Calculate Weighted Average Cost (WAC)
+            // Formulas: New Avg Cost = (StockActual * CostoActual + CantidadNueva * CostoNuevo) / (StockActual + CantidadNueva)
+            let newAvgCost = newCost;
+            if (currentStock > 0) {
+                newAvgCost = (currentStock * currentAvgCost + newQuantity * newCost) / (currentStock + newQuantity);
+            }
+
+            const newStock = currentStock + newQuantity;
+
+            // 3. Update supply stock and average cost
+            const updatedSupply = await tx.supply.update({
+                where: { id: data.supplyId },
+                data: {
+                    stockActual: newStock,
+                    costoUnitario: newAvgCost,
+                }
+            });
+
+            // 4. Create stock movement record
+            await tx.stockMovement.create({
+                data: {
+                    supplyId: data.supplyId,
+                    tipo: "IN" as TipoMovimientoStock,
+                    cantidad: data.cantidad,
+                    stockResultante: newStock,
+                    motivo: data.motivo || "Entrada de stock (Compra)",
+                }
+            });
+
+            // 5. AUTOMATICALLY CREATE EXPENSE (EGRESO)
+            // Create expense only if there's a cost involved
+            const totalCost = newQuantity * newCost;
+
+            if (totalCost > 0) {
+                // Get next Egreso Number
+                const seq = await tx.appSequence.upsert({
+                    where: { tipo: "egreso" },
+                    update: { ultimo: { increment: 1 } },
+                    create: { tipo: "egreso", prefijo: "E-", ultimo: 1 }
+                });
+                const numero = `${seq.prefijo}${seq.ultimo.toString().padStart(3, '0')}`;
+
+                // Create Egreso Record
+                await tx.egreso.create({
+                    data: {
+                        numero,
+                        descripcion: `Compra de insumo: ${supply.nombre} - ${data.motivo || 'Reposición de stock'}`,
+                        monto: totalCost,
+                        categoria: CategoriaEgreso.INSUMOS,
+                        fecha: new Date(),
+                        proveedor: "Compra Directa", // We could add a field for provider in the form later if needed
+                    }
+                });
+
+                // Audit Log for Egreso creation (optional but good for consistency)
+                // Leaving audit log logic minimal to avoid complexity, but could add here if needed.
+            }
+
+            return updatedSupply;
+        });
+
+        revalidatePath("/empleado/insumos");
+        revalidatePath("/admin/dashboard/reportes/egresos");
+        return { success: true, data: serializePrisma(result) };
+    } catch (error) {
+        console.error("Error registering stock entry:", error);
+        return { success: false, error: "Error al registrar la entrada de stock" };
+    }
+}
+
+export async function registerStockMovement(data: {
+    supplyId: string;
+    cantidad: number;
+    tipo: TipoMovimientoStock;
+    motivo: string;
+}) {
+    try {
+        const result = await prisma.$transaction(async (tx) => {
+            const supply = await tx.supply.findUnique({
+                where: { id: data.supplyId }
+            });
+
+            if (!supply) throw new Error("Insumo no encontrado");
+
+            const currentStock = Number(supply.stockActual);
+            // If OUT, subtract; if AJUSTE, depends? Usually manual adjustment modifies directly or adds/subtracts.
+            // Following admin logic: Check admin implementation.
+            // Admin logic: 
+            // const factor = data.tipo === "IN" ? 1 : -1;
+            // But wait, "IN" is handled by registerStockEntry usually for Purchases. 
+            // registerStockMovement handles general movements.
+
+            let factor = 1;
+            if (data.tipo === "OUT") factor = -1;
+
+            // Note: If type is IN here, it won't create an expense because this function doesn't take cost.
+            // The Form properly calls registerStockEntry for IN type.
+
+            const newStock = currentStock + (data.cantidad * factor);
+
+            const updatedSupply = await tx.supply.update({
+                where: { id: data.supplyId },
+                data: { stockActual: newStock }
+            });
+
+            await tx.stockMovement.create({
+                data: {
+                    supplyId: data.supplyId,
+                    tipo: data.tipo,
+                    cantidad: data.cantidad,
+                    stockResultante: newStock,
+                    motivo: data.motivo
+                }
+            });
+
+            return updatedSupply;
+        });
+
+        revalidatePath("/empleado/insumos");
+        return { success: true, data: serializePrisma(result) };
+    } catch (error) {
+        console.error("Error registering stock movement:", error);
+        return { success: false, error: "Error al registrar el movimiento" };
+    }
+}
+
+export async function softDeleteSupply(id: string) {
+    try {
+        await prisma.supply.update({
+            where: { id },
+            data: { deletedAt: new Date() },
+        });
+        revalidatePath("/empleado/insumos");
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting supply:", error);
+        return { success: false, error: "Error al eliminar el insumo" };
+    }
+}

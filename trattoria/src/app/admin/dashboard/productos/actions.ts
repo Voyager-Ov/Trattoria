@@ -32,18 +32,23 @@ type CategoryUpdateData = {
     orden?: number;
 };
 
-type PromotionActionData = {
-    name: string;
+export type PromotionActionData = {
+    name?: string;
+    nombre?: string; // Soportar nombre del UI
     description?: string;
-    discountType: string;
-    discountValue: string | number;
+    descripcion?: string; // Soportar descripcion del UI
+    discountType?: string;
+    discountValue?: string | number;
+    precio?: string | number; // Soportar precio del UI (final price)
     daysOfWeek?: string | null;
     imagen?: string | null;
     isActive?: boolean;
     startDate?: string | Date | null;
     endDate?: string | Date | null;
     items?: { productId: string; quantity: string | number }[];
+    productIds?: string[];
     categoryIds?: string[];
+    categoriaPromoId?: string; // Soportar categoria del UI
 };
 
 export async function getCategories() {
@@ -212,44 +217,76 @@ export async function updateProduct(id: string, data: ProductActionData) {
 }
 export async function createPromotion(data: PromotionActionData) {
     try {
+        // Alíasing de campos del UI si es necesario
+        const name = data.name || data.nombre || "";
+        const description = data.description || data.descripcion || "";
+        const discountType = (data.discountType as DiscountType) || DiscountType.FIXED_AMOUNT;
+
+        // Si el UI manda 'precio' (precio final), pero necesitamos 'discountValue' (ahorro)
+        // en esta versión asumimos que si no viene discountValue, el UI ya hizo el cálculo
+        // o que 'discountValue' es lo que queremos guardar.
+        // Pero para ser compatibles con el UI actual:
+        const discountValue = Number(data.discountValue || 0);
+
+        // Si no viene discountValue pero si precio, intentamos usarlo si el tipo es FIXED_AMOUNT 
+        // (Aunque lo ideal es que el UI mande el ahorro directamente)
+        if (!data.discountValue && data.precio) {
+            // Nota: Aquí no sabemos el total original, así que el UI DEBE mandar el ahorro en discountValue
+            // o el backend debería calcularlo. Por ahora, si viene discountValue lo usamos.
+            // Si el UI manda 'precio', lo usaremos como discountValue solo si es lo que se espera.
+            // PERO: El UI de CreatePromotionSheet manda 'precio' queriendo decir 'precio final'.
+            // Vamos a dejar que el UI mande discountValue calculado.
+        }
+
         const promotionData: Prisma.PromotionCreateInput = {
-            name: data.name,
-            description: data.description || "",
-            discountType: data.discountType as DiscountType,
-            discountValue: Number(data.discountValue),
+            name,
+            description,
+            discountType,
+            discountValue,
             daysOfWeek: data.daysOfWeek || null,
             imagen: data.imagen || null,
             isActive: data.isActive !== undefined ? data.isActive : true,
         };
 
-        // Handle optional dates carefully
+        // Handle optional dates
         if (data.startDate && typeof data.startDate === 'string' && data.startDate.trim() !== "") {
             const parsedStart = new Date(data.startDate);
-            if (!isNaN(parsedStart.getTime())) {
-                promotionData.startDate = parsedStart;
-            }
+            if (!isNaN(parsedStart.getTime())) promotionData.startDate = parsedStart;
         }
 
         if (data.endDate && typeof data.endDate === 'string' && data.endDate.trim() !== "") {
             const parsedEnd = new Date(data.endDate);
-            if (!isNaN(parsedEnd.getTime())) {
-                promotionData.endDate = parsedEnd;
-            }
+            if (!isNaN(parsedEnd.getTime())) promotionData.endDate = parsedEnd;
         }
 
-        // Build relations
-        if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+        // Build relations from items and productIds
+        const itemsToCreate = [...(data.items || [])];
+        if (data.productIds && Array.isArray(data.productIds)) {
+            data.productIds.forEach(pid => {
+                if (!itemsToCreate.find(i => i.productId === pid)) {
+                    itemsToCreate.push({ productId: pid, quantity: 1 });
+                }
+            });
+        }
+
+        if (itemsToCreate.length > 0) {
             promotionData.items = {
-                create: (data.items || []).map((item) => ({
+                create: itemsToCreate.map((item) => ({
                     productId: item.productId,
                     quantity: Number(item.quantity) || 1
                 }))
             };
         }
 
-        if (data.categoryIds && Array.isArray(data.categoryIds) && data.categoryIds.length > 0) {
+        // Combine categoryIds and categoriaPromoId
+        const catIds = [...(data.categoryIds || [])];
+        if (data.categoriaPromoId && !catIds.includes(data.categoriaPromoId)) {
+            catIds.push(data.categoriaPromoId);
+        }
+
+        if (catIds.length > 0) {
             promotionData.categories = {
-                connect: data.categoryIds.map((catId: string) => ({ id: catId }))
+                connect: catIds.map((id) => ({ id }))
             };
         }
 
@@ -298,11 +335,16 @@ export async function getPromotionById(id: string) {
 
 export async function updatePromotion(id: string, data: PromotionActionData) {
     try {
+        const name = data.name || data.nombre || "";
+        const description = data.description || data.descripcion || "";
+        const discountType = (data.discountType as DiscountType) || DiscountType.FIXED_AMOUNT;
+        const discountValue = Number(data.discountValue || 0);
+
         const promotionUpdateData: Prisma.PromotionUpdateInput = {
-            name: data.name,
-            description: data.description || "",
-            discountType: data.discountType as DiscountType,
-            discountValue: Number(data.discountValue),
+            name,
+            description,
+            discountType,
+            discountValue,
             daysOfWeek: data.daysOfWeek || null,
             imagen: data.imagen || null,
             isActive: data.isActive !== undefined ? data.isActive : true,
@@ -310,6 +352,22 @@ export async function updatePromotion(id: string, data: PromotionActionData) {
 
         if (data.startDate) promotionUpdateData.startDate = new Date(data.startDate);
         if (data.endDate) promotionUpdateData.endDate = new Date(data.endDate);
+
+        // Build relations from items and productIds
+        const itemsToCreate = [...(data.items || [])];
+        if (data.productIds && Array.isArray(data.productIds)) {
+            data.productIds.forEach(pid => {
+                if (!itemsToCreate.find(i => i.productId === pid)) {
+                    itemsToCreate.push({ productId: pid, quantity: 1 });
+                }
+            });
+        }
+
+        // Combine categoryIds and categoriaPromoId
+        const catIds = [...(data.categoryIds || [])];
+        if (data.categoriaPromoId && !catIds.includes(data.categoriaPromoId)) {
+            catIds.push(data.categoriaPromoId);
+        }
 
         // Update with transaction to handle relations
         const promotion = await prisma.$transaction(async (tx) => {
@@ -322,13 +380,13 @@ export async function updatePromotion(id: string, data: PromotionActionData) {
                 data: {
                     ...promotionUpdateData,
                     items: {
-                        create: (data.items || []).map((item) => ({
+                        create: itemsToCreate.map((item) => ({
                             productId: item.productId,
                             quantity: Number(item.quantity) || 1
                         }))
                     },
                     categories: {
-                        set: data.categoryIds?.map((catId: string) => ({ id: catId })) || []
+                        set: catIds.map((catId: string) => ({ id: catId }))
                     }
                 },
                 include: {

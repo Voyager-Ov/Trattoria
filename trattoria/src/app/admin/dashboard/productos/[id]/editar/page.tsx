@@ -89,10 +89,13 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
             return acc + itemCost;
         }, 0);
 
-        setFormData(prev => ({
-            ...prev,
-            costoUnitario: totalCost > 0 ? totalCost.toFixed(2) : prev.costoUnitario
-        }));
+        if (totalCost > 0) {
+            setFormData(prev => {
+                const newCosto = totalCost.toFixed(2);
+                if (prev.costoUnitario === newCosto) return prev;
+                return { ...prev, costoUnitario: newCosto };
+            });
+        }
     }, [recipeItems]);
 
     const loadData = useCallback(async () => {
@@ -105,7 +108,7 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
             ]);
 
             if (catRes.success && catRes.data) {
-                setCategories((catRes.data as any[]).filter((c: any) => !c.esPromocion));
+                setCategories((catRes.data as Category[]).filter(c => !c.esPromocion));
             }
 
             if (supRes.success && supRes.data) {

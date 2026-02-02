@@ -260,20 +260,16 @@ export default function CategoriasPage() {
     }, []);
 
     useEffect(() => {
-        refreshData();
+        const init = async () => {
+            await refreshData();
+        };
+        init();
     }, [refreshData]);
 
+    // Simplified effect to only reset form if strictly needed, 
+    // but we'll try to handle primary transitions in handlers.
     useEffect(() => {
-        if (editingCategory) {
-            setFormState({
-                nombre: editingCategory.nombre,
-                descripcion: editingCategory.descripcion || "",
-                slug: editingCategory.slug,
-                imagen: editingCategory.imagen || "",
-                activo: editingCategory.activo,
-                esPromocion: editingCategory.esPromocion
-            });
-        } else {
+        if (!editingCategory && !isSheetOpen) {
             setFormState({
                 nombre: "",
                 descripcion: "",
@@ -283,7 +279,7 @@ export default function CategoriasPage() {
                 esPromocion: false
             });
         }
-    }, [editingCategory]);
+    }, [editingCategory, isSheetOpen]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -359,18 +355,7 @@ export default function CategoriasPage() {
         }
     };
 
-    // Auto-generate slug from name
-    useEffect(() => {
-        if (!editingCategory && formState.nombre) {
-            const slug = formState.nombre
-                .toLowerCase()
-                .trim()
-                .replace(/[^\w\s-]/g, '')
-                .replace(/[\s_-]+/g, '-')
-                .replace(/^-+|-+$/g, '');
-            setFormState(prev => ({ ...prev, slug }));
-        }
-    }, [formState.nombre, editingCategory]);
+    // Slug effect removed - moved to onChange
 
     const stats = {
         total: categories.length,
@@ -393,7 +378,18 @@ export default function CategoriasPage() {
 
                 <Sheet open={isSheetOpen} onOpenChange={(open) => {
                     setIsSheetOpen(open);
-                    if (!open) setEditingCategory(null);
+                    if (!open) {
+                        setEditingCategory(null);
+                    } else if (!editingCategory) {
+                        setFormState({
+                            nombre: "",
+                            descripcion: "",
+                            slug: "",
+                            imagen: "",
+                            activo: true,
+                            esPromocion: false
+                        });
+                    }
                 }}>
                     <SheetTrigger asChild>
                         <Button className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 transition-all font-semibold shadow-lg shadow-zinc-200 h-12 px-8">
@@ -475,7 +471,16 @@ export default function CategoriasPage() {
                                             placeholder="Ej: Pastas Artesanales"
                                             className="rounded-xl border-zinc-200 h-11 text-base font-bold"
                                             value={formState.nombre}
-                                            onChange={(e) => setFormState({ ...formState, nombre: e.target.value })}
+                                            onChange={(e) => {
+                                                const nombre = e.target.value;
+                                                const slug = editingCategory ? formState.slug : nombre
+                                                    .toLowerCase()
+                                                    .trim()
+                                                    .replace(/[^\w\s-]/g, '')
+                                                    .replace(/[\s_-]+/g, '-')
+                                                    .replace(/^-+|-+$/g, '');
+                                                setFormState({ ...formState, nombre, slug });
+                                            }}
                                             required
                                         />
                                     </div>
@@ -612,6 +617,14 @@ export default function CategoriasPage() {
                                                 onToggleActive={handleToggleActive}
                                                 onEdit={(cat) => {
                                                     setEditingCategory(cat);
+                                                    setFormState({
+                                                        nombre: cat.nombre,
+                                                        descripcion: cat.descripcion || "",
+                                                        slug: cat.slug,
+                                                        imagen: cat.imagen || "",
+                                                        activo: cat.activo,
+                                                        esPromocion: cat.esPromocion
+                                                    });
                                                     setIsSheetOpen(true);
                                                 }}
                                                 onDelete={handleDelete}

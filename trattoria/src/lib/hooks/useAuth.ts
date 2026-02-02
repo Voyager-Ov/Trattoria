@@ -45,12 +45,34 @@ export function useAuth() {
 
     // Listen to Firebase auth state changes
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             setUser(currentUser);
+
+            if (currentUser && !userData) {
+                try {
+                    // Try to restore session data from backend
+                    const response = await fetch('/api/auth/verify');
+                    if (response.ok) {
+                        const data = await response.json();
+                        setUserData(data.user);
+                        console.log('✅ Session restored:', data.user);
+                    }
+                } catch (error) {
+                    console.error('Failed to restore session:', error);
+                }
+            }
+
             setState(prev => ({ ...prev, loading: false }));
         });
         return () => unsubscribe();
-    }, []);
+    }, [userData]);
+
+    /**
+     * Helper to determine where to redirect after login/register
+     */
+    const getRedirectPath = (rol: 'ADMIN' | 'EMPLEADO') => {
+        return rol === 'ADMIN' ? '/admin/dashboard' : '/empleado';
+    };
 
     /**
      * Login with email and password
@@ -79,8 +101,8 @@ export function useAuth() {
 
             console.log('✅ Login successful:', data.user);
 
-            // 3. Redirect to dashboard
-            router.push('/dashboard');
+            // 3. Redirect based on role
+            router.push(getRedirectPath(data.user.rol));
             setState({ loading: false, error: null });
 
         } catch (error) {
@@ -103,7 +125,6 @@ export function useAuth() {
             const idToken = await userCredential.user.getIdToken();
 
             // 2. Check if user exists in our system
-            // If not, register them
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -111,28 +132,19 @@ export function useAuth() {
             });
 
             if (!response.ok) {
-                // If login fails, try registering
-                const registerResponse = await fetch('/api/auth/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ idToken }),
-                });
-
-                if (!registerResponse.ok) {
-                    throw new Error('Failed to authenticate with Google');
-                }
-
-                const data = await registerResponse.json();
-                setUserData(data.user);
-                console.log('✅ Google registration successful:', data.user);
-            } else {
-                const data = await response.json();
-                setUserData(data.user);
-                console.log('✅ Google login successful:', data.user);
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'No pudimos iniciar sesión. Verifica que tu cuenta tenga acceso.');
             }
 
-            // 3. Redirect to dashboard
-            router.push('/admin/dashboard');
+            const data = await response.json();
+            const activeUser = data.user;
+            setUserData(data.user);
+            console.log('✅ Google login successful:', data.user);
+
+            // 3. Redirect based on role
+            if (activeUser) {
+                router.push(getRedirectPath(activeUser.rol));
+            }
             setState({ loading: false, error: null });
 
         } catch (error) {
@@ -175,8 +187,8 @@ export function useAuth() {
                 console.log('🎉 First user - promoted to ADMIN');
             }
 
-            // 3. Redirect to dashboard
-            router.push('/dashboard');
+            // 3. Redirect based on role
+            router.push(getRedirectPath(data.user.rol));
             setState({ loading: false, error: null });
 
         } catch (error) {
@@ -187,6 +199,7 @@ export function useAuth() {
             });
         }
     };
+
 
     /**
      * Logout

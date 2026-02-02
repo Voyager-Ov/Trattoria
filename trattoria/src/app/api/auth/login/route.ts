@@ -58,42 +58,87 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 3. Sync user in database
-        // Get existing custom claims (rol) from Firebase if they exist
-        let userData;
+        // 3. Check if user exists in database (STRICT CHECK)
+        // We check by firebaseUid OR email (to handle pre-invited users)
+        let dbUser = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { firebaseUid: uid },
+                    { email: email }
+                ]
+            }
+        });
+
+        if (!dbUser) {
+            // BOOTSTRAP LOGIC: Check if this email is allowed to be an admin
+            const { isBootstrapAdmin } = await import('@/lib/auth');
+            if (isBootstrapAdmin(email)) {
+                console.log(`🚀 [Bootstrap] Creating admin user for allowlisted email: ${email}`);
+                dbUser = await prisma.user.create({
+                    data: {
+                        firebaseUid: uid,
+                        email: email,
+                        rol: 'ADMIN',
+                        estado: 'ACTIVO'
+                    }
+                });
+            } else {
+                console.log(`🚫 Login attempt rejected for unregistered user: ${email}`);
+                return NextResponse.json(
+                    { error: 'No formas parte de la organización.' },
+                    { status: 403 }
+                );
+            }
+        }
+
+        // 4. Update user data if needed (e.g. first login after invite)
         try {
-            const firebaseUser = await adminAuth.getUser(uid);
-            const existingRol = firebaseUser.customClaims?.rol as 'ADMIN' | 'EMPLEADO' | undefined;
+            const updates: any = {};
 
-            // Upsert user in database
-            userData = await prisma.user.upsert({
-                where: { firebaseUid: uid },
-                update: {
-                    email,
-                    updatedAt: new Date(),
-                },
-                create: {
-                    firebaseUid: uid,
-                    email,
-                    rol: existingRol || 'EMPLEADO', // Default to EMPLEADO if no rol set
-                    estado: 'ACTIVO',
-                },
-            });
+            // Link Firebase UID if not set (pre-invite)
+            if (dbUser.firebaseUid !== uid) {
+                updates.firebaseUid = uid;
+            }
+            // Update email if changed (unlikely but good hygiene)
+            if (dbUser.email !== email) {
+                updates.email = email;
+            }
 
-            // Sync Firebase Custom Claims if needed
-            if (userData.rol && userData.rol !== existingRol) {
-                await adminAuth.setCustomUserClaims(uid, {
-                    rol: userData.rol,
+            // Only hit DB if there are updates
+            if (Object.keys(updates).length > 0) {
+                dbUser = await prisma.user.update({
+                    where: { id: dbUser.id },
+                    data: updates
                 });
             }
+
+            // Sync Firebase Custom Claims ensuring they match DB role
+            const firebaseUser = await adminAuth.getUser(uid);
+            const currentClaims = firebaseUser.customClaims?.rol;
+
+            if (currentClaims !== dbUser.rol) {
+                console.log(`Syncing claims for ${email}: ${currentClaims} -> ${dbUser.rol}`);
+                await adminAuth.setCustomUserClaims(uid, {
+                    rol: dbUser.rol,
+                });
+            }
+
+            // Use dbUser for response
+            var userData = {
+                id: dbUser.id,
+                email: dbUser.email,
+                rol: dbUser.rol,
+            };
+
         } catch (dbError) {
-            console.error('Database sync failed (non-critical):', dbError);
-            // Don't block login if DB sync fails
-            // User will still have a valid session from Firebase
+            console.error('Database sync failed:', dbError);
+            // If strict check passed but update failed, we can still proceed 
+            // but we should probably err on safe side. 
+            // For now, let's allow login if they exist.
             userData = {
-                id: uid,
-                email,
-                rol: 'EMPLEADO' as const,
+                id: dbUser.id,
+                email: dbUser.email,
+                rol: dbUser.rol as 'ADMIN' | 'EMPLEADO',
             };
         }
 

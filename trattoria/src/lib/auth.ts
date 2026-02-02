@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { adminAuth } from './firebase-admin';
 import type { DecodedIdToken } from 'firebase-admin/auth';
+import { prisma } from '@/lib/prisma';
 
 /**
  * Session cookie management utilities
@@ -101,15 +102,72 @@ export async function getSessionCookie(): Promise<string | undefined> {
     return cookieStore.get(COOKIE_NAME)?.value;
 }
 
-/**
- * Extract user claims from decoded token
- * @param decodedToken - Decoded Firebase token
- * @returns User claims object
- */
 export function getUserClaims(decodedToken: DecodedIdToken): UserClaims {
     return {
         firebaseUid: decodedToken.uid,
         email: decodedToken.email ?? null,
         rol: (decodedToken.rol as 'ADMIN' | 'EMPLEADO') ?? null,
     };
+}
+
+/**
+ * STRICT Server-Side Authentication Helper
+ * Use this in Server Components (Layouts, Pages) and Server Actions.
+ * 
+ * Verifies session cookie AND ensures user exists in Database with correct role.
+ * Prevents access by deleted users or users with stale claims.
+ */
+export async function getAuthenticatedUserServer() {
+    const session = await getSessionCookie();
+
+    if (!session) {
+        return null; // No session
+    }
+
+    try {
+        // 1. Verify Cookie Signature & Expiry
+        const claims = await verifySessionCookie(session);
+
+        // 2. Strict DB Check
+        const dbUser = await prisma.user.findUnique({
+            where: { firebaseUid: claims.uid },
+            select: {
+                id: true,
+                email: true,
+                displayName: true,
+                phone: true,
+                rol: true,
+                estado: true,
+                firebaseUid: true
+            }
+        });
+
+        // 3. Validation
+        if (!dbUser) {
+            console.warn(`[Auth] Session valid but User missing in DB: ${claims.uid}`);
+            return null;
+        }
+
+        if (dbUser.estado !== 'ACTIVO') {
+            console.warn(`[Auth] User inactive: ${dbUser.email}`);
+            return null;
+        }
+
+        return dbUser;
+
+    } catch (error) {
+        console.error('[Auth] Server verification failed:', error);
+        return null;
+    }
+}
+
+/**
+ * Check if an email is in the bootstrap admin allowlist
+ */
+export function isBootstrapAdmin(email: string): boolean {
+    const enabled = process.env.BOOTSTRAP_ENABLED === 'true';
+    if (!enabled) return false;
+
+    const allowlist = process.env.BOOTSTRAP_ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || [];
+    return allowlist.includes(email.toLowerCase());
 }

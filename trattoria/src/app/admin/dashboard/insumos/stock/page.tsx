@@ -4,18 +4,13 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-    AlertTriangle,
-    Beaker,
-    ChevronLeft,
     ChevronRight,
-    CreditCard,
     History as HistoryIcon,
     Info,
     Loader2,
     Save,
     ShoppingCart,
     TrendingUp,
-    Plus,
     X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,13 +28,22 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { TipoMovimientoStock } from "@prisma/client";
 
+interface Supply {
+    id: string;
+    nombre: string;
+    unidad: string;
+    stockActual: number;
+    stockMinimo?: number;
+    costoUnitario?: number;
+}
+
 function RegistrarStockContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const preselectedId = searchParams.get("id");
 
     const [loading, setLoading] = useState(false);
-    const [supplies, setSupplies] = useState<any[]>([]);
+    const [supplies, setSupplies] = useState<Supply[]>([]);
     const [formData, setFormData] = useState({
         supplyId: preselectedId || "",
         cantidad: "",
@@ -48,16 +52,16 @@ function RegistrarStockContent() {
         tipo: "IN" as TipoMovimientoStock,
     });
 
-    useEffect(() => {
-        loadSupplies();
-    }, []);
-
-    async function loadSupplies() {
+    const loadSupplies = React.useCallback(async () => {
         const result = await getSupplies();
         if (result.success) {
-            setSupplies(result.data);
+            setSupplies(result.data as Supply[]);
         }
-    }
+    }, []);
+
+    useEffect(() => {
+        loadSupplies();
+    }, [loadSupplies]);
 
     const selectedSupply = supplies.find(s => s.id === formData.supplyId);
 

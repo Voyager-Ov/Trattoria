@@ -48,47 +48,64 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // 3. Get user from database to ensure up-to-date rol
-        let userRol = (decodedToken.rol as 'ADMIN' | 'EMPLEADO' | undefined) ?? null;
-
+        // 3. Get user from database (STRICT: DB is source of truth)
+        let dbUser = null;
         try {
-            const user = await prisma.user.findUnique({
+            dbUser = await prisma.user.findUnique({
                 where: { firebaseUid: decodedToken.uid },
-                select: { rol: true, estado: true },
+                select: { id: true, rol: true, estado: true },
             });
-
-            if (user) {
-                // Check if user is active
-                if (user.estado !== 'ACTIVO') {
-                    return NextResponse.json(
-                        { error: 'User account is inactive' },
-                        { status: 403 }
-                    );
-                }
-
-                // Use database rol (source of truth)
-                userRol = user.rol as 'ADMIN' | 'EMPLEADO';
-
-                // Sync Firebase Custom Claims if they're out of date
-                if (decodedToken.rol !== user.rol) {
-                    console.log(`Syncing custom claims for ${decodedToken.uid}: ${decodedToken.rol} → ${user.rol}`);
-                    // Note: This won't affect current session, but will apply to future sessions
-                    await import('@/lib/firebase-admin').then(({ adminAuth }) =>
-                        adminAuth.setCustomUserClaims(decodedToken.uid, { rol: user.rol })
-                    );
-                }
-            }
         } catch (dbError) {
-            console.error('Database lookup failed (non-critical):', dbError);
-            // Use token rol as fallback if DB lookup fails
+            console.error('Database lookup failed:', dbError);
+            return NextResponse.json(
+                { error: 'System error during verification' },
+                { status: 500 }
+            );
         }
 
-        // 4. Extract user claims
-        const claims = getUserClaims(decodedToken);
-        claims.rol = userRol; // Use the rol from database
+        if (!dbUser) {
+            console.warn(`[Verify API] Valid session but User not found in DB: ${decodedToken.uid}`);
+            // User might be deleted from DB but has valid session cookie
+            return NextResponse.json(
+                { error: 'User account not found' },
+                { status: 403 }
+            );
+        }
 
-        // 5. Return claims for middleware
-        return NextResponse.json(claims);
+        // Check if user is active
+        if (dbUser.estado !== 'ACTIVO') {
+            return NextResponse.json(
+                { error: 'User account is inactive' },
+                { status: 403 }
+            );
+        }
+
+        const userRol = dbUser.rol as 'ADMIN' | 'EMPLEADO';
+
+        // Sync Firebase Custom Claims if they're out of date
+        if (decodedToken.rol !== dbUser.rol) {
+            console.log(`Syncing custom claims for ${decodedToken.uid}: ${decodedToken.rol} → ${dbUser.rol}`);
+            await import('@/lib/firebase-admin').then(({ adminAuth }) =>
+                adminAuth.setCustomUserClaims(decodedToken.uid, { rol: dbUser.rol })
+            );
+        }
+
+        // 4. Extract user claims and add database ID
+        const claims = getUserClaims(decodedToken);
+        const responseData = {
+            id: dbUser.id,
+            email: claims.email,
+            rol: userRol,
+            firebaseUid: claims.firebaseUid
+        };
+
+        console.log(`[Verify API] User: ${claims.email} | DB Role: ${userRol}`);
+
+        // 5. Return data for middleware and client
+        return NextResponse.json({
+            success: true,
+            user: responseData
+        });
 
     } catch (error) {
         console.error('Verify error:', error);

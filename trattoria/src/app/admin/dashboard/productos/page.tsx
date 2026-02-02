@@ -13,6 +13,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { getProducts, getCategories, toggleProductAvailability, softDeleteProduct, createProduct, updateProduct, createPromotion, deletePromotion } from "./actions";
 import { Prisma, UnidadMedida } from "@prisma/client";
 import { toast } from "sonner";
+import { CreateCategorySheet } from "./components/CreateCategorySheet";
+import { CreateProductSheet } from "./components/CreateProductSheet";
+import { CreatePromotionSheet } from "./components/CreatePromotionSheet";
 
 // Unified Menu Item type
 interface MenuItem {
@@ -122,6 +125,11 @@ export default function ProductosPage() {
     };
 
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Sheets state
+    const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);
+    const [isProductSheetOpen, setIsProductSheetOpen] = useState(false);
+    const [isPromotionSheetOpen, setIsPromotionSheetOpen] = useState(false);
 
 
     type ProductWithCategory = Prisma.ProductGetPayload<{
@@ -298,10 +306,53 @@ export default function ProductosPage() {
 
     return (
         <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen">
-            <div className="flex justify-between items-end">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Catálogo de Productos</h1>
                     <p className="text-zinc-500 mt-1">Gestiona el inventario y precios de tu trattoria.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="rounded-full border-zinc-200 hover:bg-zinc-50 transition-all font-medium text-sm h-11 px-6 shadow-sm">
+                                <ListTree className="h-4 w-4 mr-2" />
+                                Categorías
+                                <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100">
+                            <DropdownMenuLabel className="px-3 pb-2 text-[0.65rem] font-bold uppercase tracking-widest text-zinc-400">Gestión de Categorías</DropdownMenuLabel>
+                            <Link href="/admin/dashboard/productos/categorias">
+                                <DropdownMenuItem className="rounded-xl cursor-pointer">
+                                    <ListTree className="h-3.5 w-3.5 mr-2" />
+                                    Ver Todas
+                                </DropdownMenuItem>
+                            </Link>
+                            <DropdownMenuSeparator className="bg-zinc-100" />
+                            <DropdownMenuItem className="rounded-xl cursor-pointer focus:bg-orange-50 focus:text-orange-600" onClick={() => setIsCategorySheetOpen(true)}>
+                                <Plus className="h-3.5 w-3.5 mr-2" />
+                                Nueva Categoría
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <Link href="/admin/dashboard/productos/promociones/nueva">
+                        <Button
+                            className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 transition-all font-medium text-sm h-11 px-6 shadow-md"
+                        >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Nueva Promoción
+                        </Button>
+                    </Link>
+
+                    <Link href="/admin/dashboard/productos/nuevo">
+                        <Button
+                            className="rounded-full bg-orange-500 text-white hover:bg-orange-600 shadow-md transition-all font-medium text-sm h-11 px-6"
+                        >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Nuevo Producto
+                        </Button>
+                    </Link>
                 </div>
             </div>
 
@@ -395,29 +446,6 @@ export default function ProductosPage() {
                         </DropdownMenu>
 
                         <div className="h-8 w-[1px] bg-zinc-200 mx-1 hidden md:block"></div>
-
-                        <div className="flex items-center gap-3">
-                            <Link href="/admin/dashboard/productos/categorias">
-                                <Button variant="outline" className="rounded-full border-zinc-200 hover:bg-zinc-50 transition-all font-medium text-xs h-9 px-4">
-                                    <ListTree className="h-3.5 w-3.5 mr-2" />
-                                    Ver Categorías
-                                </Button>
-                            </Link>
-
-                            <Link href="/admin/dashboard/productos/promociones/nueva">
-                                <Button className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 transition-all font-medium text-xs h-9 px-4">
-                                    <Plus className="h-3.5 w-3.5 mr-2" />
-                                    Nueva Promoción
-                                </Button>
-                            </Link>
-
-                            <Link href="/admin/dashboard/productos/nuevo">
-                                <Button className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm transition-all font-medium text-xs h-9 px-4">
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Nuevo Producto
-                                </Button>
-                            </Link>
-                        </div>
                     </div>
                 </div>
 

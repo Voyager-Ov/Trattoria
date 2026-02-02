@@ -85,6 +85,11 @@ enum TipoAuditAction {
   ADJUST_STOCK
   UPDATE_SUPPLY
   
+  // Egreso (Gastos)
+  CREATE_EXPENSE
+  UPDATE_EXPENSE
+  DELETE_EXPENSE
+  
   // Sistema
   SYSTEM_ERROR
   UNAUTHORIZED_ACCESS
@@ -107,8 +112,9 @@ model User {
   avatarUrl   String?
   
   // Rol y estado
-  rol    Rol           @default(EMPLEADO)
-  estado EstadoUsuario @default(ACTIVO)
+  rol      Rol           @default(EMPLEADO)
+  estado   EstadoUsuario @default(ACTIVO)
+  permisos String[]      @default([])
   
   // Información adicional
   notas String? @db.Text
@@ -211,6 +217,7 @@ model Promotion {
   // Relaciones
   items         PromotionProduct[]
   categories    Category[]
+  orderItems    OrderItem[]
 
   // Auditoría
   createdAt     DateTime     @default(now())
@@ -365,9 +372,13 @@ model OrderItem {
   orderId String
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
-  // Producto (snapshot para inmutabilidad)
-  productId     String
-  product       Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  // Producto/Promoción (snapshot para inmutabilidad)
+  productId     String?
+  product       Product? @relation(fields: [productId], references: [id], onDelete: Restrict)
+  
+  promotionId   String?
+  promotion     Promotion? @relation(fields: [promotionId], references: [id], onDelete: Restrict)
+  
   nombreProduct String // Snapshot del nombre
   
   // Cantidad y precio
@@ -534,6 +545,43 @@ model AuditLog {
   @@index([actorId, createdAt(sort: Desc)])
   @@index([action, createdAt(sort: Desc)])
   @@map("audit_logs")
+}
+
+// =============================================================================
+// EGRESOS - Gestión de gastos
+// =============================================================================
+
+enum CategoriaEgreso {
+  INSUMOS
+  SERVICIOS
+  NOMINA
+  MANTENIMIENTO
+  OTROS
+}
+
+/// Egreso - Registro de gastos o egresos de dinero
+model Egreso {
+  id String @id @default(cuid())
+  
+  // Número legible (E-001, etc.)
+  numero String @unique
+  
+  // Datos
+  fecha       DateTime @default(now())
+  descripcion String   @db.Text
+  monto       Decimal  @db.Decimal(10, 2)
+  categoria   CategoriaEgreso @default(OTROS)
+  proveedor   String?
+  
+  // Auditoría
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  
+  @@index([fecha(sort: Desc)])
+  @@index([categoria])
+  @@index([deletedAt])
+  @@map("egresos")
 }
 
 // =============================================================================

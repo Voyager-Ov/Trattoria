@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getConfigs } from "./configActions";
+import { getStoreStatus } from "@/lib/openingHours";
 
 export async function createPublicOrder(data: {
     clienteNombre: string;
@@ -12,6 +14,19 @@ export async function createPublicOrder(data: {
     total: number;
 }) {
     try {
+        // 0. Validate Store Hours
+        const configRes = await getConfigs(["business.hours", "business.closedDays"]);
+        if (configRes.success && configRes.data) {
+            const status = getStoreStatus(
+                configRes.data["business.hours"] || {},
+                configRes.data["business.closedDays"] || []
+            );
+
+            if (!status.isOpen) {
+                return { success: false, error: status.message || "El local se encuentra cerrado en este momento." };
+            }
+        }
+
         // 1. Get next order number from AppSequence
         const seq = await prisma.appSequence.upsert({
             where: { tipo: "order" },

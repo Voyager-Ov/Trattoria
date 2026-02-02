@@ -37,6 +37,7 @@ interface CartItem {
     nombre: string;
     cantidad: number;
     precio: number;
+    type: 'PRODUCTO' | 'PROMOCION';
 }
 
 interface Customer {
@@ -123,7 +124,8 @@ export default function NuevoPedidoPage() {
                 productId: product.id,
                 nombre: product.nombre,
                 cantidad: 1,
-                precio: product.precio
+                precio: product.precio,
+                type: product.type
             }];
         });
     };
@@ -161,6 +163,7 @@ export default function NuevoPedidoPage() {
                 clienteDireccion: clienteDireccion,
                 items: cart.map(item => ({
                     productId: item.productId,
+                    type: item.type, // Map the type from the cart item
                     nombreProduct: item.nombre,
                     cantidad: item.cantidad,
                     precioUnitario: item.precio

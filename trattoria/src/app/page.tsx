@@ -2,6 +2,7 @@
 
 import { useCart } from "@/providers/CartProvider";
 import { CartDrawer } from "@/components/cart/CartDrawer";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,11 @@ export default function CatalogPage() {
     const [activeCategory, setActiveCategory] = useState('Todas');
     const [searchQuery, setSearchQuery] = useState("");
     const { addItem } = useCart();
+    const { userData } = useAuth();
+
+    const dashboardHref = userData
+        ? (userData.rol === 'ADMIN' ? '/admin/dashboard' : '/empleado')
+        : '/login';
 
     const refreshData = useCallback(async () => {
         setIsLoading(true);
@@ -82,7 +88,7 @@ export default function CatalogPage() {
                         </div>
                     </div>
 
-                    <Link href="/admin/dashboard">
+                    <Link href={dashboardHref}>
                         <Button variant="ghost" size="icon" className="rounded-full text-foreground/80 hover:text-primary hover:bg-primary/10">
                             <User className="h-5 w-5" />
                         </Button>
