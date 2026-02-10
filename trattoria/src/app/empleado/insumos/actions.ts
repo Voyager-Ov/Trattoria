@@ -83,6 +83,7 @@ export async function registerStockEntry(data: {
     cantidad: number;
     costoUnitario: number;
     motivo?: string;
+    proveedor?: string;
 }) {
     try {
         const result = await prisma.$transaction(async (tx) => {
@@ -127,34 +128,28 @@ export async function registerStockEntry(data: {
                 }
             });
 
-            // 5. AUTOMATICALLY CREATE EXPENSE (EGRESO)
-            // Create expense only if there's a cost involved
-            const totalCost = newQuantity * newCost;
+            // 5. Create Egreso (expense) for the purchase
+            const montoTotal = newQuantity * newCost;
+            
+            // Generate egreso number
+            const seq = await tx.appSequence.upsert({
+                where: { tipo: "egreso" },
+                update: { ultimo: { increment: 1 } },
+                create: { tipo: "egreso", prefijo: "E-", ultimo: 1 }
+            });
+            const numeroEgreso = `${seq.prefijo}${seq.ultimo.toString().padStart(3, '0')}`;
 
-            if (totalCost > 0) {
-                // Get next Egreso Number
-                const seq = await tx.appSequence.upsert({
-                    where: { tipo: "egreso" },
-                    update: { ultimo: { increment: 1 } },
-                    create: { tipo: "egreso", prefijo: "E-", ultimo: 1 }
-                });
-                const numero = `${seq.prefijo}${seq.ultimo.toString().padStart(3, '0')}`;
-
-                // Create Egreso Record
-                await tx.egreso.create({
-                    data: {
-                        numero,
-                        descripcion: `Compra de insumo: ${supply.nombre} - ${data.motivo || 'Reposición de stock'}`,
-                        monto: totalCost,
-                        categoria: CategoriaEgreso.INSUMOS,
-                        fecha: new Date(),
-                        proveedor: "Compra Directa", // We could add a field for provider in the form later if needed
-                    }
-                });
-
-                // Audit Log for Egreso creation (optional but good for consistency)
-                // Leaving audit log logic minimal to avoid complexity, but could add here if needed.
-            }
+            // Create the egreso
+            await tx.egreso.create({
+                data: {
+                    numero: numeroEgreso,
+                    descripcion: `Compra de ${supply.nombre} - ${newQuantity} ${supply.unidad.toLowerCase()}`,
+                    monto: montoTotal,
+                    categoria: CategoriaEgreso.INSUMOS,
+                    fecha: new Date(),
+                    proveedor: data.proveedor || null,
+                }
+            });
 
             return updatedSupply;
         });

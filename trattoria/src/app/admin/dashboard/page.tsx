@@ -141,9 +141,11 @@ export default function DashboardPage() {
                                 <h3 className="text-xl font-bold text-zinc-900 tracking-tight">Rendimiento Semanal</h3>
                                 <p className="text-zinc-400 text-sm mt-1">Comparativa de ingresos diarios</p>
                             </div>
-                            <Button variant="outline" className="rounded-full border-zinc-200 text-zinc-600 text-xs font-bold uppercase tracking-widest">
-                                Ver Reporte Completo
-                            </Button>
+                            <Link href="/admin/dashboard/reportes">
+                                <Button variant="outline" className="rounded-full border-zinc-200 text-zinc-600 text-xs font-bold uppercase tracking-widest">
+                                    Ver Reporte Completo
+                                </Button>
+                            </Link>
                         </div>
                         <div className="p-8 flex-grow flex flex-col items-center justify-center bg-zinc-50/50">
                             <div className="h-64 w-full flex items-end justify-between px-4 gap-4">

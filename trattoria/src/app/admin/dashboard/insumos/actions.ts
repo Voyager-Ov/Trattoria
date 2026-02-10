@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { UnidadMedida, TipoMovimientoStock } from "@prisma/client";
+import { UnidadMedida, TipoMovimientoStock, CategoriaEgreso } from "@prisma/client";
 
 // Helper to serialize Prisma Decimal objects
 function serializePrisma(obj: any): any {
@@ -83,6 +83,7 @@ export async function registerStockEntry(data: {
     cantidad: number;
     costoUnitario: number;
     motivo?: string;
+    proveedor?: string;
 }) {
     try {
         const result = await prisma.$transaction(async (tx) => {
@@ -127,10 +128,34 @@ export async function registerStockEntry(data: {
                 }
             });
 
+            // 5. Create Egreso (expense) for the purchase
+            const montoTotal = newQuantity * newCost;
+            
+            // Generate egreso number
+            const seq = await tx.appSequence.upsert({
+                where: { tipo: "egreso" },
+                update: { ultimo: { increment: 1 } },
+                create: { tipo: "egreso", prefijo: "E-", ultimo: 1 }
+            });
+            const numeroEgreso = `${seq.prefijo}${seq.ultimo.toString().padStart(3, '0')}`;
+
+            // Create the egreso
+            await tx.egreso.create({
+                data: {
+                    numero: numeroEgreso,
+                    descripcion: `Compra de ${supply.nombre} - ${newQuantity} ${supply.unidad.toLowerCase()}`,
+                    monto: montoTotal,
+                    categoria: CategoriaEgreso.INSUMOS,
+                    fecha: new Date(),
+                    proveedor: data.proveedor || null,
+                }
+            });
+
             return updatedSupply;
         });
 
         revalidatePath("/admin/dashboard/insumos");
+        revalidatePath("/admin/dashboard/reportes/egresos");
         return { success: true, data: serializePrisma(result) };
     } catch (error) {
         console.error("Error registering stock entry:", error);

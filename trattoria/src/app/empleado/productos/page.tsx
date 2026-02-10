@@ -28,6 +28,8 @@ import {
 } from "@/app/admin/dashboard/productos/actions";
 import { Prisma, UnidadMedida } from "@prisma/client";
 import { CreateCategorySheet } from "@/app/admin/dashboard/productos/components/CreateCategorySheet";
+import { ComingSoonOverlay } from "@/components/ui/coming-soon-overlay";
+import { isFeatureEnabled } from "@/lib/features";
 import { CreateProductSheet } from "@/app/admin/dashboard/productos/components/CreateProductSheet";
 import { CreatePromotionSheet } from "@/app/admin/dashboard/productos/components/CreatePromotionSheet";
 
@@ -77,6 +79,13 @@ function MetricCard({ title, value, change, headerColor, icon }: any) {
 }
 
 export default function EmpleadoProductosPage() {
+    // Feature flag check
+    const empleadoModulesEnabled = isFeatureEnabled('empleado_modules');
+    
+    if (!empleadoModulesEnabled) {
+        return <ComingSoonOverlay />;
+    }
+
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);

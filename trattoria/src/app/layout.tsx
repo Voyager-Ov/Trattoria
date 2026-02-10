@@ -7,8 +7,8 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const outfit = Outfit({ subsets: ['latin'], variable: '--font-outfit' });
 
 export const metadata: Metadata = {
-    title: 'Trattoria Management',
-    description: 'Sistema de gestión de restaurantes',
+    title: 'Trattoria',
+    description: 'Arroyito',
 };
 
 import { CartProvider } from '@/providers/CartProvider';

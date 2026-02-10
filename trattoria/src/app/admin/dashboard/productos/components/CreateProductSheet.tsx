@@ -39,7 +39,7 @@ import { Prisma, UnidadMedida } from "@prisma/client";
 import Image from "next/image";
 
 type Category = Prisma.CategoryGetPayload<{ select: { id: true; nombre: true; esPromocion: true } }>;
-type Supply = Prisma.SupplyGetPayload<{ select: { id: true; ean: true; nombre: true; descripcion: true; costoUnitario: true; unidad: true; stockActual: true; stockMinimo: true; createdAt: true; updatedAt: true; deletedAt: true } }>;
+type Supply = Prisma.SupplyGetPayload<{ select: { id: true; nombre: true; descripcion: true; costoUnitario: true; unidad: true; stockActual: true; stockMinimo: true; createdAt: true; updatedAt: true; deletedAt: true } }>;
 
 interface RecipeItem {
     supplyId: string;
@@ -200,8 +200,7 @@ export function CreateProductSheet({ open, onOpenChange, onSuccess }: CreateProd
     };
 
     const filteredSupplies = supplies.filter(s =>
-        s.nombre.toLowerCase().includes(searchSupply.toLowerCase()) ||
-        s.ean?.toLowerCase().includes(searchSupply.toLowerCase())
+        s.nombre.toLowerCase().includes(searchSupply.toLowerCase())
     ).slice(0, 5);
 
     return (
@@ -348,7 +347,7 @@ export function CreateProductSheet({ open, onOpenChange, onSuccess }: CreateProd
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="font-bold text-sm text-zinc-900 truncate">{supply.nombre}</p>
-                                                    <p className="text-[0.65rem] text-zinc-500 uppercase tracking-tighter">Stock: {supply.stockActual} {supply.unidad}</p>
+                                                    <p className="text-[0.65rem] text-zinc-500 uppercase tracking-tighter">Stock: {supply.stockActual.toString()} {supply.unidad}</p>
                                                 </div>
                                                 <Plus className="h-4 w-4 text-zinc-300" />
                                             </button>

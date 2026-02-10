@@ -14,7 +14,10 @@ export async function createPublicOrder(data: {
     total: number;
 }) {
     try {
+        console.log('📥 createPublicOrder llamada con:', { clienteNombre: data.clienteNombre, total: data.total, items: data.items.length });
+        
         // 0. Validate Store Hours
+        console.log('⏰ Validando horario del local...');
         const configRes = await getConfigs(["business.hours", "business.closedDays"]);
         if (configRes.success && configRes.data) {
             const status = getStoreStatus(
@@ -22,20 +25,26 @@ export async function createPublicOrder(data: {
                 configRes.data["business.closedDays"] || []
             );
 
+            console.log('🏪 Estado del local:', status);
+
             if (!status.isOpen) {
+                console.error('❌ Local cerrado');
                 return { success: false, error: status.message || "El local se encuentra cerrado en este momento." };
             }
         }
 
         // 1. Get next order number from AppSequence
+        console.log('🔢 Obteniendo número de orden...');
         const seq = await prisma.appSequence.upsert({
             where: { tipo: "order" },
             update: { ultimo: { increment: 1 } },
             create: { tipo: "order", prefijo: "ORD-", ultimo: 1 }
         });
-        const numeroOrden = `${seq.prefijo}${seq.ultimo.toString().padStart(3, '0')}`;
+        const numeroOrden = `${seq.prefijo}${seq.ultimo.toString().padStart(4, '0')}`;
+        console.log('📋 Número de orden:', numeroOrden);
 
         // 2. Create the order in a transaction
+        console.log('💾 Creando orden en base de datos...');
         const newOrder = await prisma.$transaction(async (tx) => {
             const order = await tx.order.create({
                 data: {
@@ -48,21 +57,24 @@ export async function createPublicOrder(data: {
                     subtotal: data.total,
                     total: data.total,
                     metodoPago: data.metodoPago,
-                    notas: "", // or remove if not needed, but keep it clean
+                    notas: "",
                     items: {
-                        create: data.items.map(item => ({
-                            product: { connect: { id: item.productId } },
+                        create: data.items.map((item, index) => ({
+                            productId: item.productId,
                             nombreProduct: item.nombreProduct,
                             cantidad: item.cantidad,
                             precioUnitario: item.precioUnitario,
-                            subtotal: item.cantidad * item.precioUnitario
+                            subtotal: item.cantidad * item.precioUnitario,
+                            orden: index
                         }))
                     }
-                } as any,
+                },
                 include: {
                     items: true
                 }
             });
+
+            console.log('✅ Orden creada:', order.id);
 
             // 3. Optional: Create Audit Log
             await tx.auditLog.create({
@@ -76,13 +88,31 @@ export async function createPublicOrder(data: {
                 }
             });
 
+            console.log('📝 Audit log creado');
+
             return order;
         });
 
+        console.log('✅ Transacción completada');
         revalidatePath("/admin/dashboard/pedidos");
         return { success: true, orderNumber: numeroOrden, data: JSON.parse(JSON.stringify(newOrder)) };
-    } catch (error) {
-        console.error("Error creating public order:", error);
-        return { success: false, error: "No se pudo procesar el pedido en este momento" };
+    } catch (error: any) {
+        console.error("❌ Error creating public order:", error);
+        console.error("❌ Error code:", error?.code);
+        console.error("❌ Error message:", error?.message);
+        console.error("❌ Error stack:", error?.stack);
+        
+        // More specific error messages
+        if (error?.code === 'P2025') {
+            return { success: false, error: "Uno o más productos ya no están disponibles" };
+        }
+        if (error?.code === 'P2002') {
+            return { success: false, error: "Error de duplicación en el pedido" };
+        }
+        if (error?.message) {
+            console.error("Error details:", error.message);
+        }
+        
+        return { success: false, error: "No se pudo procesar el pedido. Por favor intenta nuevamente." };
     }
 }

@@ -12,7 +12,8 @@ import {
     Package,
     History,
     ChevronDown,
-    Loader2
+    Loader2,
+    LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +38,29 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ComingSoonOverlay } from "@/components/ui/coming-soon-overlay";
+import { isFeatureEnabled } from "@/lib/features";
+
+interface Supply {
+    id: string;
+    nombre: string;
+    stockActual: number | string;
+    stockMinimo: number | string;
+    unidad: string;
+    costoUnitario: number | string;
+    activo: boolean;
+}
+
+interface MetricCardProps {
+    title: string;
+    value: string | number;
+    change?: string;
+    headerColor: string;
+    icon?: LucideIcon;
+}
 
 // Metric Card - Exact Match with Admin Page
-function MetricCard({ title, value, change, headerColor, icon: Icon }: any) {
+function MetricCard({ title, value, change, headerColor, icon: Icon }: MetricCardProps) {
     return (
         <div className="bg-white rounded-[2rem] border border-zinc-200 shadow-sm overflow-hidden flex flex-col h-full group hover:shadow-md transition-shadow duration-300">
             {/* Colored Header Strip */}
@@ -64,13 +85,17 @@ function MetricCard({ title, value, change, headerColor, icon: Icon }: any) {
 }
 
 export default function InsumosPage() {
-    const [supplies, setSupplies] = useState<any[]>([]);
+    const [supplies, setSupplies] = useState<Supply[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
+    // Feature flag
+    const empleadoModulesEnabled = isFeatureEnabled('empleado_modules');
+
     useEffect(() => {
         loadSupplies();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     async function loadSupplies() {
@@ -79,7 +104,7 @@ export default function InsumosPage() {
         if (result.success) {
             setSupplies(result.data);
         } else {
-            toast.error(result.error);
+            toast.error(result.error || "Error al cargar los insumos");
         }
         setLoading(false);
     }
@@ -102,7 +127,7 @@ export default function InsumosPage() {
             toast.success("Insumo eliminado correctamente");
             loadSupplies();
         } else {
-            toast.error(result.error);
+            toast.error(result.error || "Error al eliminar el insumo");
         }
         setDeleteId(null);
     };
@@ -110,6 +135,11 @@ export default function InsumosPage() {
     const truncateId = (id: string) => {
         return id.length > 12 ? `${id.slice(0, 12)}...` : id;
     };
+
+    // Si la feature no está habilitada, mostrar Coming Soon
+    if (!empleadoModulesEnabled) {
+        return <ComingSoonOverlay />;
+    }
 
     return (
         <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen">

@@ -51,6 +51,16 @@ interface SelectionItem {
     precio: number;
     imagen?: string | null;
     categoryId: string;
+    recipeItems?: {
+        id: string;
+        qtyPerUnit: number;
+        unidad: string;
+        supply: {
+            id: string;
+            nombre: string;
+            costoUnitario: number;
+        };
+    }[];
 }
 
 interface SelectedProduct {
@@ -139,11 +149,15 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
                     if (product) totalOrig += Number(product.precio) * sp.quantity;
                 });
 
+                const finalPrice = promo.discountType === 'PERCENTAGE'
+                    ? totalOrig * (1 - Number(promo.discountValue) / 100)
+                    : totalOrig - Number(promo.discountValue);
+
                 setFormData({
                     name: promo.name || "",
                     description: promo.description || "",
                     code: promo.code || "",
-                    finalPrice: (totalOrig - Number(promo.discountValue)).toString(),
+                    finalPrice: finalPrice.toString(),
                     startDate: promo.startDate ? new Date(promo.startDate).toISOString().split('T')[0] : "",
                     endDate: promo.endDate ? new Date(promo.endDate).toISOString().split('T')[0] : "",
                     imagen: promo.imagen || "",
@@ -186,6 +200,24 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
         if (totalOriginalPrice === 0 || calculatedDiscount === 0) return 0;
         return Math.round((calculatedDiscount / totalOriginalPrice) * 100);
     }, [totalOriginalPrice, calculatedDiscount]);
+
+    const totalSuppliesCost = useMemo(() => {
+        return selectedProducts.reduce((total, sp) => {
+            const product = products.find(p => p.id === sp.id);
+            if (!product || !product.recipeItems) return total;
+            
+            const itemRecipeCost = product.recipeItems.reduce((acc, ri) => 
+                acc + (Number(ri.qtyPerUnit) * Number(ri.supply.costoUnitario || 0)), 0);
+            
+            return total + (itemRecipeCost * sp.quantity);
+        }, 0);
+    }, [selectedProducts, products]);
+
+    const profitabilityMargin = useMemo(() => {
+        const final = Number(formData.finalPrice) || 0;
+        if (final <= 0) return 0;
+        return ((final - totalSuppliesCost) / final) * 100;
+    }, [formData.finalPrice, totalSuppliesCost]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -639,13 +671,31 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
                                     </div>
                                 </div>
 
-                                <div className="p-6 bg-white/50 rounded-[2rem] border border-emerald-200 flex gap-4 items-center">
-                                    <div className="h-12 w-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
-                                        <Info className="h-6 w-6" />
+                                <div className="p-6 bg-white/50 rounded-[2rem] border border-emerald-200 flex flex-col gap-4">
+                                    <div className="flex gap-4 items-center">
+                                        <div className="h-12 w-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                                            <Info className="h-6 w-6" />
+                                        </div>
+                                        <p className="text-xs font-bold text-emerald-800 leading-tight">
+                                            Esta oferta representa un beneficio directo de **${calculatedDiscount.toLocaleString()}** para tus clientes habituales.
+                                        </p>
                                     </div>
-                                    <p className="text-xs font-bold text-emerald-800 leading-tight">
-                                        Esta oferta representa un beneficio directo de **${calculatedDiscount.toLocaleString()}** para tus clientes habituales.
-                                    </p>
+
+                                    {/* Cost Analysis */}
+                                    {totalSuppliesCost > 0 && (
+                                        <div className="mt-2 pt-4 border-t border-emerald-200/50 space-y-3">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[0.65rem] font-black text-emerald-700 uppercase tracking-widest">Costo Producción (Insumos)</span>
+                                                <span className="font-black text-emerald-900">${totalSuppliesCost.toLocaleString('es-CL')}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[0.65rem] font-black text-emerald-700 uppercase tracking-widest">Margen Bruto Estimado</span>
+                                                <span className={`font-black px-3 py-1 rounded-lg text-xs ${profitabilityMargin > 30 ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-800'}`}>
+                                                    {profitabilityMargin.toFixed(1)}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

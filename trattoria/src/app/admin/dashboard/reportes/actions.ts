@@ -14,7 +14,7 @@ export type FinancialSummary = {
 
 export async function getReportsData(startDate?: Date, endDate?: Date) {
     try {
-        const where: any = {
+        const where = {
             deletedAt: null,
             ...(startDate && endDate ? {
                 recibidoEn: {
@@ -22,6 +22,16 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
                     lte: endDate
                 }
             } : {})
+        };
+
+        const whereNotCancelled = {
+            ...where,
+            estado: { not: EstadoPedido.CANCELADO }
+        };
+
+        const whereFinalized = {
+            ...where,
+            estado: EstadoPedido.FINALIZADO
         };
 
         const [
@@ -39,23 +49,17 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
                     items: true
                 }
             }),
-            // Total Revenue summary
+            // Total Revenue summary (excluding cancelled orders)
             prisma.order.aggregate({
-                where: {
-                    ...where,
-                    estado: { not: "CANCELADO" as EstadoPedido }
-                },
+                where: whereNotCancelled,
                 _sum: { total: true },
                 _count: { id: true }
             }),
-            // Total Orders Count
+            // Total Orders Count (all orders in range)
             prisma.order.count({ where }),
-            // All valid orders in range to calculate daily stats (only needed fields for performance)
+            // Finalized orders for daily stats
             prisma.order.findMany({
-                where: {
-                    ...where,
-                    estado: { in: ["FINALIZADO"] as EstadoPedido[] }
-                },
+                where: whereFinalized,
                 select: {
                     total: true,
                     recibidoEn: true
@@ -77,17 +81,16 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
         // Group by Payment Method
         const paymentGroups = await prisma.order.groupBy({
             by: ['metodoPago'],
-            where: {
-                ...where,
-                estado: { not: "CANCELADO" as EstadoPedido }
-            },
+            where: whereNotCancelled,
             _sum: { total: true },
             _count: true
         });
 
         const ordersByStatus: { [key: string]: number } = {};
         statusGroups.forEach(g => {
-            ordersByStatus[g.estado] = g._count;
+            if (g.estado) {
+                ordersByStatus[g.estado] = g._count || 0;
+            }
         });
 
         const ordersByPaymentMethod: { [key: string]: number } = {};
@@ -109,12 +112,12 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
         });
 
         const summary: FinancialSummary = {
-            totalRevenue,
-            totalOrders: totalOrdersAgg,
-            averageTicket,
-            ordersByStatus,
-            ordersByPaymentMethod,
-            revenueByDay
+            totalRevenue: totalRevenue || 0,
+            totalOrders: totalOrdersAgg || 0,
+            averageTicket: averageTicket || 0,
+            ordersByStatus: ordersByStatus || {},
+            ordersByPaymentMethod: ordersByPaymentMethod || {},
+            revenueByDay: revenueByDay || {}
         };
 
         return {
@@ -126,14 +129,15 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
                     numero: order.numero,
                     recibidoEn: order.recibidoEn.toISOString(),
                     clienteNombre: order.clienteNombre || "Cliente Final",
-                    total: order.total.toNumber(),
+                    total: order.total?.toNumber() || 0,
                     metodoPago: order.metodoPago || "N/A",
                     estado: order.estado,
-                    items: order.items.map(item => ({
-                        ...item,
-                        cantidad: item.cantidad.toNumber(),
-                        precioUnitario: item.precioUnitario.toNumber(),
-                        subtotal: item.subtotal.toNumber()
+                    items: (order.items || []).map(item => ({
+                        id: item.id,
+                        productId: item.productId,
+                        cantidad: item.cantidad?.toNumber() || 0,
+                        precioUnitario: item.precioUnitario?.toNumber() || 0,
+                        subtotal: item.subtotal?.toNumber() || 0
                     }))
                 }))
             }
@@ -141,6 +145,10 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
 
     } catch (error) {
         console.error("Error fetching reports data:", error);
-        return { success: false, error: "No se pudieron cargar los reportes" };
+        return { 
+            success: false, 
+            error: "No se pudieron cargar los reportes",
+            data: null
+        };
     }
 }

@@ -3,15 +3,10 @@
 import React from "react";
 import {
     ChevronRight,
-    ArrowLeft,
     Save,
     X,
     AlertTriangle,
-    Info,
-    Package,
     Beaker,
-    TrendingUp,
-    Settings2,
     Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";

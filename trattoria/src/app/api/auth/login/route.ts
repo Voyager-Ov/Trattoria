@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
         if (!dbUser) {
             // BOOTSTRAP LOGIC: Check if this email is allowed to be an admin
             const { isBootstrapAdmin } = await import('@/lib/auth');
+            
             if (isBootstrapAdmin(email)) {
                 console.log(`🚀 [Bootstrap] Creating admin user for allowlisted email: ${email}`);
                 dbUser = await prisma.user.create({

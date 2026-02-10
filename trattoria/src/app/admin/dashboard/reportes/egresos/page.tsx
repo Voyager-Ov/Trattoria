@@ -42,6 +42,8 @@ import { format, startOfDay, subDays, startOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
 import { getEgresos, getEgresoStats, deleteEgreso } from "@/app/actions/egresoActions";
 import { CreateEgresoDrawer } from "@/components/dashboard/reportes/CreateEgresoDrawer";
+import { ComingSoonOverlay } from "@/components/ui/coming-soon-overlay";
+import { isFeatureEnabled } from "@/lib/features";
 
 // --- Types ---
 interface Egreso {
@@ -82,6 +84,9 @@ function MetricCard({ title, value, subValue, headerColor, icon }: MetricCardPro
 
 // --- Main Component ---
 export default function EgresosPage() {
+    // Feature flag check
+    const reportesEnabled = isFeatureEnabled('reportes');
+    
     const [isLoading, setIsLoading] = useState(true);
     const [egresos, setEgresos] = useState<Egreso[]>([]);
     const [stats, setStats] = useState({ total: 0, porCategoria: {} as Record<string, number>, count: 0 });
@@ -124,7 +129,7 @@ export default function EgresosPage() {
             ]);
 
             if (resEgresos.success && resEgresos.data) {
-                setEgresos(resEgresos.data as any);
+                setEgresos(resEgresos.data as Egreso[]);
             }
             if (resStats.success && resStats.data) {
                 setStats(resStats.data);
@@ -158,6 +163,7 @@ export default function EgresosPage() {
                 toast.error(res.error || "No se pudo eliminar");
             }
         } catch (error) {
+            console.error("Error deleting egreso:", error);
             toast.error("Error al eliminar");
         } finally {
             setDeletingId(null);
@@ -190,6 +196,15 @@ export default function EgresosPage() {
             default: return "bg-zinc-50 text-zinc-600";
         }
     };
+
+    // Si la feature está deshabilitada, mostrar overlay
+    if (!reportesEnabled) {
+        return (
+            <ComingSoonOverlay>
+                <div className="space-y-8"></div>
+            </ComingSoonOverlay>
+        );
+    }
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 pb-10">

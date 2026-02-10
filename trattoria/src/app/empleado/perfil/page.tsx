@@ -1,15 +1,37 @@
-import { getAuthenticatedUserServer } from '@/lib/auth';
+"use client";
+
+import { useAuth } from '@/lib/hooks/useAuth';
 import { redirect } from 'next/navigation';
 import { ProfileForm } from './profile-form';
 import { SecurityCard } from '@/app/admin/dashboard/perfil/security-card'; // Reuse from admin
 import { Separator } from '@/components/ui/separator';
 import { User, Key } from 'lucide-react';
+import { ComingSoonOverlay } from '@/components/ui/coming-soon-overlay';
+import { isFeatureEnabled } from '@/lib/features';
+import { useEffect } from 'react';
 
-export default async function EmpleadoProfilePage() {
-    const user = await getAuthenticatedUserServer();
+export default function EmpleadoProfilePage() {
+    const { user, loading } = useAuth();
+
+    // Feature flag check
+    const empleadoModulesEnabled = isFeatureEnabled('empleado_modules');
+    
+    useEffect(() => {
+        if (!loading && !user) {
+            redirect('/login');
+        }
+    }, [user, loading]);
+
+    if (!empleadoModulesEnabled) {
+        return <ComingSoonOverlay />;
+    }
+
+    if (loading) {
+        return <div className="p-8">Cargando...</div>;
+    }
 
     if (!user) {
-        redirect('/login');
+        return null;
     }
 
     return (

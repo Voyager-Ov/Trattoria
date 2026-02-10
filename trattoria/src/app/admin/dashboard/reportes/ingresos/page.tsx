@@ -10,6 +10,8 @@ import { getReportsData, FinancialSummary } from "../actions";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { ComingSoonOverlay } from "@/components/ui/coming-soon-overlay";
+import { isFeatureEnabled } from "@/lib/features";
 
 // --- Types ---
 interface Transaction {
@@ -51,6 +53,9 @@ function MetricCard({ title, value, subValue, headerColor, icon }: MetricCardPro
 
 // --- Main Component ---
 export default function IngresosPage() {
+    // Feature flag check
+    const reportesEnabled = isFeatureEnabled('reportes');
+    
     const [isLoading, setIsLoading] = useState(true);
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -104,6 +109,15 @@ export default function IngresosPage() {
     const formatDate = (dateStr: string) => {
         return format(new Date(dateStr), "dd MMM yyyy, HH:mm", { locale: es });
     };
+
+    // Si la feature está deshabilitada, mostrar overlay
+    if (!reportesEnabled) {
+        return (
+            <ComingSoonOverlay>
+                <div className="space-y-8"></div>
+            </ComingSoonOverlay>
+        );
+    }
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">

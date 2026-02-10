@@ -6,6 +6,8 @@ import {
     onAuthStateChanged,
     signInWithEmailAndPassword,
     signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
     createUserWithEmailAndPassword,
     signOut
 } from 'firebase/auth';
@@ -26,16 +28,6 @@ type UserData = {
 /**
  * useAuth Hook
  * Client-side authentication management
- * 
- * Based on Alquimia's working implementation
- * 
- * Flow:
- * 1. User enters email/password or clicks Google
- * 2. Firebase handles authentication (browser)
- * 3. Get ID token from Firebase
- * 4. Send token to /api/auth/login or /api/auth/register
- * 5. Backend creates session cookie
- * 6. Redirect to dashboard
  */
 export function useAuth() {
     const [user, setUser] = useState<User | null>(null);
@@ -120,11 +112,11 @@ export function useAuth() {
     const loginGoogle = async () => {
         setState({ loading: true, error: null });
         try {
-            // 1. Open Google sign-in popup
+            // Use popup for all browsers
             const userCredential = await signInWithPopup(auth, googleProvider);
             const idToken = await userCredential.user.getIdToken();
 
-            // 2. Check if user exists in our system
+            // Check if user exists in our system
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -133,18 +125,15 @@ export function useAuth() {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'No pudimos iniciar sesión. Verifica que tu cuenta tenga acceso.');
+                throw new Error(errorData.error || 'No pudimos iniciar sesión');
             }
 
             const data = await response.json();
-            const activeUser = data.user;
             setUserData(data.user);
             console.log('✅ Google login successful:', data.user);
 
-            // 3. Redirect based on role
-            if (activeUser) {
-                router.push(getRedirectPath(activeUser.rol));
-            }
+            // Redirect based on role
+            router.push(getRedirectPath(data.user.rol));
             setState({ loading: false, error: null });
 
         } catch (error) {

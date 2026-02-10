@@ -20,6 +20,8 @@ type ProductActionData = {
 
 type CategoryCreateData = {
     nombre: string;
+    descripcion?: string;
+    imagen?: string;
     activo?: boolean;
     esPromocion?: boolean;
     orden?: number;
@@ -27,6 +29,8 @@ type CategoryCreateData = {
 
 type CategoryUpdateData = {
     nombre?: string;
+    descripcion?: string;
+    imagen?: string;
     activo?: boolean;
     esPromocion?: boolean;
     orden?: number;
@@ -76,6 +80,11 @@ export async function getProducts() {
             },
             include: {
                 category: true,
+                recipeItems: {
+                    include: {
+                        supply: true
+                    }
+                }
             },
             orderBy: {
                 nombre: "asc",
@@ -177,6 +186,8 @@ export async function createCategory(data: CategoryCreateData) {
         const category = await prisma.category.create({
             data: {
                 nombre: data.nombre,
+                descripcion: data.descripcion,
+                imagen: data.imagen,
                 activo: data.activo,
                 esPromocion: data.esPromocion,
                 orden: data.orden,
@@ -315,7 +326,15 @@ export async function getPromotionById(id: string) {
             include: {
                 items: {
                     include: {
-                        product: true
+                        product: {
+                            include: {
+                                recipeItems: {
+                                    include: {
+                                        supply: true
+                                    }
+                                }
+                            }
+                        }
                     }
                 },
                 categories: true
@@ -427,6 +446,8 @@ export async function updateCategory(id: string, data: CategoryUpdateData) {
             where: { id },
             data: {
                 nombre: data.nombre,
+                descripcion: data.descripcion,
+                imagen: data.imagen,
                 activo: data.activo,
                 esPromocion: data.esPromocion,
                 orden: data.orden,

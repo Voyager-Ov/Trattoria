@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { DashboardMetricCard } from "../components/DashboardMetricCard";
 import { updateOrderStatus, toggleOrderPayment } from "./actions";
 import { toast } from "sonner";
 import {
@@ -148,6 +149,14 @@ const STATUS_CONFIG: Record<string, { label: string, color: string, icon: Lucide
 export default function PedidosPage() {
     const router = useRouter();
     const [orders, setOrders] = useState<Order[]>([]);
+    
+    // Quick statistics for the header cards
+    const metrics = {
+        received: orders.filter((o: any) => o.estado === "RECIBIDO").length,
+        pending: orders.filter((o: any) => o.estado === "PENDIENTE").length,
+        preparing: orders.filter((o: any) => o.estado === "EN_PREPARACION").length,
+        ready: orders.filter((o: any) => o.estado === "LISTO").length,
+    };
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("TODOS");
@@ -321,6 +330,15 @@ export default function PedidosPage() {
 
                     <div className="flex items-center gap-3">
                         <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => fetchOrders()}
+                            className="h-12 w-12 rounded-2xl border-zinc-200 hover:bg-zinc-50 transition-all active:scale-95"
+                            title="Refrescar pedidos"
+                        >
+                            <RefreshCw className={cn("h-5 w-5 text-zinc-500", isLoading && "animate-spin")} />
+                        </Button>
+                        <Button
                             onClick={() => router.push("/admin/dashboard/pedidos/nuevo")}
                             className="bg-zinc-900 text-white hover:bg-zinc-800 rounded-2xl px-6 h-12 font-bold shadow-lg shadow-zinc-200 transition-all active:scale-95"
                         >
@@ -328,6 +346,39 @@ export default function PedidosPage() {
                             Nuevo Pedido
                         </Button>
                     </div>
+                </div>
+
+                {/* Statistics Cards Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                    <DashboardMetricCard 
+                        title="Recibidos"
+                        value={metrics.received}
+                        icon={<Clock size={16} />}
+                        isPrimary={true}
+                        headerColor="bg-zinc-900"
+                        description="Ingresados hoy"
+                    />
+                    <DashboardMetricCard 
+                        title="Pendientes"
+                        value={metrics.pending}
+                        icon={<Clock size={16} />}
+                        headerColor="bg-amber-500"
+                        description="En espera de confirmación"
+                    />
+                    <DashboardMetricCard 
+                        title="En Cocina"
+                        value={metrics.preparing}
+                        icon={<ChefHat size={16} />}
+                        headerColor="bg-blue-500"
+                        description="Pedidos en cocción"
+                    />
+                    <DashboardMetricCard 
+                        title="Listos"
+                        value={metrics.ready}
+                        icon={<CheckCircle2 size={16} />}
+                        headerColor="bg-emerald-500"
+                        description="Esperando retiro/entrega"
+                    />
                 </div>
 
                 {/* Filters Row - Refactored for Stability and Premium Look */}

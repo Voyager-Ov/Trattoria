@@ -1,4 +1,4 @@
-import { Sidebar } from "./Sidebar";
+import { AdminSidebar } from "./Sidebar";
 import { Header } from "./Header";
 // import { ScrollArea } from "@/components/ui/scroll-area"; // Removed to fix build, using standard overflow
 
@@ -11,7 +11,7 @@ export default function DashboardLayout({
         <div className="flex h-screen overflow-hidden bg-zinc-50/50">
             {/* Desktop Sidebar - Hidden on mobile */}
             <div className="hidden md:block">
-                <Sidebar mode="desktop" />
+                <AdminSidebar mode="desktop" />
             </div>
 
             {/* Main Content Area */}

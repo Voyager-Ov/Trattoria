@@ -46,6 +46,10 @@ export function CartDrawer() {
             if (res.success && res.data) {
                 const data = res.data;
                 setConfigs(data);
+                
+                // Debug: Log delivery settings
+                console.log('Delivery Settings:', data["delivery.settings"]);
+                
                 // Set default payment method if available
                 const methods = (data["payments.methods"]?.length > 0)
                     ? data["payments.methods"]
@@ -78,10 +82,10 @@ export function CartDrawer() {
     }, []);
 
     const deliverySettings = configs?.["delivery.settings"];
-    const deliveryFee = formData.tipoEntrega === 'envio' ? (deliverySettings?.deliveryFee || 0) : 0;
+    const deliveryFee = formData.tipoEntrega === 'envio' ? (Number(deliverySettings?.deliveryFee) || 0) : 0;
 
     const finalTotal = totalPrice + deliveryFee;
-    const isMinPurchaseMet = (formData.tipoEntrega === 'envio' && deliverySettings) ? totalPrice >= deliverySettings.minPurchase : true;
+    const isMinPurchaseMet = (formData.tipoEntrega === 'envio' && deliverySettings) ? totalPrice >= (Number(deliverySettings.minPurchase) || 0) : true;
 
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,15 +96,40 @@ export function CartDrawer() {
     const handleConfirmOrder = async () => {
         if (isSubmitting) return;
 
+        // Validaciones básicas
+        if (!formData.nombre || !formData.telefono || !formData.metodoPago) {
+            toast.error("Por favor completa todos los campos requeridos");
+            return;
+        }
+
+        if (formData.tipoEntrega === 'envio' && !formData.direccion) {
+            toast.error("Por favor ingresa una dirección de entrega");
+            return;
+        }
+
+        if (formData.tipoEntrega === 'envio' && deliverySettings && !isMinPurchaseMet) {
+            toast.error(`La compra mínima para delivery es $${Number(deliverySettings.minPurchase).toLocaleString('es-CL')}`);
+            return;
+        }
+
+        const whatsappSettings = configs?.["whatsapp.settings"];
+        if (!whatsappSettings?.phoneNumber || !whatsappSettings?.enabled) {
+            toast.error("La confirmación por WhatsApp no está disponible en este momento.");
+            return;
+        }
+
         setIsSubmitting(true);
+        console.log('🔄 Iniciando proceso de pedido...');
+        
         try {
             // 1. Create order in database
+            console.log('📝 Creando pedido en la base de datos...');
             const result = await createPublicOrder({
                 clienteNombre: formData.nombre,
                 clienteTelefono: formData.telefono,
                 clienteDireccion: formData.tipoEntrega === 'envio' ? formData.direccion : 'Retiro en Local',
                 metodoPago: formData.metodoPago,
-                total: finalTotal, // Use finalTotal which includes delivery if applicable
+                total: finalTotal,
                 items: items.map(item => ({
                     productId: item.id,
                     cantidad: item.quantity,
@@ -109,22 +138,21 @@ export function CartDrawer() {
                 }))
             });
 
+            console.log('📊 Resultado de creación:', result);
+
             if (!result.success) {
+                console.error('❌ Error al crear pedido:', result.error);
                 toast.error(result.error || "Error al procesar el pedido");
+                setIsSubmitting(false);
                 return;
             }
+
+            console.log('✅ Pedido creado exitosamente:', result.orderNumber);
 
             // 2. Prepare WhatsApp message
-            const whatsappSettings = configs?.["whatsapp.settings"];
-            if (!whatsappSettings?.phoneNumber || !whatsappSettings?.enabled) {
-                toast.error("El pedido se guardó, pero la notificación por WhatsApp no está disponible en este momento.");
-                // Clean up anyway
-                clearCart();
-                setStep('cart');
-                return;
-            }
-
             const WHATSAPP_NUMBER = whatsappSettings.phoneNumber.replace(/\D/g, '');
+            console.log('📞 Número de WhatsApp limpio:', WHATSAPP_NUMBER);
+            
             let message = whatsappSettings.templateMessage || "Hola {nombre}, recibimos tu pedido #{id}.";
 
             const itemsText = items.map(item =>
@@ -146,14 +174,22 @@ export function CartDrawer() {
                 .replace(/{items}/g, itemsText)
                 .replace(/{total}/g, `$${finalTotal.toLocaleString('es-CL')}`);
 
-            // Add delivery type and payment details
+            // Add delivery type and cost details
             const entregaLabel = formData.tipoEntrega === 'envio' ? "Delivery 🛵" : "Retiro en Local 🍕";
             message += `\n\n📌 *Tipo de entrega:* ${entregaLabel}`;
+            
+            // Add cost breakdown
+            message += `\n\n💵 *Resumen de costos:*`;
+            message += `\n• Subtotal productos: $${totalPrice.toLocaleString('es-CL')}`;
+            if (deliveryFee > 0) {
+                message += `\n• Costo de envío: $${deliveryFee.toLocaleString('es-CL')}`;
+            }
+            message += `\n\n*TOTAL: $${finalTotal.toLocaleString('es-CL')}*`;
 
             if (formData.metodoPago === 'EFECTIVO' && formData.pagaCon) {
                 const pagaConNum = Number(formData.pagaCon);
                 const vuelto = pagaConNum - finalTotal;
-                message += `\n💰 *Paga con:* $${pagaConNum.toLocaleString('es-CL')}`;
+                message += `\n\n💰 *Paga con:* $${pagaConNum.toLocaleString('es-CL')}`;
                 message += `\n💵 *Vuelto:* $${vuelto.toLocaleString('es-CL')}`;
             }
 
@@ -163,10 +199,15 @@ export function CartDrawer() {
 
             const encodedMessage = encodeURIComponent(message);
             const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodedMessage}`;
+            
+            console.log('🌐 URL de WhatsApp generada');
+            console.log('📤 Redirigiendo a WhatsApp...');
 
-            window.location.assign(whatsappUrl);
+            // Success notification
+            toast.success("¡Pedido creado! Redirigiendo a WhatsApp...");
 
-            // Clear cart and reset state
+            // Clear cart and reset state BEFORE redirect
+            console.log('🧹 Limpiando carrito...');
             clearCart();
             setStep('cart');
             const finalMethods = (configs?.["payments.methods"]?.length > 0)
@@ -181,12 +222,21 @@ export function CartDrawer() {
                 tipoEntrega: 'envio',
                 pagaCon: ''
             });
-            toast.success("¡Pedido enviado con éxito!");
+
+            // Use setTimeout to ensure state updates complete before redirect
+            // This ensures the cart is cleared even if user comes back
+            setTimeout(() => {
+                console.log('✅ Abriendo WhatsApp...');
+                // Direct redirect works better in Safari and mobile browsers
+                window.location.href = whatsappUrl;
+            }, 100);
+
         } catch (error) {
-            console.error(error);
-            toast.error("Ocurrió un error inesperado");
+            console.error('❌ Error inesperado:', error);
+            toast.error("Ocurrió un error inesperado al crear el pedido");
         } finally {
             setIsSubmitting(false);
+            console.log('🏁 Proceso finalizado');
         }
     };
 
@@ -459,11 +509,11 @@ export function CartDrawer() {
                                         {deliveryFee > 0 ? `$${deliveryFee.toLocaleString('es-CL')}` : "Gratis"}
                                     </span>
                                 </div>
-                                {deliverySettings?.minPurchase > 0 && (
+                                {deliverySettings?.minPurchase && Number(deliverySettings.minPurchase) > 0 && (
                                     <div className="flex justify-between text-[10px]">
                                         <span className="text-muted-foreground italic">Compra mínima para delivery</span>
                                         <span className={isMinPurchaseMet ? "text-green-600" : "text-destructive font-bold"}>
-                                            ${deliverySettings.minPurchase.toLocaleString('es-CL')}
+                                            ${Number(deliverySettings.minPurchase).toLocaleString('es-CL')}
                                         </span>
                                     </div>
                                 )}
@@ -488,7 +538,8 @@ export function CartDrawer() {
                                     disabled={
                                         !formData.nombre ||
                                         !formData.telefono ||
-                                        (formData.tipoEntrega === 'envio' && (!formData.direccion || !formData.metodoPago || !isMinPurchaseMet)) ||
+                                        !formData.metodoPago ||
+                                        (formData.tipoEntrega === 'envio' && (!formData.direccion || !isMinPurchaseMet)) ||
                                         isSubmitting ||
                                         !storeStatus.isOpen
                                     }

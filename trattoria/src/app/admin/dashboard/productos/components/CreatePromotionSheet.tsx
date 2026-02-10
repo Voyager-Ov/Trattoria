@@ -35,13 +35,20 @@ import {
     Image as ImageIcon,
     Tag,
     Utensils,
-    Layers
+    Layers,
+    Scale
 } from "lucide-react";
 import { Prisma } from "@prisma/client";
 import Image from "next/image";
 
 type Category = Prisma.CategoryGetPayload<{ select: { id: true; nombre: true; esPromocion: true } }>;
-type Product = Prisma.ProductGetPayload<{ select: { id: true; nombre: true; precio: true; categoryId: true } }>;
+type Product = Prisma.ProductGetPayload<{ 
+    include: { 
+        recipeItems: { 
+            include: { supply: true } 
+        } 
+    } 
+}>;
 
 interface SelectionItem {
     id: string;
@@ -49,6 +56,7 @@ interface SelectionItem {
     tipo: "PRODUCT" | "CATEGORY";
     precio?: number;
     cantidad: number;
+    recipeItems?: any[];
 }
 
 interface CreatePromotionSheetProps {
@@ -136,7 +144,8 @@ export function CreatePromotionSheet({ open, onOpenChange, onSuccess }: CreatePr
                 nombre: item.nombre,
                 tipo,
                 precio: tipo === "PRODUCT" ? Number((item as Product).precio) : undefined,
-                cantidad: 1
+                cantidad: 1,
+                recipeItems: tipo === "PRODUCT" ? (item as Product).recipeItems : undefined
             }
         ]);
         setSearchQuery("");
@@ -436,19 +445,42 @@ export function CreatePromotionSheet({ open, onOpenChange, onSuccess }: CreatePr
                             </div>
 
                             {/* Total Original vs Promo */}
-                            <div className="p-5 bg-zinc-900 rounded-[1.5rem] flex items-center justify-between shadow-lg shadow-zinc-200 mt-4">
-                                <div>
-                                    <p className="text-[0.65rem] font-bold text-zinc-400 uppercase tracking-widest">Ahorro Estimado</p>
-                                    <p className="text-xl font-black text-white">
-                                        {formData.precio && selectedItems.some(i => i.tipo === "PRODUCT")
-                                            ? `${Math.max(0, (((selectedItems.filter(i => i.tipo === "PRODUCT").reduce((acc, current) => acc + ((current.precio || 0) * current.cantidad), 0)) - Number(formData.precio)))).toFixed(2)}`
-                                            : "0.00"}
-                                    </p>
+                            <div className="space-y-3">
+                                <div className="p-5 bg-zinc-900 rounded-[1.5rem] flex items-center justify-between shadow-lg shadow-zinc-200 mt-4">
+                                    <div>
+                                        <p className="text-[0.65rem] font-bold text-zinc-400 uppercase tracking-widest">Ahorro Estimado</p>
+                                        <p className="text-xl font-black text-white">
+                                            {formData.precio && selectedItems.some(i => i.tipo === "PRODUCT")
+                                                ? `${Math.max(0, (((selectedItems.filter(i => i.tipo === "PRODUCT").reduce((acc, current) => acc + ((current.precio || 0) * current.cantidad), 0)) - Number(formData.precio)))).toFixed(2)}`
+                                                : "0.00"}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[0.65rem] font-bold text-zinc-400 uppercase tracking-widest">Precio Final</p>
+                                        <p className="text-xl font-black text-emerald-400">${Number(formData.precio || 0).toFixed(2)}</p>
+                                    </div>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-[0.65rem] font-bold text-zinc-400 uppercase tracking-widest">Precio Final</p>
-                                    <p className="text-xl font-black text-emerald-400">${Number(formData.precio || 0).toFixed(2)}</p>
-                                </div>
+
+                                {/* Supply Cost Calculation */}
+                                {selectedItems.some(i => i.tipo === "PRODUCT" && i.recipeItems?.length) && (
+                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <Scale className="h-5 w-5 text-amber-500" />
+                                            <div>
+                                                <p className="text-[0.65rem] font-bold text-amber-600 uppercase tracking-widest">Costo de Producción (Insumos)</p>
+                                                <p className="text-sm font-black text-amber-900">
+                                                    ${selectedItems
+                                                        .filter(i => i.tipo === "PRODUCT")
+                                                        .reduce((totalCost, item) => {
+                                                            const itemRecipeCost = (item.recipeItems || []).reduce((acc: number, ri: any) => 
+                                                                acc + (Number(ri.qtyPerUnit) * Number(ri.supply.costoUnitario || 0)), 0);
+                                                            return totalCost + (itemRecipeCost * item.cantidad);
+                                                        }, 0).toLocaleString('es-CL')}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

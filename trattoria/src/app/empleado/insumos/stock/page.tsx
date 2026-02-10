@@ -40,6 +40,7 @@ function RegistrarStockContent() {
         cantidad: "",
         costoTotal: "",
         motivo: "Compra de Insumos",
+        proveedor: "",
         tipo: "IN" as TipoMovimientoStock,
     });
 
@@ -81,6 +82,7 @@ function RegistrarStockContent() {
                 cantidad: qty,
                 costoUnitario: unitCost,
                 motivo: formData.motivo,
+                proveedor: formData.proveedor || undefined,
             });
         } else {
             result = await registerStockMovement({
@@ -247,6 +249,18 @@ function RegistrarStockContent() {
                                     onChange={(e) => setFormData({ ...formData, motivo: e.target.value })}
                                 />
                             </div>
+
+                            {formData.tipo === "IN" && (
+                                <div className="space-y-3 md:col-span-2">
+                                    <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Proveedor (Opcional)</Label>
+                                    <Input
+                                        placeholder="Ej: Distribuidora San Juan, Mayorista Central..."
+                                        className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-medium px-6 shadow-none"
+                                        value={formData.proveedor}
+                                        onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -272,26 +286,31 @@ function RegistrarStockContent() {
                                         <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Nuevo Stock Estimado</p>
                                         <div className="flex items-baseline gap-2">
                                             <span className="text-4xl font-black tracking-tighter italic">
-                                                {(Number(selectedSupply.stockActual) + (parseFloat(formData.cantidad) || 0)).toFixed(2)}
+                                                {(
+                                                    Number(selectedSupply.stockActual) + 
+                                                    (formData.tipo === 'OUT' ? -(parseFloat(formData.cantidad) || 0) : (parseFloat(formData.cantidad) || 0))
+                                                ).toFixed(2)}
                                             </span>
                                             <span className="text-zinc-500 font-bold text-xs uppercase tracking-widest">{selectedSupply.unidad}</span>
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2 border-t border-white/5 pt-6">
-                                        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Inversión Total</p>
-                                        <div className="flex items-baseline gap-1">
-                                            <span className="text-lg font-black text-zinc-500">$</span>
-                                            <span className="text-3xl font-black tracking-tighter text-emerald-400 italic">
-                                                {(parseFloat(formData.costoTotal) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                                            </span>
+                                    {formData.tipo === 'IN' && (
+                                        <div className="space-y-2 border-t border-white/5 pt-6">
+                                            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Inversión Total</p>
+                                            <div className="flex items-baseline gap-1">
+                                                <span className="text-lg font-black text-zinc-500">$</span>
+                                                <span className="text-3xl font-black tracking-tighter text-emerald-400 italic">
+                                                    {(parseFloat(formData.costoTotal) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                                                </span>
+                                            </div>
+                                            {formData.cantidad && parseFloat(formData.cantidad) > 0 && parseFloat(formData.costoTotal) > 0 && (
+                                                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                                                    Costo Unit: ${(parseFloat(formData.costoTotal) / parseFloat(formData.cantidad)).toFixed(2)}
+                                                </p>
+                                            )}
                                         </div>
-                                        {formData.cantidad && parseFloat(formData.cantidad) > 0 && (
-                                            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                                                Costo Unit: ${(parseFloat(formData.costoTotal) / parseFloat(formData.cantidad)).toFixed(2)}
-                                            </p>
-                                        )}
-                                    </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -314,7 +333,7 @@ function RegistrarStockContent() {
                             className="h-16 w-full rounded-2xl bg-zinc-900 text-white font-black text-lg shadow-lg active:scale-95 transition-all flex items-center justify-center gap-3"
                         >
                             {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <Save className="h-6 w-6" />}
-                            CONFIRMAR ENTRADA
+                            {formData.tipo === 'IN' ? 'CONFIRMAR ENTRADA' : formData.tipo === 'OUT' ? 'CONFIRMAR SALIDA' : 'CONFIRMAR AJUSTE'}
                         </Button>
                         <Link href="/empleado/insumos">
                             <Button variant="outline" className="h-16 w-full rounded-2xl border-zinc-200 hover:bg-zinc-50 font-bold text-zinc-500 shadow-none transition-all">

@@ -14,7 +14,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { Menu, Bell, LogOut, User as UserIcon } from "lucide-react";
+import { Menu, LogOut, User as UserIcon } from "lucide-react";
 import { EmpleadoSidebar } from "./EmpleadoSidebar";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { getCurrentUserProfile } from "@/app/admin/dashboard/userActions";
@@ -63,12 +63,6 @@ export function EmpleadoHeader() {
 
             {/* User & Actions */}
             <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="rounded-full text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100">
-                    <Bell className="h-5 w-5" />
-                </Button>
-
-                <div className="h-8 w-[1px] bg-zinc-200 mx-1 hidden md:block"></div>
-
                 <div className="flex items-center gap-3">
                     <div className="text-right hidden md:block">
                         {loading ? (

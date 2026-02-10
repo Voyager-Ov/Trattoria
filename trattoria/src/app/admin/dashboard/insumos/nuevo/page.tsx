@@ -33,6 +33,13 @@ import { UnidadMedida } from "@prisma/client";
 export default function NuevoInsumoPage() {
     const router = useRouter();
     const [loading, setLoading] = React.useState(false);
+    
+    // Estados para la vista previa
+    const [nombre, setNombre] = React.useState("");
+    const [unidad, setUnidad] = React.useState<UnidadMedida>(UnidadMedida.GRAMO);
+    const [descripcion, setDescripcion] = React.useState("");
+    const [stockMinimo, setStockMinimo] = React.useState("1");
+    const [costoUnitario, setCostoUnitario] = React.useState("0");
 
     async function handleSubmit(formData: FormData) {
         setLoading(true);
@@ -95,12 +102,14 @@ export default function NuevoInsumoPage() {
                                         name="nombre"
                                         placeholder="Ej: Harina 0000"
                                         required
+                                        value={nombre}
+                                        onChange={(e) => setNombre(e.target.value)}
                                         className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus-visible:ring-zinc-900 transition-all text-base font-bold px-6 shadow-none"
                                     />
                                 </div>
                                 <div className="space-y-3">
                                     <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Unidad de Medida</Label>
-                                    <Select name="unidad" required defaultValue={UnidadMedida.GRAMO}>
+                                    <Select name="unidad" required value={unidad} onValueChange={(value) => setUnidad(value as UnidadMedida)}>
                                         <SelectTrigger className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:ring-zinc-900 text-base font-bold px-6 shadow-none">
                                             <SelectValue placeholder="Seleccionar unidad" />
                                         </SelectTrigger>
@@ -120,6 +129,8 @@ export default function NuevoInsumoPage() {
                                 <Input
                                     name="descripcion"
                                     placeholder="Detalles sobre calidad o proveedor..."
+                                    value={descripcion}
+                                    onChange={(e) => setDescripcion(e.target.value)}
                                     className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus-visible:ring-zinc-900 transition-all text-base font-medium px-6 shadow-none"
                                 />
                             </div>
@@ -144,7 +155,8 @@ export default function NuevoInsumoPage() {
                                     name="stockMinimo"
                                     type="number"
                                     step="0.01"
-                                    defaultValue="1"
+                                    value={stockMinimo}
+                                    onChange={(e) => setStockMinimo(e.target.value)}
                                     required
                                     className="h-16 bg-zinc-800/50 border-transparent rounded-[1.5rem] focus-visible:ring-amber-400 transition-all text-base font-bold px-6 text-white shadow-none"
                                 />
@@ -157,7 +169,8 @@ export default function NuevoInsumoPage() {
                                         name="costoUnitario"
                                         type="number"
                                         step="any"
-                                        defaultValue="0"
+                                        value={costoUnitario}
+                                        onChange={(e) => setCostoUnitario(e.target.value)}
                                         required
                                         className="h-16 pl-10 bg-zinc-800/50 border-transparent rounded-[1.5rem] focus-visible:ring-zinc-400 transition-all text-base font-bold px-6 text-white shadow-none"
                                     />
@@ -172,12 +185,36 @@ export default function NuevoInsumoPage() {
                     <div className="bg-white p-8 rounded-[2.5rem] border border-zinc-200 shadow-sm">
                         <h4 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-400 mb-6 ml-1">Vista Previa</h4>
                         <div className="p-6 bg-zinc-50 rounded-[2rem] border border-zinc-100 flex flex-col items-center text-center gap-4 group">
-                            <div className="h-20 w-20 bg-white shadow-sm rounded-full flex items-center justify-center text-zinc-200 group-hover:scale-105 transition-transform">
+                            <div className={`h-20 w-20 bg-white shadow-sm rounded-full flex items-center justify-center group-hover:scale-105 transition-transform ${nombre ? 'text-zinc-700' : 'text-zinc-200'}`}>
                                 <Beaker className="h-10 w-10" />
                             </div>
-                            <div>
-                                <p className="font-black text-zinc-300 italic uppercase">PENDIENTE</p>
-                                <p className="text-[0.65rem] font-bold text-zinc-400 uppercase tracking-widest mt-1">Nombre Insumo</p>
+                            <div className="w-full">
+                                <p className={`font-black uppercase transition-all ${nombre ? 'text-zinc-900 text-lg' : 'text-zinc-300 italic text-base'}`}>
+                                    {nombre || 'PENDIENTE'}
+                                </p>
+                                <p className="text-[0.65rem] font-bold text-zinc-400 uppercase tracking-widest mt-1">
+                                    {nombre ? unidad.charAt(0) + unidad.slice(1).toLowerCase() : 'Nombre Insumo'}
+                                </p>
+                                
+                                {nombre && (
+                                    <div className="mt-4 pt-4 border-t border-zinc-200 space-y-2">
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-zinc-500 font-medium">Stock mínimo:</span>
+                                            <span className="font-bold text-zinc-900">{stockMinimo} {unidad.toLowerCase()}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-zinc-500 font-medium">Costo unitario:</span>
+                                            <span className="font-bold text-zinc-900">${parseFloat(costoUnitario || '0').toFixed(2)}</span>
+                                        </div>
+                                        {descripcion && (
+                                            <div className="mt-3 pt-3 border-t border-zinc-200">
+                                                <p className="text-xs text-zinc-600 italic line-clamp-2">
+                                                    {descripcion}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

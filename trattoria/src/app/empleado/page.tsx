@@ -21,12 +21,21 @@ import { getEmployeeDashboardMetrics, getRecentOrders } from "./actions";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { ComingSoonOverlay } from "@/components/ui/coming-soon-overlay";
+import { isFeatureEnabled } from "@/lib/features";
 
 export default function EmpleadoPage() {
     const { userData } = useAuth();
     const [metrics, setMetrics] = useState<any>(null);
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Feature flag check
+    const empleadoModulesEnabled = isFeatureEnabled('empleado_modules');
+    
+    if (!empleadoModulesEnabled) {
+        return <ComingSoonOverlay />;
+    }
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -63,7 +72,7 @@ export default function EmpleadoPage() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
                     <h1 className="text-4xl font-black text-zinc-900 tracking-tight">
-                        ¡Hola, {userData?.displayName?.split(' ')[0] || "Compañero"}! 👋
+                        ¡Hola, {userData?.email?.split('@')[0] || "Compañero"}! 👋
                     </h1>
                     <p className="text-zinc-500 mt-2 text-lg">Aquí tienes el resumen operativo de hoy.</p>
                 </div>

@@ -49,6 +49,7 @@ function RegistrarStockContent() {
         cantidad: "",
         costoTotal: "",
         motivo: "Compra de Insumos",
+        proveedor: "",
         tipo: "IN" as TipoMovimientoStock,
     });
 
@@ -90,6 +91,7 @@ function RegistrarStockContent() {
                 cantidad: qty,
                 costoUnitario: unitCost,
                 motivo: formData.motivo,
+                proveedor: formData.proveedor || undefined,
             });
         } else {
             result = await registerStockMovement({
@@ -256,6 +258,18 @@ function RegistrarStockContent() {
                                     onChange={(e) => setFormData({ ...formData, motivo: e.target.value })}
                                 />
                             </div>
+
+                            {formData.tipo === "IN" && (
+                                <div className="space-y-3 md:col-span-2">
+                                    <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Proveedor (Opcional)</Label>
+                                    <Input
+                                        placeholder="Ej: Distribuidora San Juan, Mayorista Central..."
+                                        className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-medium px-6 shadow-none"
+                                        value={formData.proveedor}
+                                        onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

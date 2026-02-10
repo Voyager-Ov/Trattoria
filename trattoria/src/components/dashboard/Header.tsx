@@ -12,8 +12,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { Menu, Bell, LogOut, Settings, User as UserIcon } from "lucide-react";
-import { Sidebar } from "./Sidebar";
+import { Menu, LogOut, Settings, User as UserIcon } from "lucide-react";
+import { AdminSidebar } from "./Sidebar";
 import { HeaderSearch } from "./HeaderSearch";
 import { DynamicBreadcrumb } from "./DynamicBreadcrumb";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -53,7 +53,7 @@ export function Header() {
                 <SheetContent side="left" className="p-0 border-r-zinc-200 bg-white w-[280px]">
                     {/* Force Expanded Sidebar in Mobile Sheet */}
                     <div className="h-full">
-                        <Sidebar mode="mobile" className="w-full h-full border-none shadow-none" />
+                        <AdminSidebar mode="mobile" className="w-full h-full border-none shadow-none" />
                     </div>
                 </SheetContent>
             </Sheet>
@@ -68,12 +68,6 @@ export function Header() {
 
             {/* User & Actions */}
             <div className="flex items-center gap-3 ml-auto md:ml-0">
-                <Button variant="ghost" size="icon" className="rounded-full text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100">
-                    <Bell className="h-5 w-5" />
-                </Button>
-
-                <div className="h-8 w-[1px] bg-zinc-200 mx-1 hidden md:block"></div>
-
                 <div className="flex items-center gap-3">
                     <div className="text-right hidden md:block">
                         {loading ? (

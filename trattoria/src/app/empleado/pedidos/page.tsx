@@ -551,6 +551,18 @@ export default function EmpleadoPedidosPage() {
                                                 </td>
                                                 <td className="px-8 py-6">
                                                     <div className="flex items-center justify-center gap-2">
+                                                        {/* View Button */}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => router.push(`/empleado/pedidos/${order.id}`)}
+                                                            className="h-9 px-3 rounded-xl hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 border border-transparent hover:border-zinc-200 transition-all active:scale-95 gap-2"
+                                                            title="Ver Detalles"
+                                                        >
+                                                            <Eye size={14} />
+                                                            <span className="text-[10px] font-black uppercase tracking-widest hidden lg:inline">Detalles</span>
+                                                        </Button>
+
                                                         {/* Single "Cobrar" Button outside menu */}
                                                         <Button
                                                             variant="outline"

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
@@ -20,6 +21,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/hooks/useAuth";
 import {
     Tooltip,
     TooltipContent,
@@ -32,19 +34,60 @@ type MenuItem = {
     name: string;
     href: string;
     icon: any;
+    activeColor: string; // Color de fondo cuando está activo
+    activeTextColor: string; // Color del texto cuando está activo
+    hoverColor: string; // Color en hover
     subItems?: { name: string; href: string }[];
 };
 
 const MENU_ITEMS: MenuItem[] = [
-    { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
-    { name: "Pedidos", href: "/admin/dashboard/pedidos", icon: ShoppingBag },
-    { name: "Menú y Productos", href: "/admin/dashboard/productos", icon: UtensilsCrossed },
-    { name: "Insumos", href: "/admin/dashboard/insumos", icon: Package },
-    { name: "Empleados", href: "/admin/dashboard/usuarios", icon: Users },
+    { 
+        name: "Dashboard", 
+        href: "/admin/dashboard", 
+        icon: LayoutDashboard,
+        activeColor: "bg-blue-500/10",
+        activeTextColor: "text-blue-600",
+        hoverColor: "hover:bg-blue-500/5"
+    },
+    { 
+        name: "Pedidos", 
+        href: "/admin/dashboard/pedidos", 
+        icon: ShoppingBag,
+        activeColor: "bg-orange-500/10",
+        activeTextColor: "text-orange-600",
+        hoverColor: "hover:bg-orange-500/5"
+    },
+    { 
+        name: "Menú y Productos", 
+        href: "/admin/dashboard/productos", 
+        icon: UtensilsCrossed,
+        activeColor: "bg-emerald-500/10",
+        activeTextColor: "text-emerald-600",
+        hoverColor: "hover:bg-emerald-500/5"
+    },
+    { 
+        name: "Insumos", 
+        href: "/admin/dashboard/insumos", 
+        icon: Package,
+        activeColor: "bg-indigo-500/10",
+        activeTextColor: "text-indigo-600",
+        hoverColor: "hover:bg-indigo-500/5"
+    },
+    { 
+        name: "Empleados", 
+        href: "/admin/dashboard/usuarios", 
+        icon: Users,
+        activeColor: "bg-violet-500/10",
+        activeTextColor: "text-violet-600",
+        hoverColor: "hover:bg-violet-500/5"
+    },
     {
         name: "Reportes",
         href: "/admin/dashboard/reportes",
         icon: FileText,
+        activeColor: "bg-rose-500/10",
+        activeTextColor: "text-rose-600",
+        hoverColor: "hover:bg-rose-500/5",
         subItems: [
             { name: "Dashboard", href: "/admin/dashboard/reportes" },
             { name: "Ingresos", href: "/admin/dashboard/reportes/ingresos" },
@@ -58,16 +101,23 @@ interface SidebarProps {
     mode?: 'desktop' | 'mobile'; // Support for mobile sheet usage
 }
 
-export function Sidebar({ className, mode = 'desktop' }: SidebarProps) {
+export function AdminSidebar({ className, mode = 'desktop' }: SidebarProps) {
     const pathname = usePathname();
+    const { logout } = useAuth();
+    const [mounted, setMounted] = useState(false);
     // If mobile, always expanded. If desktop, default collapsed.
     const [isCollapsed, setIsCollapsed] = useState(mode === 'desktop');
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
+    // Handle hydration
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     // Auto-expand parent if on a submenu page
     useEffect(() => {
         MENU_ITEMS.forEach(item => {
-            if (item.subItems && pathname?.startsWith(item.href)) {
+            if (item.subItems && (pathname === item.href || pathname?.startsWith(item.href + "/"))) {
                 setExpandedItems(prev => prev.includes(item.href) ? prev : [...prev, item.href]);
             }
         });
@@ -84,106 +134,131 @@ export function Sidebar({ className, mode = 'desktop' }: SidebarProps) {
         );
     };
 
+    if (!mounted) return <div className={cn("h-screen bg-white border-r border-zinc-100", isCollapsed ? "w-[80px]" : "w-[260px]")} />;
+
     return (
-        <div
-            className={cn(
-                "relative flex flex-col h-screen bg-white text-zinc-600 border-r border-zinc-100 transition-all duration-300 ease-in-out shadow-sm",
-                // Width logic: Mobile = w-full (handled by container), Desktop = variable
-                mode === 'desktop' ? (isCollapsed ? "w-[80px]" : "w-[240px]") : "w-full",
-                className
-            )}
-        >
-            {/* Toggle Button - Only for Desktop */}
-            {mode === 'desktop' && (
-                <Button
-                    onClick={toggleSidebar}
-                    variant="ghost"
-                    size="icon"
-                    className="absolute -right-3 top-6 h-6 w-6 rounded-full bg-white border border-zinc-200 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50 z-50 hidden md:flex shadow-sm"
-                >
-                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-                </Button>
-            )}
-
-            {/* Header / Logo */}
-            <div className={cn(
-                "flex items-center h-20 px-4 mb-2 transition-all duration-300",
-                (isCollapsed && mode === 'desktop') ? "justify-center" : "justify-start gap-3"
-            )}>
-                {/* Placeholder Logo */}
-                <div className="h-10 w-10 flex-shrink-0 bg-primary/10 rounded-xl flex items-center justify-center text-primary font-bold text-xl border border-primary/20">
-                    T
-                </div>
-                {(!isCollapsed || mode === 'mobile') && (
-                    <div className="flex flex-col">
-                        <span className="font-bold text-zinc-900 text-lg tracking-tight">Trattoria</span>
-                        <span className="text-xs text-zinc-400 font-medium">Panel Administrativo</span>
-                    </div>
+        <TooltipProvider delayDuration={0}>
+            <div
+                className={cn(
+                    "relative flex flex-col h-screen bg-white text-zinc-500 border-r border-zinc-200 transition-all duration-300 ease-in-out overflow-hidden",
+                    mode === 'desktop' ? (isCollapsed ? "w-[80px]" : "w-[260px]") : "w-full",
+                    className
                 )}
-            </div>
+            >
+                {/* Toggle Button - Desktop Only */}
+                {mode === 'desktop' && (
+                    <Button
+                        onClick={toggleSidebar}
+                        variant="ghost"
+                        size="icon"
+                        className="absolute -right-3 top-6 h-7 w-7 rounded-full bg-white border border-zinc-200 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 z-50 hidden md:flex shadow-lg transition-all duration-300"
+                    >
+                        {isCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+                    </Button>
+                )}
 
-            {/* Navigation Links */}
-            <div className="flex-1 px-3 space-y-1 overflow-y-auto scrollbar-hide py-2">
-                <TooltipProvider delayDuration={0}>
+                {/* Header / Logo */}
+                <div className={cn(
+                    "flex items-center h-20 px-4 mb-2 transition-all duration-300",
+                    isCollapsed && mode === 'desktop' ? "justify-center" : "justify-start gap-3"
+                )}>
+                    <div className="relative h-12 w-12 flex-shrink-0 bg-zinc-900 rounded-2xl overflow-hidden shadow-lg ring-2 ring-zinc-900/5">
+                        <Image 
+                            src="/tratologo.png" 
+                            alt="Logo" 
+                            fill 
+                            className="object-cover"
+                        />
+                    </div>
+                    {(!isCollapsed || mode === 'mobile') && (
+                        <div className="flex flex-col overflow-hidden">
+                            <span className="text-zinc-900 font-black tracking-tight leading-none text-lg uppercase">TRATTORIA</span>
+                            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider mt-0.5">Management</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Navigation Links */}
+                <div className="flex-1 px-3 space-y-1 overflow-y-auto no-scrollbar py-2">
                     {MENU_ITEMS.map((item) => {
-                        const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
+                        const isActive = item.href === "/admin/dashboard" 
+                            ? pathname === "/admin/dashboard" 
+                            : pathname === item.href || pathname?.startsWith(item.href + "/");
+                        
                         const hasSubItems = item.subItems && item.subItems.length > 0;
                         const isExpanded = expandedItems.includes(item.href);
                         const showLabel = !isCollapsed || mode === 'mobile';
 
+                        const content = (
+                            <>
+                                <item.icon
+                                    className={cn(
+                                        "h-5 w-5 flex-shrink-0 transition-all duration-300",
+                                        isActive ? item.activeTextColor : "text-zinc-400 group-hover:text-zinc-900"
+                                    )}
+                                />
+
+                                {showLabel && (
+                                    <span className={cn(
+                                        "font-semibold text-sm whitespace-nowrap overflow-hidden text-ellipsis flex-1 tracking-tight transition-all duration-300",
+                                        isActive && [item.activeTextColor, "font-bold"],
+                                        !isActive && "text-zinc-600 group-hover:text-zinc-900"
+                                    )}>
+                                        {item.name}
+                                    </span>
+                                )}
+
+                                {hasSubItems && showLabel && (
+                                    <ChevronDown
+                                        className={cn(
+                                            "h-4 w-4 transition-all duration-300",
+                                            isActive ? item.activeTextColor : "text-zinc-400 group-hover:text-zinc-600",
+                                            isExpanded && "rotate-180"
+                                        )}
+                                    />
+                                )}
+                            </>
+                        );
+
+                        const commonClasses = cn(
+                            "flex items-center gap-3 py-3 rounded-2xl transition-all duration-300 group cursor-pointer relative overflow-hidden",
+                            showLabel ? "px-4" : "justify-center px-0 w-14 mx-auto",
+                            isActive && [
+                                item.activeColor,
+                                "shadow-sm ring-1 ring-black/5"
+                            ],
+                            !isActive && [
+                                "text-zinc-500 hover:bg-zinc-50 hover:shadow-sm active:scale-[0.98]",
+                                item.hoverColor
+                            ]
+                        );
+
                         return (
-                            <div key={item.href}>
+                            <div key={item.href} className="space-y-1 relative">
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <div
-                                            className={cn(
-                                                "flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-200 group active:scale-95 cursor-pointer",
-                                                isActive && !hasSubItems
-                                                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                                                    : isActive && hasSubItems
-                                                        ? "bg-zinc-100 text-zinc-900"
-                                                        : "hover:bg-zinc-50 hover:text-zinc-900"
-                                            )}
-                                            onClick={() => {
-                                                if (hasSubItems && showLabel) {
-                                                    toggleExpanded(item.href);
-                                                } else if (!hasSubItems) {
-                                                    window.location.href = item.href;
-                                                }
-                                            }}
-                                        >
-                                            <item.icon
-                                                className={cn(
-                                                    "h-5 w-5 flex-shrink-0 transition-colors",
-                                                    isActive ? (hasSubItems ? "text-zinc-900" : "text-primary-foreground") : "text-zinc-400 group-hover:text-zinc-900"
-                                                )}
-                                            />
-
-                                            {showLabel && (
-                                                <span className="font-medium text-sm whitespace-nowrap overflow-hidden text-ellipsis flex-1">
-                                                    {item.name}
-                                                </span>
-                                            )}
-
-                                            {/* Chevron for submenus */}
-                                            {hasSubItems && showLabel && (
-                                                <ChevronDown
-                                                    className={cn(
-                                                        "h-4 w-4 transition-transform duration-200",
-                                                        isExpanded && "rotate-180"
-                                                    )}
-                                                />
-                                            )}
-
-                                            {/* Active Indicator Dot for Collapsed Mode Desktop Only */}
-                                            {!showLabel && isActive && (
-                                                <div className="absolute right-2 w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                                            )}
-                                        </div>
+                                        {hasSubItems ? (
+                                            <div
+                                                className={commonClasses}
+                                                onClick={() => {
+                                                    if (showLabel) {
+                                                        toggleExpanded(item.href);
+                                                    }
+                                                }}
+                                            >
+                                                {content}
+                                            </div>
+                                        ) : (
+                                            <Link
+                                                href={item.href}
+                                                className={commonClasses}
+                                            >
+                                                {content}
+                                            </Link>
+                                        )}
                                     </TooltipTrigger>
-                                    {/* Only show tooltip if collapsed and desktop */}
                                     {!showLabel && (
-                                        <TooltipContent side="right" className="bg-white text-zinc-900 border-zinc-200 shadow-md rounded-xl font-medium">
+                                        <TooltipContent side="right" sideOffset={20} className="bg-zinc-900 text-white border-none shadow-xl rounded-2xl font-semibold px-4 py-2.5 z-[100]">
                                             {item.name}
                                         </TooltipContent>
                                     )}
@@ -191,7 +266,7 @@ export function Sidebar({ className, mode = 'desktop' }: SidebarProps) {
 
                                 {/* Sub Items */}
                                 {hasSubItems && showLabel && isExpanded && (
-                                    <div className="ml-6 mt-1 space-y-1 border-l-2 border-zinc-100 pl-3">
+                                    <div className="ml-8 mt-1.5 space-y-1 pl-4 border-l-2 border-zinc-200">
                                         {item.subItems!.map((subItem) => {
                                             const isSubActive = pathname === subItem.href;
                                             return (
@@ -199,15 +274,24 @@ export function Sidebar({ className, mode = 'desktop' }: SidebarProps) {
                                                     key={subItem.href}
                                                     href={subItem.href}
                                                     className={cn(
-                                                        "flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all duration-150",
-                                                        isSubActive
-                                                            ? "bg-primary/10 text-primary font-semibold"
-                                                            : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50"
+                                                        "flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-300 group/sub",
+                                                        isSubActive && [
+                                                            item.activeColor,
+                                                            item.activeTextColor,
+                                                            "font-semibold shadow-sm"
+                                                        ],
+                                                        !isSubActive && [
+                                                            "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50 font-medium active:scale-[0.98]",
+                                                            item.hoverColor
+                                                        ]
                                                     )}
                                                 >
                                                     <div className={cn(
-                                                        "w-1.5 h-1.5 rounded-full",
-                                                        isSubActive ? "bg-primary" : "bg-zinc-300"
+                                                        "w-1.5 h-1.5 rounded-full transition-all duration-300",
+                                                        isSubActive ? [
+                                                            item.activeTextColor.replace('text-', 'bg-'),
+                                                            "scale-125"
+                                                        ] : "bg-zinc-300 group-hover/sub:bg-zinc-400"
                                                     )} />
                                                     {subItem.name}
                                                 </Link>
@@ -218,73 +302,85 @@ export function Sidebar({ className, mode = 'desktop' }: SidebarProps) {
                             </div>
                         );
                     })}
-                </TooltipProvider>
-            </div>
+                </div>
 
-            {/* Bottom Section: Config & User */}
-            <div className="p-3 mt-auto space-y-1">
-
-                <TooltipProvider delayDuration={0}>
-                    {/* User Profile */}
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Link
-                                href="/admin/dashboard/perfil"
-                                className={cn(
-                                    "flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-zinc-50 transition-all duration-200 text-zinc-400 hover:text-zinc-900",
-                                    pathname === '/admin/dashboard/perfil' && "bg-zinc-100 text-zinc-900"
+                {/* Bottom Section */}
+                {(() => {
+                    const showLabel = !isCollapsed || mode === 'mobile';
+                    return (
+                        <div className="p-3 mt-auto space-y-1 border-t border-zinc-200">
+                            {/* User Profile */}
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Link
+                                        href="/admin/dashboard/perfil"
+                                        className={cn(
+                                            "flex items-center gap-3 py-3 rounded-2xl transition-all duration-300 group",
+                                            showLabel ? "px-4" : "justify-center px-0 w-14 mx-auto",
+                                            pathname === '/admin/dashboard/perfil' 
+                                                ? "bg-zinc-900/10 text-zinc-900 shadow-sm ring-1 ring-black/5"
+                                                : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 hover:shadow-sm active:scale-[0.98]"
+                                        )}
+                                    >
+                                        <User className="h-5 w-5 flex-shrink-0" />
+                                        {showLabel && <span className="font-semibold text-sm tracking-tight">Mi Perfil</span>}
+                                    </Link>
+                                </TooltipTrigger>
+                                {!showLabel && (
+                                    <TooltipContent side="right" sideOffset={20} className="bg-zinc-900 text-white border-none shadow-xl rounded-2xl font-semibold px-4 py-2.5 z-[100]">
+                                        Mi Perfil
+                                    </TooltipContent>
                                 )}
-                            >
-                                <User className="h-5 w-5 flex-shrink-0" />
-                                {(!isCollapsed || mode === 'mobile') && <span className="font-medium text-sm">Mi Perfil</span>}
-                            </Link>
-                        </TooltipTrigger>
-                        {isCollapsed && mode === 'desktop' &&
-                            <TooltipContent side="right" className="bg-white text-zinc-900 border-zinc-200 shadow-md rounded-xl font-medium">
-                                Mi Perfil
-                            </TooltipContent>
-                        }
-                    </Tooltip>
+                            </Tooltip>
 
-                    {/* Settings Button */}
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Link
-                                href="/admin/dashboard/configuracion"
-                                className={cn(
-                                    "flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-zinc-50 transition-all duration-200 text-zinc-400 hover:text-zinc-900",
-                                    pathname === '/admin/dashboard/configuracion' && "bg-zinc-100 text-zinc-900"
+                            {/* Settings */}
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Link
+                                        href="/admin/dashboard/configuracion"
+                                        className={cn(
+                                            "flex items-center gap-3 py-3 rounded-2xl transition-all duration-300 group",
+                                            showLabel ? "px-4" : "justify-center px-0 w-14 mx-auto",
+                                            pathname === '/admin/dashboard/configuracion'
+                                                ? "bg-zinc-900/10 text-zinc-900 shadow-sm ring-1 ring-black/5"
+                                                : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 hover:shadow-sm active:scale-[0.98]"
+                                        )}
+                                    >
+                                        <Settings className="h-5 w-5 flex-shrink-0" />
+                                        {showLabel && <span className="font-semibold text-sm tracking-tight">Configuración</span>}
+                                    </Link>
+                                </TooltipTrigger>
+                                {!showLabel && (
+                                    <TooltipContent side="right" sideOffset={20} className="bg-zinc-900 text-white border-none shadow-xl rounded-2xl font-semibold px-4 py-2.5 z-[100]">
+                                        Configuración
+                                    </TooltipContent>
                                 )}
-                            >
-                                <Settings className="h-5 w-5 flex-shrink-0" />
-                                {(!isCollapsed || mode === 'mobile') && <span className="font-medium text-sm">Configuración</span>}
-                            </Link>
-                        </TooltipTrigger>
-                        {isCollapsed && mode === 'desktop' &&
-                            <TooltipContent side="right" className="bg-white text-zinc-900 border-zinc-200 shadow-md rounded-xl font-medium">
-                                Configuración
-                            </TooltipContent>
-                        }
-                    </Tooltip>
+                            </Tooltip>
 
-                    {/* Logout / User Profile */}
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <button
-                                className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-red-50 hover:text-red-500 text-zinc-400 transition-all duration-200 group"
-                            >
-                                <LogOut className="h-5 w-5 flex-shrink-0" />
-                                {(!isCollapsed || mode === 'mobile') && <span className="font-medium text-sm">Cerrar Sesión</span>}
-                            </button>
-                        </TooltipTrigger>
-                        {isCollapsed && mode === 'desktop' &&
-                            <TooltipContent side="right" className="bg-white text-red-500 border-red-100 shadow-md rounded-xl font-medium">
-                                Cerrar Sesión
-                            </TooltipContent>
-                        }
-                    </Tooltip>
-                </TooltipProvider>
+                            {/* Logout */}
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        onClick={() => logout()}
+                                        className={cn(
+                                            "w-full flex items-center gap-3 py-3 rounded-2xl text-zinc-500 hover:bg-red-50/90 hover:text-red-600 transition-all duration-300 active:scale-[0.98]",
+                                            showLabel ? "px-4" : "justify-center px-0 w-14 mx-auto"
+                                        )}
+                                    >
+                                        <LogOut className="h-5 w-5 flex-shrink-0" />
+                                        {showLabel && <span className="font-semibold text-sm tracking-tight text-left">Cerrar Sesión</span>}
+                                    </button>
+                                </TooltipTrigger>
+                                {!showLabel && (
+                                    <TooltipContent side="right" sideOffset={20} className="bg-red-500 text-white border-none shadow-xl rounded-2xl font-semibold px-4 py-2.5 z-[100]">
+                                        Cerrar Sesión
+                                    </TooltipContent>
+                                )}
+                            </Tooltip>
+                        </div>
+                    );
+                })()}
             </div>
-        </div>
+        </TooltipProvider>
     );
 }

@@ -45,7 +45,20 @@ export async function GET(request: NextRequest) {
                     } : {})
                 },
                 include: {
-                    categories: true
+                    categories: true,
+                    items: {
+                        include: {
+                            product: {
+                                include: {
+                                    recipeItems: {
+                                        include: {
+                                            supply: true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 },
                 orderBy: {
                     createdAt: 'desc'
@@ -67,24 +80,45 @@ export async function GET(request: NextRequest) {
             activo: p.activo,
             disponible: p.disponible,
             unidad: p.unidad,
+            costoUnitario: p.costoUnitario,
             createdAt: p.createdAt
         }));
 
-        const normalizedPromotions = promotions.map(p => ({
-            ...p,
-            type: 'PROMOCION',
-            id: p.id,
-            nombre: p.name,
-            descripcion: p.description,
-            precio: p.discountValue, // This might need logic if it's percentage vs fixed
-            imagen: p.imagen,
-            categoria: p.categories.map(c => c.nombre).join(', ') || 'Varias',
-            categoryId: p.categories[0]?.id || 'promo',
-            activo: p.isActive,
-            disponible: true,
-            unidad: 'PROMO',
-            createdAt: p.createdAt
-        }));
+        const normalizedPromotions = promotions.map(p => {
+            const totalOriginal = p.items.reduce((sum, item) => 
+                sum + (Number(item.product.precio) * item.quantity), 0);
+            
+            const finalPrice = p.discountType === 'PERCENTAGE'
+                ? totalOriginal * (1 - p.discountValue / 100)
+                : totalOriginal - p.discountValue;
+
+            // Calcular costo total de insumos
+            let totalSuppliesCost = 0;
+            p.items.forEach(promoItem => {
+                promoItem.product.recipeItems?.forEach(recipeItem => {
+                    const qty = Number(recipeItem.qtyPerUnit) * promoItem.quantity;
+                    const cost = Number(recipeItem.supply.costoUnitario || 0) * qty;
+                    totalSuppliesCost += cost;
+                });
+            });
+
+            return {
+                ...p,
+                type: 'PROMOCION',
+                id: p.id,
+                nombre: p.name,
+                descripcion: p.description,
+                precio: finalPrice, 
+                imagen: p.imagen,
+                categoria: p.categories.map(c => c.nombre).join(', ') || 'Varias',
+                categoryId: p.categories[0]?.id || 'promo',
+                activo: p.isActive,
+                disponible: true,
+                unidad: 'PROMO',
+                costoUnitario: totalSuppliesCost,
+                createdAt: p.createdAt
+            };
+        });
 
         const combined = [...normalizedProducts, ...normalizedPromotions].sort((a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()

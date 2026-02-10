@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, use } from "react";
+import { useState, useEffect, useCallback, use, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
     ChevronLeft,
@@ -17,7 +17,10 @@ import {
     CheckCircle2,
     Loader2,
     CalendarDays,
-    Info
+    Info,
+    ChefHat,
+    Scale,
+    TrendingUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +67,63 @@ export default function DetallePromocionPage({ params }: { params: Promise<{ id:
         fetchData();
     }, [fetchData]);
 
+    // Move all hooks to the top level, before any early returns
+    const totalOriginal = useMemo(() => {
+        if (!promotion) return 0;
+        return promotion.items?.reduce((sum: number, item: any) =>
+            sum + (Number(item.product?.precio || 0) * item.quantity), 0) || 0;
+    }, [promotion]);
+
+    const finalPrice = useMemo(() => {
+        if (!promotion) return 0;
+        return promotion.discountType === 'PERCENTAGE'
+            ? totalOriginal * (1 - Number(promotion.discountValue) / 100)
+            : totalOriginal - Number(promotion.discountValue);
+    }, [promotion, totalOriginal]);
+
+    const savingsPercentage = useMemo(() => {
+        if (!promotion || totalOriginal === 0) return 0;
+        return promotion.discountType === 'PERCENTAGE'
+            ? Math.round(Number(promotion.discountValue))
+            : Math.round((Number(promotion.discountValue) / totalOriginal) * 100);
+    }, [promotion, totalOriginal]);
+
+    const totalSupplies = useMemo(() => {
+        if (!promotion) return [];
+        const suppliesMap: Record<string, { name: string, totalQty: number, unit: string, cost: number }> = {};
+        
+        promotion.items?.forEach((promoItem: any) => {
+            promoItem.product?.recipeItems?.forEach((recipeItem: any) => {
+                const supplyId = recipeItem.supplyId;
+                const qty = Number(recipeItem.qtyPerUnit) * promoItem.quantity;
+                const cost = Number(recipeItem.supply.costoUnitario || 0) * qty;
+
+                if (suppliesMap[supplyId]) {
+                    suppliesMap[supplyId].totalQty += qty;
+                    suppliesMap[supplyId].cost += cost;
+                } else {
+                    suppliesMap[supplyId] = {
+                        name: recipeItem.supply.nombre,
+                        totalQty: qty,
+                        unit: recipeItem.unidad,
+                        cost: cost
+                    };
+                }
+            });
+        });
+
+        return Object.values(suppliesMap);
+    }, [promotion]);
+
+    const totalSuppliesCost = useMemo(() => 
+        totalSupplies.reduce((sum, s) => sum + s.cost, 0)
+    , [totalSupplies]);
+
+    const profitabilityMargin = useMemo(() => {
+        if (finalPrice <= 0) return 0;
+        return ((finalPrice - totalSuppliesCost) / finalPrice) * 100;
+    }, [finalPrice, totalSuppliesCost]);
+
     if (loading) {
         return (
             <div className="flex h-[80vh] items-center justify-center">
@@ -75,12 +135,6 @@ export default function DetallePromocionPage({ params }: { params: Promise<{ id:
     if (!promotion) return null;
 
     const daysList = promotion.daysOfWeek ? promotion.daysOfWeek.split(",") : [];
-
-    // Calculate final price (total - discount)
-    const totalOriginal = promotion.items?.reduce((sum: number, item: any) =>
-        sum + (Number(item.product?.precio || 0) * item.quantity), 0) || 0;
-    const finalPrice = totalOriginal - Number(promotion.discountValue);
-    const savingsPercentage = totalOriginal > 0 ? Math.round((Number(promotion.discountValue) / totalOriginal) * 100) : 0;
 
     return (
         <div className="flex flex-col gap-10 p-12 bg-[#F8F9FA] min-h-screen w-full">
@@ -120,18 +174,52 @@ export default function DetallePromocionPage({ params }: { params: Promise<{ id:
                 {/* Left: Graphic & Summary */}
                 <div className="xl:col-span-7 space-y-10">
                     <Card className="rounded-[4rem] border-none shadow-[0_40px_80px_rgba(0,0,0,0.05)] overflow-hidden bg-white">
-                        <div className="aspect-[21/9] w-full relative group">
+                        <div className="aspect-[16/9] w-full relative group bg-zinc-900">
                             {promotion.imagen ? (
-                                <img src={promotion.imagen} alt={promotion.name} className="h-full w-full object-cover" />
+                                <>
+                                    <img 
+                                        src={promotion.imagen} 
+                                        alt={promotion.name} 
+                                        className="h-full w-full object-cover"
+                                        onError={(e) => {
+                                            const target = e.currentTarget;
+                                            target.style.display = 'none';
+                                            const parent = target.parentElement;
+                                            if (parent) {
+                                                parent.classList.add('bg-gradient-to-br', 'from-zinc-800', 'to-zinc-900');
+                                                const fallbackDiv = document.createElement('div');
+                                                fallbackDiv.className = 'h-full w-full flex items-center justify-center';
+                                                fallbackDiv.innerHTML = `
+                                                    <div class="text-center">
+                                                        <svg class="h-20 w-20 text-zinc-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                                        </svg>
+                                                        <p class="text-zinc-500 font-bold">Imagen no disponible</p>
+                                                    </div>
+                                                `;
+                                                parent.appendChild(fallbackDiv);
+                                            }
+                                        }}
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-12">
+                                        <h2 className="text-4xl font-black text-white mb-2">{promotion.name}</h2>
+                                        <p className="text-white/80 text-lg font-medium max-w-2xl">{promotion.description || "Sin descripción proporcionada"}</p>
+                                    </div>
+                                </>
                             ) : (
-                                <div className="h-full w-full bg-zinc-50 flex items-center justify-center">
-                                    <ImageIcon className="h-20 w-20 text-zinc-100" />
-                                </div>
+                                <>
+                                    <div className="h-full w-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
+                                        <div className="text-center">
+                                            <ImageIcon className="h-20 w-20 text-zinc-600 mx-auto mb-4" />
+                                            <p className="text-zinc-500 font-bold">Sin imagen</p>
+                                        </div>
+                                    </div>
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-12">
+                                        <h2 className="text-4xl font-black text-white mb-2">{promotion.name}</h2>
+                                        <p className="text-white/80 text-lg font-medium max-w-2xl">{promotion.description || "Sin descripción proporcionada"}</p>
+                                    </div>
+                                </>
                             )}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-12">
-                                <h2 className="text-4xl font-black text-white mb-2">{promotion.name}</h2>
-                                <p className="text-white/80 text-lg font-medium max-w-2xl">{promotion.description || "Sin descripción proporcionada"}</p>
-                            </div>
                         </div>
 
                         <CardContent className="p-12">
@@ -162,6 +250,63 @@ export default function DetallePromocionPage({ params }: { params: Promise<{ id:
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+
+                            {/* New: Supplies Section */}
+                            <div className="mt-16 pt-10 border-t border-zinc-50">
+                                <div className="flex items-center justify-between mb-8">
+                                    <h3 className="text-xl font-black text-zinc-900 uppercase tracking-widest flex items-center gap-3">
+                                        <ChefHat className="h-6 w-6 text-zinc-400" />
+                                        Insumos Requeridos
+                                    </h3>
+                                    <Badge variant="outline" className="border-zinc-200 text-zinc-400 font-bold px-4 py-2 rounded-xl uppercase tracking-widest text-[0.65rem]">
+                                        Costo Total de Producción: ${totalSuppliesCost.toLocaleString('es-CL')}
+                                    </Badge>
+                                </div>
+                                
+                                {totalSupplies.length > 0 ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {totalSupplies.map((supply, idx) => (
+                                            <div key={idx} className="p-5 bg-white rounded-3xl border border-zinc-100 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all">
+                                                <div className="flex items-start justify-between mb-3">
+                                                    <div className="h-10 w-10 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-400">
+                                                        <Scale className="h-5 w-5" />
+                                                    </div>
+                                                    <span className="text-[0.6rem] font-black text-zinc-300 uppercase tracking-widest">
+                                                        Coste: ${supply.cost.toLocaleString('es-CL')}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-bold text-zinc-900 text-sm truncate uppercase tracking-tight">{supply.name}</h4>
+                                                    <p className="text-zinc-500 font-black text-xs mt-1">
+                                                        {supply.totalQty.toFixed(2)} <span className="text-[0.6rem] text-zinc-400">{supply.unit}</span>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="p-10 bg-zinc-50 rounded-[2rem] border border-dashed border-zinc-200 text-center">
+                                        <p className="text-zinc-400 font-bold italic">No hay recetas configuradas para los productos de esta promoción.</p>
+                                    </div>
+                                )}
+
+                                {/* Profitability Analysis */}
+                                <div className="mt-8 p-6 bg-emerald-50 rounded-[2rem] border border-emerald-100 flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className="h-12 w-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+                                            <TrendingUp className="h-6 w-6" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-emerald-900 font-black text-sm uppercase tracking-tight">Margen sobre Producción</h4>
+                                            <p className="text-emerald-600/70 font-bold text-xs uppercase tracking-widest">Calculado sobre el precio final de oferta</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-2xl font-black text-emerald-900 tracking-tighter">{profitabilityMargin.toFixed(1)}%</span>
+                                        <p className="text-[0.6rem] font-bold text-emerald-600 uppercase tracking-widest mt-1">Margen Bruto</p>
+                                    </div>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
@@ -233,7 +378,12 @@ export default function DetallePromocionPage({ params }: { params: Promise<{ id:
                                         <DollarSign className="h-6 w-6" />
                                     </div>
                                     <p className="text-sm font-bold text-white/60">
-                                        Generando un ahorro directo de <span className="text-white font-black">${Number(promotion.discountValue).toLocaleString()}</span> comparado con compras individuales.
+                                        Generando un ahorro directo de <span className="text-white font-black">
+                                            ${(promotion.discountType === 'PERCENTAGE' 
+                                                ? (totalOriginal * Number(promotion.discountValue) / 100)
+                                                : Number(promotion.discountValue)).toLocaleString()
+                                            }
+                                        </span> comparado con compras individuales.
                                     </p>
                                 </div>
                             </div>
