@@ -4,15 +4,15 @@ export function isFeatureEnabled(feature: 'reportes' | 'empleado_modules'): bool
     if (process.env.NODE_ENV === 'development') {
         return true;
     }
-    
+
     // En producción, se controla con variables de entorno
     if (feature === 'reportes') {
-        return process.env.NEXT_PUBLIC_FEATURE_REPORTES === 'true';
+        return true;
     }
-    
+
     if (feature === 'empleado_modules') {
         return process.env.NEXT_PUBLIC_FEATURE_EMPLEADO_MODULES === 'true';
     }
-    
+
     return false;
 }

@@ -6,12 +6,15 @@ export const dynamic = "force-dynamic";
 export default async function ConfiguracionPage() {
     const keys = [
         "business.profile",
+        "business.hours",
+        "business.closedDays",
         "payments.methods",
         "integrations.mercadoPago",
         "ops.settings",
         "whatsapp.settings",
         "delivery.settings",
-        "delivery.zones"
+        "delivery.zones",
+        "goals.monthly"
     ];
 
     const result = await getConfigs(keys);

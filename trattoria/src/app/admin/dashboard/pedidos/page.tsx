@@ -55,6 +55,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { EstadoPedido } from "@prisma/client";
 import { getConfigs } from "@/app/actions/configActions";
@@ -149,7 +150,7 @@ const STATUS_CONFIG: Record<string, { label: string, color: string, icon: Lucide
 export default function PedidosPage() {
     const router = useRouter();
     const [orders, setOrders] = useState<Order[]>([]);
-    
+
     // Quick statistics for the header cards
     const metrics = {
         received: orders.filter((o: any) => o.estado === "RECIBIDO").length,
@@ -175,6 +176,7 @@ export default function PedidosPage() {
     const [isCancelSheetOpen, setIsCancelSheetOpen] = useState(false);
     const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
     const [cancelMotive, setCancelMotive] = useState("");
+    const [cancelDeductStock, setCancelDeductStock] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
 
     // Payment Sheet State
@@ -239,6 +241,7 @@ export default function PedidosPage() {
         if (newStatus === 'CANCELADO') {
             setCancellingOrderId(id);
             setCancelMotive("");
+            setCancelDeductStock(false);
             setIsCancelSheetOpen(true);
             return;
         }
@@ -259,7 +262,7 @@ export default function PedidosPage() {
         }
 
         setIsCancelling(true);
-        const result = await updateOrderStatus(cancellingOrderId, 'CANCELADO', cancelMotive);
+        const result = await updateOrderStatus(cancellingOrderId, 'CANCELADO', cancelMotive, cancelDeductStock);
         if (result.success) {
             toast.success("Pedido cancelado");
             setIsCancelSheetOpen(false);
@@ -350,7 +353,7 @@ export default function PedidosPage() {
 
                 {/* Statistics Cards Row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-                    <DashboardMetricCard 
+                    <DashboardMetricCard
                         title="Recibidos"
                         value={metrics.received}
                         icon={<Clock size={16} />}
@@ -358,21 +361,21 @@ export default function PedidosPage() {
                         headerColor="bg-zinc-900"
                         description="Ingresados hoy"
                     />
-                    <DashboardMetricCard 
+                    <DashboardMetricCard
                         title="Pendientes"
                         value={metrics.pending}
                         icon={<Clock size={16} />}
                         headerColor="bg-amber-500"
                         description="En espera de confirmación"
                     />
-                    <DashboardMetricCard 
+                    <DashboardMetricCard
                         title="En Cocina"
                         value={metrics.preparing}
                         icon={<ChefHat size={16} />}
                         headerColor="bg-blue-500"
                         description="Pedidos en cocción"
                     />
-                    <DashboardMetricCard 
+                    <DashboardMetricCard
                         title="Listos"
                         value={metrics.ready}
                         icon={<CheckCircle2 size={16} />}
@@ -503,18 +506,13 @@ export default function PedidosPage() {
                                                 className="group hover:bg-zinc-50/50 transition-colors duration-200 animate-in fade-in slide-in-from-top-1 duration-500"
                                             >
                                                 <td className="px-8 py-6">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="h-10 w-10 rounded-2xl bg-zinc-900 flex items-center justify-center text-white font-black text-[10px] shadow-lg shadow-zinc-200">
-                                                            {order.numero.split('-')[1]}
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="font-mono text-xs font-bold text-zinc-400 tracking-tighter">
-                                                                {order.numero}
-                                                            </span>
-                                                            <span className="text-[9px] text-zinc-300 font-black uppercase tracking-widest">
-                                                                {order.origen}
-                                                            </span>
-                                                        </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-mono text-sm font-bold text-zinc-900 tracking-tight">
+                                                            {order.numero}
+                                                        </span>
+                                                        <span className="text-[9px] text-zinc-400 font-black uppercase tracking-widest mt-0.5">
+                                                            {order.origen}
+                                                        </span>
                                                     </div>
                                                 </td>
                                                 <td className="px-8 py-6">
@@ -711,7 +709,7 @@ export default function PedidosPage() {
                             Por favor ingresa el motivo de la cancelación. Esta acción es definitiva.
                         </SheetDescription>
                     </SheetHeader>
-                    <div className="py-6 space-y-4">
+                    <div className="py-6 space-y-6">
                         <div className="space-y-2">
                             <Label htmlFor="motive" className="text-xs font-bold uppercase text-zinc-400 tracking-wider text-left block">
                                 Motivo de Cancelación
@@ -722,6 +720,16 @@ export default function PedidosPage() {
                                 className="min-h-[120px] rounded-2xl border-zinc-200 focus:ring-red-500"
                                 value={cancelMotive}
                                 onChange={(e) => setCancelMotive(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex items-center justify-between p-4 rounded-2xl border border-zinc-200 bg-zinc-50/50">
+                            <div className="space-y-0.5">
+                                <Label className="text-sm font-bold text-zinc-700">Descontar insumos (Merma)</Label>
+                                <p className="text-xs text-zinc-500">Registrar como pérdida en el inventario</p>
+                            </div>
+                            <Switch
+                                checked={cancelDeductStock}
+                                onCheckedChange={setCancelDeductStock}
                             />
                         </div>
                     </div>

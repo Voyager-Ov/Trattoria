@@ -137,27 +137,52 @@ export async function getFinancialData(startDate: Date, endDate: Date) {
             },
         });
 
-        // Agrupar por día
-        const dailyData: DailyFinancialData[] = daysInterval.map(day => {
-            const dayStr = format(day, "yyyy-MM-dd");
-            const dayStart = startOfDay(day);
-            const dayEnd = endOfDay(day);
+        // Agrupar por día (o por hora si es el mismo día)
+        const isSingleDay = start.getTime() === startOfDay(end).getTime();
+        let dailyData: DailyFinancialData[];
 
-            const dayIngresos = orders
-                .filter(o => o.finalizadoEn && o.finalizadoEn >= dayStart && o.finalizadoEn <= dayEnd)
-                .reduce((sum, o) => sum + Number(o.total), 0);
+        if (isSingleDay) {
+            dailyData = Array.from({ length: 24 }, (_, hour) => {
+                const hourDate = new Date(start);
+                hourDate.setHours(hour, 0, 0, 0);
 
-            const dayEgresos = egresos
-                .filter(e => e.fecha >= dayStart && e.fecha <= dayEnd)
-                .reduce((sum, e) => sum + Number(e.monto), 0);
+                const dayIngresos = orders
+                    .filter(o => o.finalizadoEn && o.finalizadoEn.getHours() === hour)
+                    .reduce((sum, o) => sum + Number(o.total), 0);
 
-            return {
-                date: dayStr,
-                ingresos: dayIngresos,
-                egresos: dayEgresos,
-                balance: dayIngresos - dayEgresos,
-            };
-        });
+                const dayEgresos = egresos
+                    .filter(e => e.fecha.getHours() === hour)
+                    .reduce((sum, e) => sum + Number(e.monto), 0);
+
+                return {
+                    date: hourDate.toISOString(),
+                    ingresos: dayIngresos,
+                    egresos: dayEgresos,
+                    balance: dayIngresos - dayEgresos,
+                };
+            });
+        } else {
+            dailyData = daysInterval.map(day => {
+                const dayStr = format(day, "yyyy-MM-dd");
+                const dayStart = startOfDay(day);
+                const dayEnd = endOfDay(day);
+
+                const dayIngresos = orders
+                    .filter(o => o.finalizadoEn && o.finalizadoEn >= dayStart && o.finalizadoEn <= dayEnd)
+                    .reduce((sum, o) => sum + Number(o.total), 0);
+
+                const dayEgresos = egresos
+                    .filter(e => e.fecha >= dayStart && e.fecha <= dayEnd)
+                    .reduce((sum, e) => sum + Number(e.monto), 0);
+
+                return {
+                    date: dayStr,
+                    ingresos: dayIngresos,
+                    egresos: dayEgresos,
+                    balance: dayIngresos - dayEgresos,
+                };
+            });
+        }
 
         // Totales
         const totalIngresos = dailyData.reduce((sum, d) => sum + d.ingresos, 0);
@@ -320,7 +345,7 @@ export async function getTopProductsData(startDate: Date, endDate: Date, limit: 
         const grouped = orderItems.reduce((acc, item) => {
             const id = item.productId || "sin-producto";
             const nombre = item.nombreProduct;
-            
+
             if (!acc[id]) {
                 acc[id] = {
                     id,
@@ -329,7 +354,7 @@ export async function getTopProductsData(startDate: Date, endDate: Date, limit: 
                     revenue: 0,
                 };
             }
-            acc[id].count += 1;
+            acc[id].count += Number(item.cantidad);
             acc[id].revenue += Number(item.subtotal);
             return acc;
         }, {} as Record<string, { id: string; nombre: string; count: number; revenue: number }>);
@@ -398,21 +423,21 @@ export async function getProductMarginsData(startDate: Date, endDate: Date) {
         const data: ProductMarginData[] = products
             .map(product => {
                 const precio = Number(product.precio);
-                
-                // Calcular costo desde receta
-                let costoReceta = 0;
-                if (product.recipeItems.length > 0) {
-                    costoReceta = product.recipeItems.reduce((sum, item) => {
+
+                // Usar el costoUnitario del producto (definido por el usuario, ya sea manual o calculado desde insumos)
+                // Si no tiene costoUnitario, calcular desde los insumos de la receta como fallback
+                let costoFinal = 0;
+                if (product.costoUnitario && Number(product.costoUnitario) > 0) {
+                    costoFinal = Number(product.costoUnitario);
+                } else if (product.recipeItems.length > 0) {
+                    costoFinal = product.recipeItems.reduce((sum, item) => {
                         const costoInsumo = Number(item.supply.costoUnitario || 0);
                         const qty = Number(item.qtyPerUnit);
                         return sum + (costoInsumo * qty);
                     }, 0);
-                } else if (product.costoUnitario) {
-                    // Si no hay receta, usar costo unitario
-                    costoReceta = Number(product.costoUnitario);
                 }
 
-                const margen = precio - costoReceta;
+                const margen = precio - costoFinal;
                 const margenPorcentaje = precio > 0 ? (margen / precio) * 100 : 0;
 
                 const vecesVendido = product.orderItems.length;
@@ -422,7 +447,7 @@ export async function getProductMarginsData(startDate: Date, endDate: Date) {
                     id: product.id,
                     nombre: product.nombre,
                     precio,
-                    costo: costoReceta,
+                    costo: costoFinal,
                     margen,
                     margenPorcentaje,
                     vecesVendido,
@@ -495,14 +520,14 @@ export async function getCategoryRevenueOverTime(startDate: Date, endDate: Date)
 
             categoryNames.forEach(catName => {
                 const revenue = orderItems
-                    .filter(item => 
-                        item.order.finalizadoEn && 
-                        item.order.finalizadoEn >= dayStart && 
+                    .filter(item =>
+                        item.order.finalizadoEn &&
+                        item.order.finalizadoEn >= dayStart &&
                         item.order.finalizadoEn <= dayEnd &&
                         item.product?.category?.nombre === catName
                     )
                     .reduce((sum, item) => sum + Number(item.subtotal), 0);
-                
+
                 result[catName] = revenue;
             });
 
@@ -695,11 +720,18 @@ export async function getInventoryValuation() {
 // ORDERS ANALYTICS
 // ============================================================================
 
-export async function getOrdersByStatusData() {
+export async function getOrdersByStatusData(startDate: Date, endDate: Date) {
     try {
+        const start = startOfDay(startDate);
+        const end = endOfDay(endDate);
+
         const orders = await prisma.order.findMany({
             where: {
                 deletedAt: null,
+                recibidoEn: {
+                    gte: start,
+                    lte: end,
+                },
             },
             select: {
                 estado: true,
@@ -769,7 +801,7 @@ export async function getPrepTimeData(startDate: Date, endDate: Date) {
             const dayStart = startOfDay(day);
             const dayEnd = endOfDay(day);
 
-            const dayOrders = orders.filter(o => 
+            const dayOrders = orders.filter(o =>
                 o.finalizadoEn && o.finalizadoEn >= dayStart && o.finalizadoEn <= dayEnd
             );
 
@@ -839,7 +871,7 @@ export async function getOrdersByOriginData(startDate: Date, endDate: Date) {
             const dayStart = startOfDay(day);
             const dayEnd = endOfDay(day);
 
-            const dayOrders = orders.filter(o => 
+            const dayOrders = orders.filter(o =>
                 o.finalizadoEn && o.finalizadoEn >= dayStart && o.finalizadoEn <= dayEnd
             );
 
@@ -944,7 +976,7 @@ export async function getTicketPromedioData(startDate: Date, endDate: Date) {
             const dayStart = startOfDay(day);
             const dayEnd = endOfDay(day);
 
-            const dayOrders = orders.filter(o => 
+            const dayOrders = orders.filter(o =>
                 o.finalizadoEn && o.finalizadoEn >= dayStart && o.finalizadoEn <= dayEnd
             );
 
@@ -1066,16 +1098,17 @@ export async function getProfitabilityByCategoryData(startDate: Date, endDate: D
                 );
                 ingresos += productIngresos;
 
-                // Calcular costos
+                // Usar el costoUnitario del producto (definido por el usuario, ya sea manual o calculado desde insumos)
+                // Si no tiene costoUnitario, calcular desde los insumos de la receta como fallback
                 let costoUnitario = 0;
-                if (product.recipeItems.length > 0) {
+                if (product.costoUnitario && Number(product.costoUnitario) > 0) {
+                    costoUnitario = Number(product.costoUnitario);
+                } else if (product.recipeItems.length > 0) {
                     costoUnitario = product.recipeItems.reduce((sum, item) => {
                         const costoInsumo = Number(item.supply.costoUnitario || 0);
                         const qty = Number(item.qtyPerUnit);
                         return sum + (costoInsumo * qty);
                     }, 0);
-                } else if (product.costoUnitario) {
-                    costoUnitario = Number(product.costoUnitario);
                 }
 
                 const cantidadVendida = product.orderItems.reduce(

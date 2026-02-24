@@ -107,7 +107,7 @@ function RegistrarStockContent() {
         <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen">
             {/* Breadcrumbs */}
             <div className="flex items-center gap-2 text-sm font-medium text-zinc-400">
-                <Link href="/empleado/pedidos" className="hover:text-zinc-600 transition-colors">Empleado</Link>
+                <Link href="/empleado" className="hover:text-zinc-600 transition-colors">Empleado</Link>
                 <ChevronRight className="h-4 w-4" />
                 <Link href="/empleado/insumos" className="hover:text-zinc-600 transition-colors">Insumos</Link>
                 <ChevronRight className="h-4 w-4" />
@@ -286,10 +286,13 @@ function RegistrarStockContent() {
                                         <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Nuevo Stock Estimado</p>
                                         <div className="flex items-baseline gap-2">
                                             <span className="text-4xl font-black tracking-tighter italic">
-                                                {(
-                                                    Number(selectedSupply.stockActual) + 
-                                                    (formData.tipo === 'OUT' ? -(parseFloat(formData.cantidad) || 0) : (parseFloat(formData.cantidad) || 0))
-                                                ).toFixed(2)}
+                                                {formData.tipo === 'AJUSTE'
+                                                    ? (parseFloat(formData.cantidad) || 0).toFixed(2)
+                                                    : (
+                                                        Number(selectedSupply.stockActual) +
+                                                        (formData.tipo === 'OUT' ? -(parseFloat(formData.cantidad) || 0) : (parseFloat(formData.cantidad) || 0))
+                                                    ).toFixed(2)
+                                                }
                                             </span>
                                             <span className="text-zinc-500 font-bold text-xs uppercase tracking-widest">{selectedSupply.unidad}</span>
                                         </div>

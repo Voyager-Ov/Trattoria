@@ -31,7 +31,8 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
 
         const whereFinalized = {
             ...where,
-            estado: EstadoPedido.FINALIZADO
+            estado: EstadoPedido.FINALIZADO,
+            cobrado: true
         };
 
         const [
@@ -49,9 +50,9 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
                     items: true
                 }
             }),
-            // Total Revenue summary (excluding cancelled orders)
+            // Total Revenue summary (only finalized and cobrado)
             prisma.order.aggregate({
-                where: whereNotCancelled,
+                where: whereFinalized,
                 _sum: { total: true },
                 _count: { id: true }
             }),
@@ -78,10 +79,10 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
             _count: true
         });
 
-        // Group by Payment Method
+        // Group by Payment Method (only for finalized and paid orders)
         const paymentGroups = await prisma.order.groupBy({
             by: ['metodoPago'],
-            where: whereNotCancelled,
+            where: whereFinalized,
             _sum: { total: true },
             _count: true
         });
@@ -101,9 +102,14 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
         });
 
         // Group by Day (for charts)
+        const isSingleDay = startDate && endDate && startDate.toISOString().split('T')[0] === endDate.toISOString().split('T')[0];
+
         const revenueByDay: { [key: string]: { revenue: number, count: number } } = {};
         allValidOrdersInRange.forEach(order => {
-            const dayKey = order.recibidoEn.toISOString().split('T')[0];
+            let dayKey = order.recibidoEn.toISOString().split('T')[0];
+            if (isSingleDay) {
+                dayKey = order.recibidoEn.toISOString().substring(0, 13);
+            }
             if (!revenueByDay[dayKey]) {
                 revenueByDay[dayKey] = { revenue: 0, count: 0 };
             }
@@ -145,8 +151,8 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
 
     } catch (error) {
         console.error("Error fetching reports data:", error);
-        return { 
-            success: false, 
+        return {
+            success: false,
             error: "No se pudieron cargar los reportes",
             data: null
         };

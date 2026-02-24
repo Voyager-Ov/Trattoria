@@ -5,6 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function formatCurrency(amount: number) {
+  return new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    maximumFractionDigits: 0
+  }).format(amount);
+}
+
 // Helper to serialize Prisma Decimal objects and others not supported by Client Components
 export function serializePrisma(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;

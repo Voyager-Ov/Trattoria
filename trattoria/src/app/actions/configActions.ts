@@ -58,6 +58,12 @@ const WhatsAppSettingsSchema = z.object({
     enabled: z.boolean(),
 });
 
+const MonthlyGoalSchema = z.object({
+    amount: z.number().min(0, "La meta debe ser un valor positivo."),
+    type: z.enum(["revenue", "profit"]),
+});
+
+
 const ConfigSchemas: Record<string, z.ZodTypeAny> = {
     "business.profile": BusinessProfileSchema,
     "payments.methods": z.array(PaymentMethodSchema),
@@ -67,6 +73,7 @@ const ConfigSchemas: Record<string, z.ZodTypeAny> = {
     "delivery.settings": DeliverySettingsSchema,
     "delivery.zones": z.array(DeliveryZoneSchema),
     "whatsapp.settings": WhatsAppSettingsSchema,
+    "goals.monthly": MonthlyGoalSchema,
 };
 
 // --- Actions ---

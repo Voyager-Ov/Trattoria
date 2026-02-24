@@ -27,7 +27,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { EstadoPedido } from "@prisma/client";
+import { EstadoPedido, TipoEventoPedido } from "@prisma/client";
 import { updateOrderStatus, toggleOrderPayment, getOrderSuppliesAndCost } from "@/app/admin/dashboard/pedidos/actions";
 import {
     Sheet,
@@ -77,6 +77,13 @@ interface Order {
     finalizadoEn: string | null;
     canceladoEn: string | null;
     motivoCancelacion: string | null;
+    events: {
+        id: string;
+        tipo: TipoEventoPedido;
+        descripcion: string;
+        actorName: string | null;
+        createdAt: string;
+    }[];
 }
 
 const STATUS_CONFIG: Record<string, { label: string, color: string, icon: LucideIcon, bg: string }> = {
@@ -201,7 +208,7 @@ export default function EmpleadoOrderDetailPage() {
             setIsLoading(true);
             const res = await fetch(`/api/admin/dashboard/pedidos/${orderId}`);
             const data = await res.json();
-            
+
             if (data.success) {
                 setOrder(data.order);
             } else {
@@ -219,7 +226,7 @@ export default function EmpleadoOrderDetailPage() {
 
     const handleStatusChange = async (newStatus: EstadoPedido) => {
         if (!order) return;
-        
+
         setIsUpdating(true);
         try {
             const result = await updateOrderStatus(order.id, newStatus);
@@ -238,7 +245,7 @@ export default function EmpleadoOrderDetailPage() {
 
     const handlePaymentClick = () => {
         if (!order) return;
-        
+
         if (order.cobrado) {
             // Si ya está cobrado, descobrar directamente
             handleTogglePayment(false, "");
@@ -250,7 +257,7 @@ export default function EmpleadoOrderDetailPage() {
 
     const handleTogglePayment = async (cobrado: boolean, metodoPago: string) => {
         if (!order) return;
-        
+
         setIsUpdating(true);
         try {
             const result = await toggleOrderPayment(order.id, cobrado, metodoPago);
@@ -298,7 +305,7 @@ export default function EmpleadoOrderDetailPage() {
                         Volver
                     </Button>
                 </div>
-                
+
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                         <div className="flex items-center gap-3 mb-1">
@@ -320,7 +327,7 @@ export default function EmpleadoOrderDetailPage() {
                             <StatusIcon className="h-3.5 w-3.5 mr-1.5" />
                             {statusConfig.label}
                         </Badge>
-                        
+
                         {order.cobrado ? (
                             <Badge className="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600">
                                 <Banknote className="h-3.5 w-3.5 mr-1.5" />
@@ -354,35 +361,35 @@ export default function EmpleadoOrderDetailPage() {
                                             <div className="flex-1">
                                                 <p className="font-bold text-zinc-900">{item.nombreProduct}</p>
                                                 <p className="text-sm text-zinc-500 font-medium mt-0.5">
-                                                    {item.cantidad} × ${Number(item.precioUnitario).toLocaleString('es-CL')}
+                                                    {item.cantidad} × ${Number(item.precioUnitario).toLocaleString('es-AR')}
                                                 </p>
                                             </div>
                                             <div className="text-right">
                                                 <p className="font-black text-zinc-900 tracking-tight">
-                                                    ${Number(item.subtotal).toLocaleString('es-CL')}
+                                                    ${Number(item.subtotal).toLocaleString('es-AR')}
                                                 </p>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
-                                
+
                                 <div className="mt-6 pt-6 border-t border-zinc-200 space-y-3">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-zinc-600 font-medium">Subtotal</span>
-                                        <span className="font-bold text-zinc-900">${Number(order.subtotal).toLocaleString('es-CL')}</span>
+                                        <span className="font-bold text-zinc-900">${Number(order.subtotal).toLocaleString('es-AR')}</span>
                                     </div>
                                     {Number(order.descuento) > 0 && (
                                         <div className="flex justify-between text-sm">
                                             <span className="text-zinc-600 font-medium">Descuento</span>
                                             <span className="font-bold text-green-600">
-                                                -${Number(order.descuento).toLocaleString('es-CL')}
+                                                -${Number(order.descuento).toLocaleString('es-AR')}
                                             </span>
                                         </div>
                                     )}
                                     <div className="flex justify-between pt-3 border-t border-zinc-200">
                                         <span className="text-lg font-black uppercase tracking-tight text-zinc-900">Total</span>
                                         <span className="text-2xl font-black text-primary tracking-tight">
-                                            ${Number(order.total).toLocaleString('es-CL')}
+                                            ${Number(order.total).toLocaleString('es-AR')}
                                         </span>
                                     </div>
                                 </div>
@@ -405,21 +412,21 @@ export default function EmpleadoOrderDetailPage() {
                                                     <p className="text-sm text-zinc-500 font-medium mt-0.5">
                                                         {insumo.cantidadTotal.toFixed(2)} {insumo.unidad.toLowerCase()}
                                                         {insumo.costoUnitario > 0 && (
-                                                            <span className="ml-2">× ${insumo.costoUnitario.toLocaleString('es-CL')}</span>
+                                                            <span className="ml-2">× ${insumo.costoUnitario.toLocaleString('es-AR')}</span>
                                                         )}
                                                     </p>
                                                 </div>
                                                 {insumo.costoTotal > 0 && (
                                                     <div className="text-right">
                                                         <p className="font-bold text-zinc-700 text-sm">
-                                                            ${insumo.costoTotal.toLocaleString('es-CL')}
+                                                            ${insumo.costoTotal.toLocaleString('es-AR')}
                                                         </p>
                                                     </div>
                                                 )}
                                             </div>
                                         ))}
                                     </div>
-                                    
+
                                     {suppliesData.costoTotal > 0 && (
                                         <div className="mt-6 pt-6 border-t border-zinc-200 space-y-3">
                                             <div className="flex justify-between text-sm">
@@ -428,7 +435,7 @@ export default function EmpleadoOrderDetailPage() {
                                                     Costo Total de Insumos
                                                 </span>
                                                 <span className="font-bold text-red-600">
-                                                    ${suppliesData.costoTotal.toLocaleString('es-CL')}
+                                                    ${suppliesData.costoTotal.toLocaleString('es-AR')}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between text-sm">
@@ -437,7 +444,7 @@ export default function EmpleadoOrderDetailPage() {
                                                     Ganancia Estimada
                                                 </span>
                                                 <span className="font-bold text-green-600">
-                                                    ${suppliesData.ganancia.toLocaleString('es-CL')}
+                                                    ${suppliesData.ganancia.toLocaleString('es-AR')}
                                                 </span>
                                             </div>
                                             <div className="flex justify-between pt-3 border-t border-zinc-200">
@@ -459,86 +466,69 @@ export default function EmpleadoOrderDetailPage() {
                             <div className="p-8">
                                 <h3 className="text-lg font-black uppercase tracking-tight text-zinc-900 mb-6">Historial del Pedido</h3>
                                 <div className="space-y-6">
-                                    {order.recibidoEn && (
-                                        <div className="flex gap-4">
-                                            <div className="flex flex-col items-center">
-                                                <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                                                    <ShoppingBag className="h-5 w-5 text-blue-600" />
+                                    {order.events && order.events.length > 0 ? (
+                                        order.events.map((event, index) => {
+                                            let EventIcon = Clock;
+                                            let iconBg = "bg-zinc-100";
+                                            let iconColor = "text-zinc-600";
+
+                                            switch (event.tipo) {
+                                                case "CREACION":
+                                                    EventIcon = ShoppingBag;
+                                                    iconBg = "bg-blue-100";
+                                                    iconColor = "text-blue-600";
+                                                    break;
+                                                case "COBRO":
+                                                    EventIcon = Banknote;
+                                                    iconBg = "bg-emerald-100";
+                                                    iconColor = "text-emerald-600";
+                                                    break;
+                                                case "CANCELACION":
+                                                    EventIcon = XCircle;
+                                                    iconBg = "bg-red-100";
+                                                    iconColor = "text-red-600";
+                                                    break;
+                                                case "CAMBIO_ESTADO":
+                                                    if (event.descripcion.includes('En Preparación')) {
+                                                        EventIcon = ChefHat;
+                                                        iconBg = "bg-purple-100";
+                                                        iconColor = "text-purple-600";
+                                                    } else if (event.descripcion.includes('Listo')) {
+                                                        EventIcon = Package;
+                                                        iconBg = "bg-green-100";
+                                                        iconColor = "text-green-600";
+                                                    } else if (event.descripcion.includes('Finalizado')) {
+                                                        EventIcon = CheckCircle2;
+                                                        iconBg = "bg-emerald-100";
+                                                        iconColor = "text-emerald-600";
+                                                    }
+                                                    break;
+                                            }
+
+                                            return (
+                                                <div key={event.id} className="flex gap-4">
+                                                    <div className="flex flex-col items-center">
+                                                        <div className={`h-10 w-10 rounded-xl ${iconBg} flex items-center justify-center`}>
+                                                            <EventIcon className={`h-5 w-5 ${iconColor}`} />
+                                                        </div>
+                                                        {index < order.events.length - 1 && (
+                                                            <div className="h-full w-0.5 bg-zinc-200 mt-2 flex-1 min-h-[30px]" />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 pb-2">
+                                                        <p className="font-bold text-zinc-900">{event.descripcion}</p>
+                                                        <p className="text-sm text-zinc-500 font-medium mt-0.5">{formatDate(event.createdAt)}</p>
+                                                        {event.actorName && (
+                                                            <p className="text-xs text-zinc-400 mt-1 font-medium italic">
+                                                                Por: {event.actorName}
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                {(order.enPreparacionEn || order.listoEn || order.finalizadoEn) && (
-                                                    <div className="h-full w-0.5 bg-zinc-200 mt-2 flex-1 min-h-[30px]" />
-                                                )}
-                                            </div>
-                                            <div className="flex-1 pb-2">
-                                                <p className="font-bold text-zinc-900">Pedido Recibido</p>
-                                                <p className="text-sm text-zinc-500 font-medium mt-0.5">{formatDate(order.recibidoEn)}</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                    
-                                    {order.enPreparacionEn && (
-                                        <div className="flex gap-4">
-                                            <div className="flex flex-col items-center">
-                                                <div className="h-10 w-10 rounded-xl bg-purple-100 flex items-center justify-center">
-                                                    <ChefHat className="h-5 w-5 text-purple-600" />
-                                                </div>
-                                                {(order.listoEn || order.finalizadoEn) && (
-                                                    <div className="h-full w-0.5 bg-zinc-200 mt-2 flex-1 min-h-[30px]" />
-                                                )}
-                                            </div>
-                                            <div className="flex-1 pb-2">
-                                                <p className="font-bold text-zinc-900">En Preparación</p>
-                                                <p className="text-sm text-zinc-500 font-medium mt-0.5">{formatDate(order.enPreparacionEn)}</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                    
-                                    {order.listoEn && (
-                                        <div className="flex gap-4">
-                                            <div className="flex flex-col items-center">
-                                                <div className="h-10 w-10 rounded-xl bg-green-100 flex items-center justify-center">
-                                                    <Package className="h-5 w-5 text-green-600" />
-                                                </div>
-                                                {order.finalizadoEn && (
-                                                    <div className="h-full w-0.5 bg-zinc-200 mt-2 flex-1 min-h-[30px]" />
-                                                )}
-                                            </div>
-                                            <div className="flex-1 pb-2">
-                                                <p className="font-bold text-zinc-900">Listo para Entregar</p>
-                                                <p className="text-sm text-zinc-500 font-medium mt-0.5">{formatDate(order.listoEn)}</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                    
-                                    {order.finalizadoEn && (
-                                        <div className="flex gap-4">
-                                            <div className="flex flex-col items-center">
-                                                <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                                                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                                                </div>
-                                            </div>
-                                            <div className="flex-1">
-                                                <p className="font-bold text-zinc-900">Finalizado</p>
-                                                <p className="text-sm text-zinc-500 font-medium mt-0.5">{formatDate(order.finalizadoEn)}</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                    
-                                    {order.canceladoEn && (
-                                        <div className="flex gap-4">
-                                            <div className="flex flex-col items-center">
-                                                <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center">
-                                                    <XCircle className="h-5 w-5 text-red-600" />
-                                                </div>
-                                            </div>
-                                            <div className="flex-1">
-                                                <p className="font-bold text-zinc-900">Cancelado</p>
-                                                <p className="text-sm text-zinc-500 font-medium mt-0.5">{formatDate(order.canceladoEn)}</p>
-                                                {order.motivoCancelacion && (
-                                                    <p className="text-sm text-red-600 mt-2 font-medium">Motivo: {order.motivoCancelacion}</p>
-                                                )}
-                                            </div>
-                                        </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="text-zinc-500 font-medium text-sm italic">No hay eventos registrados.</p>
                                     )}
                                 </div>
                             </div>
@@ -551,12 +541,12 @@ export default function EmpleadoOrderDetailPage() {
                         <Card className="rounded-[2.5rem] border-zinc-200 shadow-xl shadow-zinc-200/50 overflow-hidden bg-white">
                             <div className="p-6 space-y-4">
                                 <h3 className="text-sm font-black uppercase tracking-wider text-zinc-900">Acciones Rápidas</h3>
-                                
+
                                 <div className="space-y-3">
                                     <div>
                                         <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Cambiar Estado</p>
-                                        <Select 
-                                            value={order.estado} 
+                                        <Select
+                                            value={order.estado}
                                             onValueChange={(value) => handleStatusChange(value as EstadoPedido)}
                                             disabled={isUpdating || order.estado === 'FINALIZADO' || order.estado === 'CANCELADO'}
                                         >
@@ -578,8 +568,8 @@ export default function EmpleadoOrderDetailPage() {
                                             variant={order.cobrado ? "outline" : "default"}
                                             className={cn(
                                                 "w-full h-11 rounded-xl font-bold text-xs uppercase tracking-wider transition-all",
-                                                order.cobrado 
-                                                    ? "border-zinc-200 text-zinc-600 hover:bg-zinc-50" 
+                                                order.cobrado
+                                                    ? "border-zinc-200 text-zinc-600 hover:bg-zinc-50"
                                                     : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200"
                                             )}
                                             onClick={handlePaymentClick}
@@ -601,7 +591,7 @@ export default function EmpleadoOrderDetailPage() {
                         <Card className="rounded-[2.5rem] border-zinc-200 shadow-xl shadow-zinc-200/50 overflow-hidden bg-white">
                             <div className="p-6 space-y-4">
                                 <h3 className="text-sm font-black uppercase tracking-wider text-zinc-900">Información del Cliente</h3>
-                                
+
                                 <div className="space-y-3">
                                     <div className="flex items-start gap-3">
                                         <div className="h-9 w-9 rounded-xl bg-zinc-100 flex items-center justify-center flex-shrink-0">
@@ -612,7 +602,7 @@ export default function EmpleadoOrderDetailPage() {
                                             <p className="font-bold text-zinc-900 truncate">{order.clienteNombre || "N/A"}</p>
                                         </div>
                                     </div>
-                                    
+
                                     {order.clienteTelefono && (
                                         <div className="flex items-start gap-3">
                                             <div className="h-9 w-9 rounded-xl bg-zinc-100 flex items-center justify-center flex-shrink-0">
@@ -624,7 +614,7 @@ export default function EmpleadoOrderDetailPage() {
                                             </div>
                                         </div>
                                     )}
-                                    
+
                                     {order.clienteDireccion && (
                                         <div className="flex items-start gap-3">
                                             <div className="h-9 w-9 rounded-xl bg-zinc-100 flex items-center justify-center flex-shrink-0">
@@ -644,7 +634,7 @@ export default function EmpleadoOrderDetailPage() {
                         <Card className="rounded-[2.5rem] border-zinc-200 shadow-xl shadow-zinc-200/50 overflow-hidden bg-white">
                             <div className="p-6 space-y-4">
                                 <h3 className="text-sm font-black uppercase tracking-wider text-zinc-900">Detalles de Pago</h3>
-                                
+
                                 <div className="space-y-3">
                                     <div className="flex items-start gap-3">
                                         <div className="h-9 w-9 rounded-xl bg-zinc-100 flex items-center justify-center flex-shrink-0">
@@ -655,7 +645,7 @@ export default function EmpleadoOrderDetailPage() {
                                             <p className="font-bold text-zinc-900">{order.metodoPago || "No especificado"}</p>
                                         </div>
                                     </div>
-                                    
+
                                     <div className="flex items-start gap-3">
                                         <div className="h-9 w-9 rounded-xl bg-zinc-100 flex items-center justify-center flex-shrink-0">
                                             <Banknote className="h-4 w-4 text-zinc-600" />
@@ -713,7 +703,7 @@ export default function EmpleadoOrderDetailPage() {
                             Selecciona el método de pago utilizado para este pedido.
                         </SheetDescription>
                     </SheetHeader>
-                    
+
                     <div className="space-y-6 py-6">
                         <div className="space-y-3">
                             <Label className="text-xs font-black uppercase tracking-wider text-zinc-500">Método de Pago</Label>
@@ -742,7 +732,7 @@ export default function EmpleadoOrderDetailPage() {
                                 <div>
                                     <p className="text-sm font-bold text-zinc-900">Total a cobrar</p>
                                     <p className="text-2xl font-black text-zinc-900 tracking-tight mt-1">
-                                        ${Number(order?.total || 0).toLocaleString('es-CL')}
+                                        ${Number(order?.total || 0).toLocaleString('es-AR')}
                                     </p>
                                 </div>
                             </div>

@@ -38,8 +38,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ComingSoonOverlay } from "@/components/ui/coming-soon-overlay";
-import { isFeatureEnabled } from "@/lib/features";
+
 
 interface Supply {
     id: string;
@@ -90,8 +89,6 @@ export default function InsumosPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
-    // Feature flag
-    const empleadoModulesEnabled = isFeatureEnabled('empleado_modules');
 
     useEffect(() => {
         loadSupplies();
@@ -136,10 +133,6 @@ export default function InsumosPage() {
         return id.length > 12 ? `${id.slice(0, 12)}...` : id;
     };
 
-    // Si la feature no está habilitada, mostrar Coming Soon
-    if (!empleadoModulesEnabled) {
-        return <ComingSoonOverlay />;
-    }
 
     return (
         <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen">

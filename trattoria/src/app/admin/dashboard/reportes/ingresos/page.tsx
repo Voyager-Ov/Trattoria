@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { BarChart3, Calendar, Download, TrendingUp, DollarSign, CreditCard, Search, ChevronDown, FileText } from "lucide-react";
+import { BarChart3, Calendar, TrendingUp, DollarSign, CreditCard, Search, ChevronDown, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,7 @@ import { getReportsData, FinancialSummary } from "../actions";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { ComingSoonOverlay } from "@/components/ui/coming-soon-overlay";
-import { isFeatureEnabled } from "@/lib/features";
+
 
 // --- Types ---
 interface Transaction {
@@ -53,9 +52,7 @@ function MetricCard({ title, value, subValue, headerColor, icon }: MetricCardPro
 
 // --- Main Component ---
 export default function IngresosPage() {
-    // Feature flag check
-    const reportesEnabled = isFeatureEnabled('reportes');
-    
+
     const [isLoading, setIsLoading] = useState(true);
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -67,16 +64,23 @@ export default function IngresosPage() {
         try {
             const now = new Date();
             let startDate: Date | undefined;
+            let endDate: Date = new Date();
 
             if (dateRange === "today") {
-                startDate = new Date(now.setHours(0, 0, 0, 0));
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
             } else if (dateRange === "week") {
-                startDate = new Date(now.setDate(now.getDate() - 7));
+                startDate = new Date(now);
+                startDate.setDate(startDate.getDate() - 7);
+                startDate.setHours(0, 0, 0, 0);
             } else if (dateRange === "month") {
-                startDate = new Date(now.setDate(now.getDate() - 30));
+                startDate = new Date(now);
+                startDate.setDate(startDate.getDate() - 30);
+                startDate.setHours(0, 0, 0, 0);
             }
+            // "all": no startDate, fetches everything
 
-            const res = await getReportsData(startDate, new Date());
+            const res = await getReportsData(startDate, endDate);
 
             if (res.success && res.data) {
                 setSummary(res.data.summary);
@@ -110,14 +114,6 @@ export default function IngresosPage() {
         return format(new Date(dateStr), "dd MMM yyyy, HH:mm", { locale: es });
     };
 
-    // Si la feature está deshabilitada, mostrar overlay
-    if (!reportesEnabled) {
-        return (
-            <ComingSoonOverlay>
-                <div className="space-y-8"></div>
-            </ComingSoonOverlay>
-        );
-    }
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
@@ -151,10 +147,6 @@ export default function IngresosPage() {
                             <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setDateRange("all")}>Histórico completo</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-
-                    <Button variant="outline" className="h-10 w-10 p-0 rounded-full border-zinc-200 text-zinc-600 hover:bg-zinc-50 bg-white" title="Exportar">
-                        <Download className="h-4 w-4" />
-                    </Button>
                 </div>
             </div>
 

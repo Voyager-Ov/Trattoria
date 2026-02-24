@@ -57,14 +57,14 @@ export default function OrdersSection({ dateRange }: OrdersSectionProps) {
     const [loading, setLoading] = useState(true);
     const [ordersByStatus, setOrdersByStatus] = useState<OrderStatusData[]>([]);
     const [prepTimeData, setPrepTimeData] = useState<{ daily: PrepTimeData[]; overallAvg: number } | null>(null);
-    const [ordersByOrigin, setOrdersByOrigin] = useState<{ date: string; [key: string]: string | number }[]>([]);
+    const [ordersByOrigin, setOrdersByOrigin] = useState<{ date: string;[key: string]: string | number }[]>([]);
     const [ticketPromedio, setTicketPromedio] = useState<{ daily: { date: string; INTERNO: number; CATALOGO: number; TOTAL: number }[]; overall: { INTERNO: number; CATALOGO: number; TOTAL: number } } | null>(null);
 
     const loadData = async () => {
         setLoading(true);
         try {
             // Estados de pedidos
-            const statusResult = await getOrdersByStatusData();
+            const statusResult = await getOrdersByStatusData(dateRange.from, dateRange.to);
             if (statusResult.success && statusResult.data) {
                 setOrdersByStatus(statusResult.data);
             }
@@ -95,7 +95,7 @@ export default function OrdersSection({ dateRange }: OrdersSectionProps) {
 
     useEffect(() => {
         loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dateRange]);
 
     if (loading) {

@@ -47,6 +47,16 @@ import {
     SheetFooter,
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectLabel,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { EstadoPedido } from "@prisma/client";
@@ -160,6 +170,7 @@ export default function EmpleadoPedidosPage() {
     const [isCancelSheetOpen, setIsCancelSheetOpen] = useState(false);
     const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
     const [cancelMotive, setCancelMotive] = useState("");
+    const [cancelDeductStock, setCancelDeductStock] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
 
     // Payment Sheet State
@@ -225,6 +236,7 @@ export default function EmpleadoPedidosPage() {
         if (newStatus === 'CANCELADO') {
             setCancellingOrderId(id);
             setCancelMotive("");
+            setCancelDeductStock(false);
             setIsCancelSheetOpen(true);
             return;
         }
@@ -245,7 +257,7 @@ export default function EmpleadoPedidosPage() {
         }
 
         setIsCancelling(true);
-        const result = await updateOrderStatus(cancellingOrderId, 'CANCELADO', cancelMotive);
+        const result = await updateOrderStatus(cancellingOrderId, 'CANCELADO', cancelMotive, cancelDeductStock);
         if (result.success) {
             toast.success("Pedido cancelado");
             setIsCancelSheetOpen(false);
@@ -436,18 +448,13 @@ export default function EmpleadoPedidosPage() {
                                                 className="group hover:bg-zinc-50/50 transition-colors duration-200 animate-in fade-in slide-in-from-top-1 duration-500"
                                             >
                                                 <td className="px-8 py-6">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="h-10 w-10 rounded-2xl bg-zinc-900 flex items-center justify-center text-white font-black text-[10px] shadow-lg shadow-zinc-200">
-                                                            {order.numero.split('-')[1]}
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="font-mono text-xs font-bold text-zinc-400 tracking-tighter">
-                                                                {order.numero}
-                                                            </span>
-                                                            <span className="text-[9px] text-zinc-300 font-black uppercase tracking-widest">
-                                                                {order.origen}
-                                                            </span>
-                                                        </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-mono text-sm font-bold text-zinc-900 tracking-tight">
+                                                            {order.numero}
+                                                        </span>
+                                                        <span className="text-[9px] text-zinc-400 font-black uppercase tracking-widest mt-0.5">
+                                                            {order.origen}
+                                                        </span>
                                                     </div>
                                                 </td>
                                                 <td className="px-8 py-6">
@@ -546,7 +553,7 @@ export default function EmpleadoPedidosPage() {
                                                 </td>
                                                 <td className="px-8 py-6 text-right">
                                                     <span className="text-lg font-black text-zinc-900 tabular-nums tracking-tighter">
-                                                        ${Number(order.total).toLocaleString('es-ES')}
+                                                        ${Number(order.total).toLocaleString('es-AR')}
                                                     </span>
                                                 </td>
                                                 <td className="px-8 py-6">
@@ -644,17 +651,27 @@ export default function EmpleadoPedidosPage() {
                             Por favor ingresa el motivo de la cancelación. Esta acción es definitiva.
                         </SheetDescription>
                     </SheetHeader>
-                    <div className="py-6 space-y-4">
+                    <div className="py-6 space-y-6">
                         <div className="space-y-2">
                             <Label htmlFor="motive" className="text-xs font-bold uppercase text-zinc-400 tracking-wider text-left block">
                                 Motivo de Cancelación
                             </Label>
                             <Textarea
                                 id="motive"
-                                placeholder="Ej: Error en el pedido..."
+                                placeholder="Ej: Error en el pedido, Cliente canceló, Sin stock..."
                                 className="min-h-[120px] rounded-2xl border-zinc-200 focus:ring-red-500"
                                 value={cancelMotive}
                                 onChange={(e) => setCancelMotive(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex items-center justify-between p-4 rounded-2xl border border-zinc-200 bg-zinc-50/50">
+                            <div className="space-y-0.5">
+                                <Label className="text-sm font-bold text-zinc-700">Descontar insumos (Merma)</Label>
+                                <p className="text-xs text-zinc-500">Registrar como pérdida en el inventario</p>
+                            </div>
+                            <Switch
+                                checked={cancelDeductStock}
+                                onCheckedChange={setCancelDeductStock}
                             />
                         </div>
                     </div>

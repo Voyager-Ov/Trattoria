@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
     Calendar,
-    Download,
     TrendingDown,
     DollarSign,
     Search,
@@ -42,8 +41,6 @@ import { format, startOfDay, subDays, startOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
 import { getEgresos, getEgresoStats, deleteEgreso } from "@/app/actions/egresoActions";
 import { CreateEgresoDrawer } from "@/components/dashboard/reportes/CreateEgresoDrawer";
-import { ComingSoonOverlay } from "@/components/ui/coming-soon-overlay";
-import { isFeatureEnabled } from "@/lib/features";
 
 // --- Types ---
 interface Egreso {
@@ -84,9 +81,7 @@ function MetricCard({ title, value, subValue, headerColor, icon }: MetricCardPro
 
 // --- Main Component ---
 export default function EgresosPage() {
-    // Feature flag check
-    const reportesEnabled = isFeatureEnabled('reportes');
-    
+
     const [isLoading, setIsLoading] = useState(true);
     const [egresos, setEgresos] = useState<Egreso[]>([]);
     const [stats, setStats] = useState({ total: 0, porCategoria: {} as Record<string, number>, count: 0 });
@@ -197,14 +192,6 @@ export default function EgresosPage() {
         }
     };
 
-    // Si la feature está deshabilitada, mostrar overlay
-    if (!reportesEnabled) {
-        return (
-            <ComingSoonOverlay>
-                <div className="space-y-8"></div>
-            </ComingSoonOverlay>
-        );
-    }
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 pb-10">
@@ -245,14 +232,10 @@ export default function EgresosPage() {
                         <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100">
                             <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setDateRange("today")}>Hoy</DropdownMenuItem>
                             <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setDateRange("week")}>Últimos 7 días</DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setDateRange("month")}>Marzo (Mes actual)</DropdownMenuItem>
+                            <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setDateRange("month")}>Últimos 30 días</DropdownMenuItem>
                             <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setDateRange("all")}>Histórico completo</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-
-                    <Button variant="outline" className="h-10 w-10 p-0 rounded-full border-zinc-200 text-zinc-600 hover:bg-zinc-50 bg-white" title="Exportar">
-                        <Download className="h-4 w-4" />
-                    </Button>
                 </div>
             </div>
 

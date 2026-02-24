@@ -7,7 +7,7 @@ import { z } from "zod";
 import {
     Settings, Save, Plus, Trash2, CreditCard, Store, Clock,
     Loader2, Smartphone, ShieldCheck, MapPin, Truck, ChevronRight,
-    Search, Moon, Sun, CheckCircle2, AlertCircle, PhoneOff, DollarSign, ShoppingBag
+    Search, Moon, Sun, CheckCircle2, AlertCircle, PhoneOff, DollarSign, ShoppingBag, Target
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,6 +83,12 @@ const ConfigFormSchema = z.object({
             enabled: z.boolean(),
         })),
     }),
+    goals: z.object({
+        monthly: z.object({
+            amount: z.number().min(0, "La meta debe ser un valor positivo."),
+            type: z.enum(["revenue", "profit"]),
+        }).optional(),
+    }).optional(),
 });
 
 type ConfigFormValues = z.infer<typeof ConfigFormSchema>;
@@ -141,6 +147,9 @@ export default function ConfigFormClient({ initialData }: ConfigFormClientProps)
                     ...initialData["delivery.settings"]
                 },
             },
+            goals: {
+                monthly: initialData["goals.monthly"] || { amount: 1000000, type: "revenue" },
+            },
         },
     });
 
@@ -191,6 +200,13 @@ export default function ConfigFormClient({ initialData }: ConfigFormClientProps)
                     payload = {
                         "business.hours": businessHours,
                         "business.closedDays": closedDays,
+                    };
+                    break;
+                case "goals":
+                    fieldsToValidate = ["goals.monthly"];
+                    const monthlyGoals = form.getValues("goals.monthly");
+                    payload = {
+                        "goals.monthly": monthlyGoals,
                     };
                     break;
             }
@@ -289,6 +305,7 @@ export default function ConfigFormClient({ initialData }: ConfigFormClientProps)
                             { id: "delivery", label: "Envío & Zonas", icon: Truck },
                             { id: "payments", label: "Pagos", icon: CreditCard },
                             { id: "hours", label: "Horarios", icon: Clock },
+                            { id: "goals", label: "Metas", icon: Target },
                         ].map((tab) => (
                             <button
                                 key={tab.id}
@@ -861,6 +878,109 @@ export default function ConfigFormClient({ initialData }: ConfigFormClientProps)
                                 <Button
                                     type="button"
                                     onClick={() => handleSave("hours")}
+                                    disabled={saving || !isDirty}
+                                    className={cn(
+                                        "h-14 px-10 rounded-3xl font-bold text-lg transition-all duration-300 gap-3 shadow-2xl active:scale-95",
+                                        isDirty
+                                            ? "bg-zinc-900 text-white hover:bg-zinc-800 shadow-zinc-200"
+                                            : "bg-zinc-100 text-zinc-400 cursor-not-allowed shadow-none"
+                                    )}
+                                >
+                                    {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                                    {isDirty ? "Guardar Cambios" : "Configuración al día"}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Goals Section */}
+                    {activeTab === "goals" && (
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <Card className="rounded-[3rem] border-none shadow-xl bg-white overflow-hidden">
+                                <CardHeader className="p-10 pb-6 border-b border-zinc-50">
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-1">
+                                            <CardTitle className="text-2xl font-black uppercase tracking-tight italic flex items-center gap-2 text-indigo-500">
+                                                <Target className="h-6 w-6" />
+                                                Metas del Negocio
+                                            </CardTitle>
+                                            <CardDescription className="text-zinc-400 font-medium tracking-tight">Establece objetivos mensuales para motivar a tu equipo.</CardDescription>
+                                        </div>
+                                    </div>
+                                </CardHeader>
+                                <CardContent className="p-10 space-y-10">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        {/* Target Amount */}
+                                        <div className="space-y-4 p-8 bg-zinc-50 rounded-[2.5rem] border border-zinc-100 hover:border-indigo-200 transition-colors group">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center shadow-sm text-indigo-500">
+                                                    <Target className="h-5 w-5" />
+                                                </div>
+                                                <Label className="text-sm font-black uppercase tracking-wide text-zinc-500 group-hover:text-indigo-600 transition-colors">Meta Mensual</Label>
+                                            </div>
+                                            <div className="relative">
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-zinc-300">$</span>
+                                                <Input
+                                                    type="number"
+                                                    {...form.register("goals.monthly.amount", { valueAsNumber: true })}
+                                                    className="h-16 pl-10 rounded-2xl border-none bg-white text-3xl font-black shadow-sm focus:ring-0"
+                                                    placeholder="0"
+                                                />
+                                            </div>
+                                            <p className="text-xs text-zinc-400 font-medium ml-2">El objetivo monetario que deseas alcanzar este mes.</p>
+                                        </div>
+
+                                        {/* Goal Type */}
+                                        <div className="space-y-4 p-8 bg-zinc-50 rounded-[2.5rem] border border-zinc-100 transition-colors">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center shadow-sm text-zinc-600">
+                                                    <Store className="h-5 w-5" />
+                                                </div>
+                                                <Label className="text-sm font-black uppercase tracking-wide text-zinc-800">Tipo de Meta</Label>
+                                            </div>
+                                            <div className="flex flex-col gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => form.setValue("goals.monthly.type", "revenue", { shouldDirty: true })}
+                                                    className={cn(
+                                                        "flex items-center justify-between p-4 rounded-2xl border-2 transition-all text-left",
+                                                        form.watch("goals.monthly.type") === "revenue"
+                                                            ? "border-indigo-500 bg-indigo-500/5 shadow-sm"
+                                                            : "border-zinc-200 bg-white hover:border-indigo-300 hover:bg-zinc-50"
+                                                    )}
+                                                >
+                                                    <div>
+                                                        <h4 className="font-bold text-zinc-900">Ingresos Totales</h4>
+                                                        <p className="text-xs font-medium text-zinc-500">Mide el total facturado en el mes.</p>
+                                                    </div>
+                                                    {form.watch("goals.monthly.type") === "revenue" && <CheckCircle2 className="h-5 w-5 text-indigo-500" />}
+                                                </button>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => form.setValue("goals.monthly.type", "profit", { shouldDirty: true })}
+                                                    className={cn(
+                                                        "flex items-center justify-between p-4 rounded-2xl border-2 transition-all text-left",
+                                                        form.watch("goals.monthly.type") === "profit"
+                                                            ? "border-indigo-500 bg-indigo-500/5 shadow-sm"
+                                                            : "border-zinc-200 bg-white hover:border-indigo-300 hover:bg-zinc-50"
+                                                    )}
+                                                >
+                                                    <div>
+                                                        <h4 className="font-bold text-zinc-900">Ganancia Neta</h4>
+                                                        <p className="text-xs font-medium text-zinc-500">Mide los ingresos descontando los egresos.</p>
+                                                    </div>
+                                                    {form.watch("goals.monthly.type") === "profit" && <CheckCircle2 className="h-5 w-5 text-indigo-500" />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <div className="flex justify-end pt-4">
+                                <Button
+                                    type="button"
+                                    onClick={() => handleSave("goals")}
                                     disabled={saving || !isDirty}
                                     className={cn(
                                         "h-14 px-10 rounded-3xl font-bold text-lg transition-all duration-300 gap-3 shadow-2xl active:scale-95",

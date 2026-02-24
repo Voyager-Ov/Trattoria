@@ -5,7 +5,7 @@ import {
     BarChart3, Calendar, ChevronDown, TrendingUp,
     DollarSign, ShoppingCart, XCircle,
     Clock, Package, Warehouse,
-    Download, CreditCard
+    CreditCard
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -15,8 +15,6 @@ import { getConfigs } from "@/app/actions/configActions";
 import { toast } from "sonner";
 import { format, subDays, startOfDay, endOfDay, eachDayOfInterval } from "date-fns";
 import { es } from "date-fns/locale";
-import { ComingSoonOverlay } from "@/components/ui/coming-soon-overlay";
-import { isFeatureEnabled } from "@/lib/features";
 
 // Import analytics sections
 import FinancialSection from "./FinancialSection";
@@ -47,7 +45,7 @@ interface PaymentMethodData {
     color: string;
 }
 
-type DatePreset = "7d" | "30d" | "90d" | "year";
+type DatePreset = "hoy" | "7d" | "30d" | "90d" | "year";
 
 // --- Utility Functions ---
 const formatCurrency = (amount: number) => {
@@ -91,8 +89,8 @@ function RevenueChart({ data }: { data: ChartDataPoint[] }) {
     const maxAmount = Math.max(...data.map(d => d.amount), 1);
 
     return (
-        <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm p-6 hover:shadow-md transition-all duration-300">
-            <div className="flex items-center justify-between mb-6">
+        <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm p-6 hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col h-full">
+            <div className="flex flex-shrink-0 items-center justify-between mb-6">
                 <div>
                     <h3 className="text-lg font-bold text-zinc-900">Ingresos por Día</h3>
                     <p className="text-sm text-zinc-500">Tendencia de ventas del período</p>
@@ -102,23 +100,25 @@ function RevenueChart({ data }: { data: ChartDataPoint[] }) {
                 </div>
             </div>
 
-            <div className="h-48 flex items-end gap-2">
-                {data.map((point, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center group">
-                        <div className="relative w-full flex justify-center">
-                            <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-xs py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                                {formatCurrency(point.amount)}
-                                <br />
-                                <span className="text-zinc-400">{point.orders} órdenes</span>
+            <div className="flex-1 w-full overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-zinc-200 scrollbar-track-transparent">
+                <div className="h-48 flex items-end gap-2 min-w-max px-2 pt-16 mt-auto">
+                    {data.map((point, i) => (
+                        <div key={i} className="flex-1 flex flex-col items-center group min-w-[32px]">
+                            <div className="relative w-full flex justify-center">
+                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-xs py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                                    {formatCurrency(point.amount)}
+                                    <br />
+                                    <span className="text-zinc-400">{point.orders} órdenes</span>
+                                </div>
+                                <div
+                                    className="w-full max-w-[40px] bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-lg transition-all duration-500 hover:from-emerald-600 hover:to-emerald-500 cursor-pointer"
+                                    style={{ height: `${Math.max((point.amount / maxAmount) * 160, 8)}px` }}
+                                />
                             </div>
-                            <div
-                                className="w-full max-w-[40px] bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-lg transition-all duration-500 hover:from-emerald-600 hover:to-emerald-500 cursor-pointer"
-                                style={{ height: `${Math.max((point.amount / maxAmount) * 160, 8)}px` }}
-                            />
+                            <span className="text-[10px] text-zinc-400 mt-2 font-medium break-keep whitespace-nowrap capitalize">{point.day}</span>
                         </div>
-                        <span className="text-[10px] text-zinc-400 mt-2 font-medium">{point.day}</span>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
         </div>
     );
@@ -164,19 +164,16 @@ export default function ReportesDashboardPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [datePreset, setDatePreset] = useState<DatePreset>("30d");
+    const [datePreset, setDatePreset] = useState<DatePreset>("hoy");
     const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>(() => {
         const now = new Date();
         return {
-            from: startOfDay(subDays(now, 30)),
+            from: startOfDay(now),
             to: endOfDay(now),
         };
     });
     const [paymentMethodsConfig, setPaymentMethodsConfig] = useState<unknown[]>([]);
     const [activeTab, setActiveTab] = useState("resumen");
-
-    // Feature flag for reportes
-    const reportesEnabled = isFeatureEnabled('reportes');
 
     const updateDateRange = (preset: DatePreset) => {
         const now = new Date();
@@ -184,6 +181,9 @@ export default function ReportesDashboardPage() {
         const to: Date = endOfDay(now);
 
         switch (preset) {
+            case "hoy":
+                from = startOfDay(now);
+                break;
             case "7d":
                 from = startOfDay(subDays(now, 7));
                 break;
@@ -269,6 +269,23 @@ export default function ReportesDashboardPage() {
     const chartData = useMemo(() => {
         if (!summary || !summary.revenueByDay) return [];
 
+        if (datePreset === "hoy") {
+            const todayStr = format(dateRange.from, "yyyy-MM-dd");
+            const hours = Array.from({ length: 24 }, (_, i) => i);
+
+            return hours.map(hour => {
+                const hourStr = hour.toString().padStart(2, '0');
+                const key = `${todayStr}T${hourStr}`;
+                const hourStats = summary.revenueByDay[key] || { revenue: 0, count: 0 };
+
+                return {
+                    day: `${hourStr}:00`,
+                    amount: hourStats.revenue || 0,
+                    orders: hourStats.count || 0
+                };
+            });
+        }
+
         const days = datePreset === "7d" ? 7 : datePreset === "30d" ? 30 : datePreset === "90d" ? 90 : 365;
         const interval = eachDayOfInterval({
             start: subDays(dateRange.to, days - 1),
@@ -280,7 +297,7 @@ export default function ReportesDashboardPage() {
             const dayStats = summary.revenueByDay[dayStr] || { revenue: 0, count: 0 };
 
             return {
-                day: format(day, "EEE", { locale: es }),
+                day: days <= 7 ? format(day, "EEE", { locale: es }) : format(day, "dd/MM", { locale: es }),
                 amount: dayStats.revenue || 0,
                 orders: dayStats.count || 0
             };
@@ -318,17 +335,19 @@ export default function ReportesDashboardPage() {
 
     // Order status counts
     const orderStats = useMemo(() => {
-        if (!transactions || transactions.length === 0) {
-            return { completed: 0, cancelled: 0, pending: 0 };
+        if (!summary || !summary.ordersByStatus) {
+            return { completed: 0, cancelled: 0, pending: 0, total: 0 };
         }
-        const completed = transactions.filter(t => t.estado === "FINALIZADO").length;
-        const cancelled = transactions.filter(t => t.estado === "CANCELADO").length;
-        const pending = transactions.filter(t => t.estado === "PENDIENTE" || t.estado === "EN_PREPARACION").length;
-        return { completed, cancelled, pending };
-    }, [transactions]);
+        const statuses = summary.ordersByStatus;
+        const completed = statuses["FINALIZADO"] || 0;
+        const cancelled = statuses["CANCELADO"] || 0;
+        const pending = (statuses["PENDIENTE"] || 0) + (statuses["EN_PREPARACION"] || 0) + (statuses["RECIBIDO"] || 0);
+        return { completed, cancelled, pending, total: summary.totalOrders || 0 };
+    }, [summary]);
 
     const getPresetLabel = (preset: DatePreset) => {
         const labels = {
+            "hoy": "Hoy",
             "7d": "Últimos 7 días",
             "30d": "Últimos 30 días",
             "90d": "Últimos 90 días",
@@ -348,14 +367,6 @@ export default function ReportesDashboardPage() {
         );
     }
 
-    // Si la feature está deshabilitada, mostrar overlay
-    if (!reportesEnabled) {
-        return (
-            <ComingSoonOverlay>
-                <div className="space-y-6">{/* contenido difuminado */}</div>
-            </ComingSoonOverlay>
-        );
-    }
 
     return (
         <div className="space-y-6">
@@ -381,6 +392,9 @@ export default function ReportesDashboardPage() {
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100">
+                            <DropdownMenuItem className="rounded-xl my-0.5 cursor-pointer" onClick={() => updateDateRange("hoy")}>
+                                Hoy
+                            </DropdownMenuItem>
                             <DropdownMenuItem className="rounded-xl my-0.5 cursor-pointer" onClick={() => updateDateRange("7d")}>
                                 Últimos 7 días
                             </DropdownMenuItem>
@@ -395,11 +409,6 @@ export default function ReportesDashboardPage() {
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-
-                    <Button variant="outline" className="h-11 rounded-full px-6 border-zinc-200 hover:bg-zinc-50 text-zinc-600 font-medium bg-white shadow-sm">
-                        <Download className="mr-2 h-4 w-4" />
-                        Exportar
-                    </Button>
                 </div>
             </div>
 
@@ -462,7 +471,7 @@ export default function ReportesDashboardPage() {
                         />
                         <DashboardCard
                             title="Tasa de Cancelación"
-                            value={`${transactions.length > 0 ? ((orderStats.cancelled / transactions.length) * 100).toFixed(1) : 0}%`}
+                            value={`${orderStats.total > 0 ? ((orderStats.cancelled / orderStats.total) * 100).toFixed(1) : 0}%`}
                             subValue={`${orderStats.pending} pendientes`}
                             icon={XCircle}
                             iconBgColor="bg-red-100"
@@ -497,7 +506,7 @@ export default function ReportesDashboardPage() {
                                     </div>
                                     <p className="text-xs text-zinc-500 font-medium">Completadas</p>
                                     <p className="text-[10px] text-emerald-600">
-                                        {transactions.length > 0 ? ((orderStats.completed / transactions.length) * 100).toFixed(0) : 0}%
+                                        {orderStats.total > 0 ? ((orderStats.completed / orderStats.total) * 100).toFixed(0) : 0}%
                                     </p>
                                 </div>
 
@@ -507,7 +516,7 @@ export default function ReportesDashboardPage() {
                                     </div>
                                     <p className="text-xs text-zinc-500 font-medium">Pendientes</p>
                                     <p className="text-[10px] text-amber-600">
-                                        {transactions.length > 0 ? ((orderStats.pending / transactions.length) * 100).toFixed(0) : 0}%
+                                        {orderStats.total > 0 ? ((orderStats.pending / orderStats.total) * 100).toFixed(0) : 0}%
                                     </p>
                                 </div>
 
@@ -517,7 +526,7 @@ export default function ReportesDashboardPage() {
                                     </div>
                                     <p className="text-xs text-zinc-500 font-medium">Canceladas</p>
                                     <p className="text-[10px] text-red-600">
-                                        {transactions.length > 0 ? ((orderStats.cancelled / transactions.length) * 100).toFixed(0) : 0}%
+                                        {orderStats.total > 0 ? ((orderStats.cancelled / orderStats.total) * 100).toFixed(0) : 0}%
                                     </p>
                                 </div>
                             </div>
@@ -544,7 +553,7 @@ export default function ReportesDashboardPage() {
                                 </div>
                                 <div className="flex items-center justify-between py-3">
                                     <span className="text-zinc-400">Total Órdenes</span>
-                                    <span className="font-bold">{transactions.length}</span>
+                                    <span className="font-bold">{summary?.totalOrders || 0}</span>
                                 </div>
                             </div>
                         </div>

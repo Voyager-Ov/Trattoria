@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -100,13 +101,17 @@ export function Header() {
                                 </div>
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator className="bg-zinc-50" />
-                            <DropdownMenuItem className="rounded-xl p-3 focus:bg-zinc-50 cursor-pointer gap-2">
-                                <UserIcon size={16} className="text-zinc-500" />
-                                <span className="text-sm font-medium">Mi Perfil</span>
+                            <DropdownMenuItem asChild className="rounded-xl p-3 focus:bg-zinc-50 cursor-pointer gap-2">
+                                <Link href="/admin/dashboard/perfil" className="flex items-center gap-2 w-full">
+                                    <UserIcon size={16} className="text-zinc-500" />
+                                    <span className="text-sm font-medium">Mi Perfil</span>
+                                </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-xl p-3 focus:bg-zinc-50 cursor-pointer gap-2">
-                                <Settings size={16} className="text-zinc-500" />
-                                <span className="text-sm font-medium">Configuración</span>
+                            <DropdownMenuItem asChild className="rounded-xl p-3 focus:bg-zinc-50 cursor-pointer gap-2">
+                                <Link href="/admin/dashboard/configuracion" className="flex items-center gap-2 w-full">
+                                    <Settings size={16} className="text-zinc-500" />
+                                    <span className="text-sm font-medium">Configuración</span>
+                                </Link>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator className="bg-zinc-50" />
                             <DropdownMenuItem

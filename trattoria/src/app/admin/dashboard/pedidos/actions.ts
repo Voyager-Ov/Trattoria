@@ -9,8 +9,31 @@ import { getSessionCookie, verifySessionCookie } from "@/lib/auth";
  * Actualiza el estado de un pedido y registra el timestamp correspondiente.
  * Si el estado es FINALIZADO, descuenta los insumos del stock.
  */
-export async function updateOrderStatus(id: string, status: EstadoPedido, motive?: string) {
+export async function updateOrderStatus(id: string, status: EstadoPedido, motive?: string, descontarInsumos?: boolean) {
     try {
+        // Identify Actor
+        let actorId = null;
+        let actorName = null;
+        try {
+            const session = await getSessionCookie();
+            if (session) {
+                const claims = await verifySessionCookie(session);
+                if (claims?.uid) {
+                    const user = await prisma.user.findUnique({
+                        where: { firebaseUid: claims.uid },
+                        select: { id: true, displayName: true, email: true, rol: true }
+                    });
+                    if (user) {
+                        actorId = user.id;
+                        actorName = user.displayName || user.email?.split("@")[0] || "Usuario";
+                        if (user.rol) actorName += ` (${user.rol})`;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("Could not identify user for order event.", e);
+        }
+
         // Obtener el estado actual del pedido
         const currentOrder = await prisma.order.findUnique({
             where: { id },
@@ -21,97 +44,53 @@ export async function updateOrderStatus(id: string, status: EstadoPedido, motive
             throw new Error("Pedido no encontrado");
         }
 
-        // Si ya está finalizado, no permitir volver a descontar insumos o cambiar estado a menos que sea necesario
-        if (currentOrder.estado === 'FINALIZADO' && status === 'FINALIZADO') {
-            return { success: true };
-        }
+        // Determinar si el pedido ya estaba finalizado (stock ya fue descontado)
+        const yaEstabaFinalizado = currentOrder.estado === 'FINALIZADO';
 
-        // Si el pedido se está finalizando, necesitamos descontar los insumos en una transacción
-        if (status === 'FINALIZADO') {
+        // === CASO: FINALIZAR PEDIDO ===
+        // Solo descontar stock si el pedido NO estaba ya finalizado
+        if (status === 'FINALIZADO' && !yaEstabaFinalizado) {
             await prisma.$transaction(async (tx) => {
-                // 1. Obtener el pedido con sus items y las recetas de cada producto
                 const order = await tx.order.findUnique({
                     where: { id },
                     include: {
                         items: {
                             include: {
-                                product: {
-                                    include: {
-                                        recipeItems: {
-                                            include: {
-                                                supply: true
-                                            }
-                                        }
-                                    }
-                                },
-                                promotion: {
-                                    include: {
-                                        items: {
-                                            include: {
-                                                product: {
-                                                    include: {
-                                                        recipeItems: {
-                                                            include: {
-                                                                supply: true
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                product: { include: { recipeItems: { include: { supply: true } } } },
+                                promotion: { include: { items: { include: { product: { include: { recipeItems: { include: { supply: true } } } } } } } }
                             }
                         }
                     }
                 });
 
-                if (!order) {
-                    throw new Error("Pedido no encontrado");
-                }
+                if (!order) throw new Error("Pedido no encontrado");
 
-                // 2. Calcular los insumos totales necesarios
                 const insumosRequeridos = new Map<string, { supply: any, cantidadTotal: number }>();
 
                 for (const item of order.items) {
                     const cantidadItem = Number(item.cantidad);
-
-                    // Si es un producto directo
                     if (item.product && item.product.recipeItems.length > 0) {
                         for (const recipeItem of item.product.recipeItems) {
-                            const cantidadInsumo = Number(recipeItem.qtyPerUnit) * cantidadItem;
                             const supplyId = recipeItem.supplyId;
-
+                            const cantidadInsumo = Number(recipeItem.qtyPerUnit) * cantidadItem;
                             if (insumosRequeridos.has(supplyId)) {
-                                const existing = insumosRequeridos.get(supplyId)!;
-                                existing.cantidadTotal += cantidadInsumo;
+                                insumosRequeridos.get(supplyId)!.cantidadTotal += cantidadInsumo;
                             } else {
-                                insumosRequeridos.set(supplyId, {
-                                    supply: recipeItem.supply,
-                                    cantidadTotal: cantidadInsumo
-                                });
+                                insumosRequeridos.set(supplyId, { supply: recipeItem.supply, cantidadTotal: cantidadInsumo });
                             }
                         }
                     }
-
-                    // Si es una promoción, iterar por los productos de la promoción
                     if (item.promotion && item.promotion.items) {
                         for (const promoItem of item.promotion.items) {
                             if (promoItem.product && promoItem.product.recipeItems.length > 0) {
-                                const cantidadPromoProduct = promoItem.quantity * cantidadItem;
-                                
+                                const cantidadPromo = promoItem.quantity * cantidadItem;
                                 for (const recipeItem of promoItem.product.recipeItems) {
-                                    const cantidadInsumo = Number(recipeItem.qtyPerUnit) * cantidadPromoProduct;
                                     const supplyId = recipeItem.supplyId;
-
+                                    const cantidadInsumo = Number(recipeItem.qtyPerUnit) * cantidadPromo;
                                     if (insumosRequeridos.has(supplyId)) {
-                                        const existing = insumosRequeridos.get(supplyId)!;
-                                        existing.cantidadTotal += cantidadInsumo;
+                                        insumosRequeridos.get(supplyId)!.cantidadTotal += cantidadInsumo;
                                     } else {
-                                        insumosRequeridos.set(supplyId, {
-                                            supply: recipeItem.supply,
-                                            cantidadTotal: cantidadInsumo
-                                        });
+                                        insumosRequeridos.set(supplyId, { supply: recipeItem.supply, cantidadTotal: cantidadInsumo });
                                     }
                                 }
                             }
@@ -119,22 +98,12 @@ export async function updateOrderStatus(id: string, status: EstadoPedido, motive
                     }
                 }
 
-                // 3. Descontar los insumos del stock y registrar movimientos
                 for (const [supplyId, { supply, cantidadTotal }] of insumosRequeridos) {
                     const nuevoStock = Number(supply.stockActual) - cantidadTotal;
-
-                    // Actualizar el stock del insumo
-                    await tx.supply.update({
-                        where: { id: supplyId },
-                        data: {
-                            stockActual: nuevoStock
-                        }
-                    });
-
-                    // Registrar el movimiento de stock
+                    await tx.supply.update({ where: { id: supplyId }, data: { stockActual: nuevoStock } });
                     await tx.stockMovement.create({
                         data: {
-                            supplyId: supplyId,
+                            supplyId,
                             tipo: 'OUT',
                             cantidad: cantidadTotal,
                             stockResultante: nuevoStock,
@@ -144,27 +113,252 @@ export async function updateOrderStatus(id: string, status: EstadoPedido, motive
                     });
                 }
 
-                // 4. Actualizar el estado del pedido
                 await tx.order.update({
                     where: { id },
                     data: {
                         estado: status,
-                        finalizadoEn: new Date()
+                        finalizadoEn: new Date(),
+                        events: {
+                            create: {
+                                tipo: 'CAMBIO_ESTADO',
+                                descripcion: `Estado cambiado a ${status}`,
+                                actorId,
+                                actorName
+                            }
+                        }
                     }
                 });
             });
+
+            // === CASO: CANCELAR PEDIDO ===
+        } else if (status === 'CANCELADO') {
+
+            if (yaEstabaFinalizado && !descontarInsumos) {
+                // El pedido estaba FINALIZADO (stock ya descontado) y se cancela SIN merma
+                // → RESTAURAR el stock (devolver los insumos porque la orden fue anulada)
+                await prisma.$transaction(async (tx) => {
+                    const order = await tx.order.findUnique({
+                        where: { id },
+                        include: {
+                            items: {
+                                include: {
+                                    product: { include: { recipeItems: { include: { supply: true } } } },
+                                    promotion: { include: { items: { include: { product: { include: { recipeItems: { include: { supply: true } } } } } } } }
+                                }
+                            }
+                        }
+                    });
+
+                    if (!order) throw new Error("Pedido no encontrado");
+
+                    const insumosRequeridos = new Map<string, { supply: any, cantidadTotal: number }>();
+
+                    for (const item of order.items) {
+                        const cantidadItem = Number(item.cantidad);
+                        if (item.product && item.product.recipeItems.length > 0) {
+                            for (const recipeItem of item.product.recipeItems) {
+                                const supplyId = recipeItem.supplyId;
+                                const cantidadInsumo = Number(recipeItem.qtyPerUnit) * cantidadItem;
+                                if (insumosRequeridos.has(supplyId)) {
+                                    insumosRequeridos.get(supplyId)!.cantidadTotal += cantidadInsumo;
+                                } else {
+                                    insumosRequeridos.set(supplyId, { supply: recipeItem.supply, cantidadTotal: cantidadInsumo });
+                                }
+                            }
+                        }
+                        if (item.promotion && item.promotion.items) {
+                            for (const promoItem of item.promotion.items) {
+                                if (promoItem.product && promoItem.product.recipeItems.length > 0) {
+                                    const cantidadPromo = promoItem.quantity * cantidadItem;
+                                    for (const recipeItem of promoItem.product.recipeItems) {
+                                        const supplyId = recipeItem.supplyId;
+                                        const cantidadInsumo = Number(recipeItem.qtyPerUnit) * cantidadPromo;
+                                        if (insumosRequeridos.has(supplyId)) {
+                                            insumosRequeridos.get(supplyId)!.cantidadTotal += cantidadInsumo;
+                                        } else {
+                                            insumosRequeridos.set(supplyId, { supply: recipeItem.supply, cantidadTotal: cantidadInsumo });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Restaurar el stock (sumar de vuelta)
+                    for (const [supplyId, { supply, cantidadTotal }] of insumosRequeridos) {
+                        const nuevoStock = Number(supply.stockActual) + cantidadTotal;
+                        await tx.supply.update({ where: { id: supplyId }, data: { stockActual: nuevoStock } });
+                        await tx.stockMovement.create({
+                            data: {
+                                supplyId,
+                                tipo: 'AJUSTE',
+                                cantidad: cantidadTotal,
+                                stockResultante: nuevoStock,
+                                orderId: id,
+                                motivo: `Restauración de insumos por cancelación de pedido ${order.numero} (estaba finalizado, sin merma)`
+                            }
+                        });
+                    }
+
+                    await tx.order.update({
+                        where: { id },
+                        data: {
+                            estado: 'CANCELADO',
+                            canceladoEn: new Date(),
+                            motivoCancelacion: motive,
+                            events: {
+                                create: {
+                                    tipo: 'CANCELACION',
+                                    descripcion: `Pedido cancelado (sin merma, insumos restaurados). Motivo: ${motive || 'No especificado'}`,
+                                    actorId,
+                                    actorName
+                                }
+                            }
+                        }
+                    });
+                });
+
+            } else if (yaEstabaFinalizado && descontarInsumos) {
+                // El pedido estaba FINALIZADO (stock ya descontado) y se cancela CON merma
+                // → NO hacer nada con el stock (ya está descontado, y la merma confirma que se usaron)
+                await prisma.order.update({
+                    where: { id },
+                    data: {
+                        estado: 'CANCELADO',
+                        canceladoEn: new Date(),
+                        motivoCancelacion: motive,
+                        events: {
+                            create: {
+                                tipo: 'CANCELACION',
+                                descripcion: `Pedido cancelado (con merma, insumos ya descontados previamente). Motivo: ${motive || 'No especificado'}`,
+                                actorId,
+                                actorName
+                            }
+                        }
+                    }
+                });
+
+            } else if (!yaEstabaFinalizado && descontarInsumos) {
+                // El pedido NO estaba finalizado (stock nunca descontado) y se cancela CON merma
+                // → DESCONTAR stock (los insumos se usaron aunque no se entregó)
+                await prisma.$transaction(async (tx) => {
+                    const order = await tx.order.findUnique({
+                        where: { id },
+                        include: {
+                            items: {
+                                include: {
+                                    product: { include: { recipeItems: { include: { supply: true } } } },
+                                    promotion: { include: { items: { include: { product: { include: { recipeItems: { include: { supply: true } } } } } } } }
+                                }
+                            }
+                        }
+                    });
+
+                    if (!order) throw new Error("Pedido no encontrado");
+
+                    const insumosRequeridos = new Map<string, { supply: any, cantidadTotal: number }>();
+
+                    for (const item of order.items) {
+                        const cantidadItem = Number(item.cantidad);
+                        if (item.product && item.product.recipeItems.length > 0) {
+                            for (const recipeItem of item.product.recipeItems) {
+                                const supplyId = recipeItem.supplyId;
+                                const cantidadInsumo = Number(recipeItem.qtyPerUnit) * cantidadItem;
+                                if (insumosRequeridos.has(supplyId)) {
+                                    insumosRequeridos.get(supplyId)!.cantidadTotal += cantidadInsumo;
+                                } else {
+                                    insumosRequeridos.set(supplyId, { supply: recipeItem.supply, cantidadTotal: cantidadInsumo });
+                                }
+                            }
+                        }
+                        if (item.promotion && item.promotion.items) {
+                            for (const promoItem of item.promotion.items) {
+                                if (promoItem.product && promoItem.product.recipeItems.length > 0) {
+                                    const cantidadPromo = promoItem.quantity * cantidadItem;
+                                    for (const recipeItem of promoItem.product.recipeItems) {
+                                        const supplyId = recipeItem.supplyId;
+                                        const cantidadInsumo = Number(recipeItem.qtyPerUnit) * cantidadPromo;
+                                        if (insumosRequeridos.has(supplyId)) {
+                                            insumosRequeridos.get(supplyId)!.cantidadTotal += cantidadInsumo;
+                                        } else {
+                                            insumosRequeridos.set(supplyId, { supply: recipeItem.supply, cantidadTotal: cantidadInsumo });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    for (const [supplyId, { supply, cantidadTotal }] of insumosRequeridos) {
+                        const nuevoStock = Number(supply.stockActual) - cantidadTotal;
+                        await tx.supply.update({ where: { id: supplyId }, data: { stockActual: nuevoStock } });
+                        await tx.stockMovement.create({
+                            data: {
+                                supplyId,
+                                tipo: 'OUT',
+                                cantidad: cantidadTotal,
+                                stockResultante: nuevoStock,
+                                orderId: id,
+                                motivo: `Merma por cancelación de pedido ${order.numero}`
+                            }
+                        });
+                    }
+
+                    await tx.order.update({
+                        where: { id },
+                        data: {
+                            estado: 'CANCELADO',
+                            canceladoEn: new Date(),
+                            motivoCancelacion: motive,
+                            events: {
+                                create: {
+                                    tipo: 'CANCELACION',
+                                    descripcion: `Pedido cancelado (con merma). Motivo: ${motive || 'No especificado'}`,
+                                    actorId,
+                                    actorName
+                                }
+                            }
+                        }
+                    });
+                });
+
+            } else {
+                // El pedido NO estaba finalizado y se cancela SIN merma
+                // → No tocar el stock
+                await prisma.order.update({
+                    where: { id },
+                    data: {
+                        estado: 'CANCELADO',
+                        canceladoEn: new Date(),
+                        motivoCancelacion: motive,
+                        events: {
+                            create: {
+                                tipo: 'CANCELACION',
+                                descripcion: `Pedido cancelado. Motivo: ${motive || 'No especificado'}`,
+                                actorId,
+                                actorName
+                            }
+                        }
+                    }
+                });
+            }
+
         } else {
-            // Para otros estados, actualizar normalmente
+            // Para otros cambios de estado (EN_PREPARACION, LISTO, etc.)
             await prisma.order.update({
                 where: { id },
                 data: {
                     estado: status,
                     ...(status === 'EN_PREPARACION' ? { enPreparacionEn: new Date() } : {}),
                     ...(status === 'LISTO' ? { listoEn: new Date() } : {}),
-                    ...(status === 'CANCELADO' ? {
-                        canceladoEn: new Date(),
-                        motivoCancelacion: motive
-                    } : {}),
+                    events: {
+                        create: {
+                            tipo: 'CAMBIO_ESTADO',
+                            descripcion: `Estado cambiado a ${status}`,
+                            actorId,
+                            actorName
+                        }
+                    }
                 }
             });
         }
@@ -181,12 +375,45 @@ export async function updateOrderStatus(id: string, status: EstadoPedido, motive
 
 export async function toggleOrderPayment(id: string, cobrado: boolean, metodoPago?: string) {
     try {
+        // Identify Actor
+        let actorId = null;
+        let actorName = null;
+        try {
+            const session = await getSessionCookie();
+            if (session) {
+                const claims = await verifySessionCookie(session);
+                if (claims?.uid) {
+                    const user = await prisma.user.findUnique({
+                        where: { firebaseUid: claims.uid },
+                        select: { id: true, displayName: true, email: true, rol: true }
+                    });
+                    if (user) {
+                        actorId = user.id;
+                        actorName = user.displayName || user.email?.split("@")[0] || "Usuario";
+                        if (user.rol) actorName += ` (${user.rol})`;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("Could not identify user for order event.", e);
+        }
+
         const order = await prisma.order.update({
             where: { id },
             data: {
                 cobrado,
                 cobradoEn: cobrado ? new Date() : null,
-                metodoPago: cobrado ? (metodoPago || null) : null
+                metodoPago: cobrado ? (metodoPago || null) : null,
+                events: {
+                    create: {
+                        tipo: 'COBRO',
+                        descripcion: cobrado
+                            ? `Pedido cobrado (${metodoPago || 'EFECTIVO'})`
+                            : 'Marcado como no cobrado',
+                        actorId,
+                        actorName
+                    }
+                }
             }
         });
 
@@ -236,6 +463,7 @@ export async function createOrder(data: {
     try {
         // Identify Creator
         let createdByUserId = null;
+        let createdByUserName = null;
         try {
             const session = await getSessionCookie();
             if (session) {
@@ -244,10 +472,12 @@ export async function createOrder(data: {
                 if (claims && claims.uid) {
                     const user = await prisma.user.findUnique({
                         where: { firebaseUid: claims.uid },
-                        select: { id: true }
+                        select: { id: true, displayName: true, email: true, rol: true }
                     });
                     if (user) {
                         createdByUserId = user.id;
+                        createdByUserName = user.displayName || user.email?.split("@")[0] || "Usuario";
+                        if (user.rol) createdByUserName += ` (${user.rol})`;
                     }
                 }
             }
@@ -282,6 +512,14 @@ export async function createOrder(data: {
                 notas: data.notas,
                 estado: "PENDIENTE",
                 createdBy: createdByUserId,
+                events: {
+                    create: {
+                        tipo: 'CREACION',
+                        descripcion: 'Pedido creado internamente',
+                        actorId: createdByUserId,
+                        actorName: createdByUserName || 'Sistema'
+                    }
+                },
                 items: {
                     create: data.items.map(item => {
                         const isPromotion = item.type === 'PROMOCION' || (!!item.productId && item.productId.includes('-'));
@@ -369,12 +607,12 @@ export async function getOrderSuppliesAndCost(orderId: string) {
         }
 
         // Calcular los insumos totales necesarios
-        const insumosMap = new Map<string, { 
-            nombre: string, 
-            unidad: string, 
+        const insumosMap = new Map<string, {
+            nombre: string,
+            unidad: string,
             cantidadTotal: number,
             costoUnitario: number,
-            costoTotal: number 
+            costoTotal: number
         }>();
 
         for (const item of order.items) {
@@ -408,7 +646,7 @@ export async function getOrderSuppliesAndCost(orderId: string) {
                 for (const promoItem of item.promotion.items) {
                     if (promoItem.product && promoItem.product.recipeItems.length > 0) {
                         const cantidadPromoProduct = promoItem.quantity * cantidadItem;
-                        
+
                         for (const recipeItem of promoItem.product.recipeItems) {
                             const cantidadInsumo = Number(recipeItem.qtyPerUnit) * cantidadPromoProduct;
                             const supplyId = recipeItem.supplyId;
@@ -435,7 +673,7 @@ export async function getOrderSuppliesAndCost(orderId: string) {
 
         // Convertir el mapa en un array
         const insumos = Array.from(insumosMap.values());
-        
+
         // Calcular el costo total
         const costoTotal = insumos.reduce((sum, insumo) => sum + insumo.costoTotal, 0);
 
@@ -444,8 +682,8 @@ export async function getOrderSuppliesAndCost(orderId: string) {
         const ganancia = totalPedido - costoTotal;
         const margenGanancia = totalPedido > 0 ? (ganancia / totalPedido) * 100 : 0;
 
-        return { 
-            success: true, 
+        return {
+            success: true,
             data: {
                 insumos,
                 costoTotal,

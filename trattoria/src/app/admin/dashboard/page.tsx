@@ -20,6 +20,8 @@ import { es } from "date-fns/locale";
 import { DashboardMetricCard } from "./components/DashboardMetricCard";
 import { getDashboardMetrics, getRecentActivity } from "./actions";
 import Link from "next/link";
+import { formatCurrency } from "@/lib/utils";
+import { SpectrumIcon } from "@/components/ui/spectrum-icons";
 
 interface DashboardMetrics {
     totalSales: number;
@@ -28,7 +30,16 @@ interface DashboardMetrics {
     totalOrdersToday: number;
     pendingOrders: number;
     activeCustomers: number;
-    goalProgress: number;
+    monthlyGoal: {
+        amount: number;
+        currentAmount: number;
+        progress: number;
+        type: string;
+    };
+    weeklyRevenue: {
+        day: string;
+        revenue: number;
+    }[];
 }
 
 interface RecentActivityItem {
@@ -71,16 +82,8 @@ export default function DashboardPage() {
         fetchData();
     }, [fetchData]);
 
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('es-CL', {
-            style: 'currency',
-            currency: 'CLP',
-            maximumFractionDigits: 0
-        }).format(amount);
-    };
-
     return (
-        <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen animate-in fade-in duration-700">
+        <div className="flex flex-col gap-6 animate-in fade-in duration-700">
             {/* Header Section */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
@@ -105,28 +108,29 @@ export default function DashboardPage() {
                     value={loading ? "..." : formatCurrency(metrics?.salesToday || 0)}
                     change={metrics?.salesGrowth}
                     headerColor="bg-zinc-900"
-                    icon={<DollarSign size={18} />}
+                    icon={<SpectrumIcon variant="diamond" className="w-5 h-5" />}
                 />
                 <DashboardMetricCard
                     title="Pedidos de Hoy"
                     value={loading ? "..." : metrics?.totalOrdersToday || 0}
                     description={`${metrics?.pendingOrders || 0} pendientes`}
                     headerColor="bg-orange-500"
-                    icon={<ShoppingBag size={18} />}
+                    icon={<SpectrumIcon variant="cube" className="w-5 h-5" />}
                 />
                 <DashboardMetricCard
                     title="Clientes Activos"
                     value={loading ? "..." : metrics?.activeCustomers || 0}
                     headerColor="bg-indigo-600"
-                    icon={<Users size={18} />}
+                    icon={<SpectrumIcon variant="nodes" className="w-5 h-5" />}
                 />
                 <DashboardMetricCard
                     isPrimary
                     title="Meta Mensual"
-                    value={loading ? "..." : `${metrics?.goalProgress || 0}%`}
+                    value={loading ? "..." : `${metrics?.monthlyGoal?.progress || 0}%`}
                     description="Progreso del mes"
                     headerColor="bg-emerald-600"
-                    icon={<TrendingUp size={18} />}
+                    icon={<SpectrumIcon variant="wave" className="w-5 h-5" />}
+                    monthlyGoal={metrics?.monthlyGoal}
                 />
             </div>
 
@@ -148,22 +152,30 @@ export default function DashboardPage() {
                             </Link>
                         </div>
                         <div className="p-8 flex-grow flex flex-col items-center justify-center bg-zinc-50/50">
-                            <div className="h-64 w-full flex items-end justify-between px-4 gap-4">
-                                {[40, 65, 45, 90, 55, 75, 85].map((height, i) => (
-                                    <div key={i} className="flex flex-col items-center gap-3 flex-1 group">
-                                        <div
-                                            className="w-full bg-zinc-200 rounded-2xl group-hover:bg-zinc-900 transition-all duration-500 relative"
-                                            style={{ height: `${height}%` }}
-                                        >
-                                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[0.65rem] font-bold py-1 px-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                                                {height}k
+                            <div className="h-64 w-full flex items-end justify-between px-4 gap-2 sm:gap-4">
+                                {metrics?.weeklyRevenue?.map((data, i) => {
+                                    const maxRevenue = Math.max(...(metrics.weeklyRevenue.map(d => d.revenue) || [1]));
+                                    const heightPercentage = maxRevenue > 0 ? (data.revenue / maxRevenue) * 100 : 0;
+                                    const finalHeight = data.revenue > 0 ? Math.max(5, heightPercentage) : 0;
+
+                                    return (
+                                        <div key={i} className="flex flex-col items-center flex-1 group">
+                                            <div className="w-full h-52 flex items-end relative mb-3">
+                                                <div
+                                                    className="w-full bg-zinc-200 rounded-xl group-hover:bg-zinc-900 transition-all duration-500 relative"
+                                                    style={{ height: `${finalHeight}%` }}
+                                                >
+                                                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-[0.65rem] font-bold py-1 px-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                                                        {formatCurrency(data.revenue)}
+                                                    </div>
+                                                </div>
                                             </div>
+                                            <span className="text-[0.65rem] font-bold text-zinc-400 text-center uppercase tracking-widest shrink-0">
+                                                {data.day}
+                                            </span>
                                         </div>
-                                        <span className="text-[0.65rem] font-bold text-zinc-400 uppercase tracking-widest">
-                                            {['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'][i]}
-                                        </span>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                         <div className="p-8 bg-zinc-900 text-white flex items-center justify-between">

@@ -2,24 +2,24 @@
 
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
-import { 
-    LineChart, 
-    Line, 
+import {
+    LineChart,
+    Line,
     BarChart,
     Bar,
     PieChart,
     Pie,
     Cell,
-    XAxis, 
-    YAxis, 
-    CartesianGrid, 
-    Tooltip, 
-    Legend, 
-    ResponsiveContainer 
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer
 } from "recharts";
-import { 
-    DollarSign, 
-    TrendingUp, 
+import {
+    DollarSign,
+    TrendingUp,
     TrendingDown,
     ArrowUp,
     ArrowDown,
@@ -82,11 +82,10 @@ function KPICard({
                 </div>
                 {change && (
                     <div
-                        className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${
-                            changeType === "up"
+                        className={`flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${changeType === "up"
                                 ? "text-emerald-600 bg-emerald-50"
                                 : "text-red-600 bg-red-50"
-                        }`}
+                            }`}
                     >
                         {changeType === "up" ? (
                             <ArrowUp className="h-3 w-3" />
@@ -142,7 +141,7 @@ export default function FinancialSection({ dateRange }: FinancialSectionProps) {
 
     useEffect(() => {
         loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dateRange]);
 
     // Colores para gráficos
@@ -206,13 +205,18 @@ export default function FinancialSection({ dateRange }: FinancialSectionProps) {
                         Evolución de ingresos, egresos y balance en el tiempo
                     </p>
                 </div>
-                
+
                 <ResponsiveContainer width="100%" height={400}>
                     <LineChart data={dailyData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                         <XAxis
                             dataKey="date"
-                            tickFormatter={(date: string) => format(new Date(date), "dd MMM", { locale: es })}
+                            tickFormatter={(date: string) => {
+                                const isSingleDay = dateRange.from.toDateString() === dateRange.to.toDateString();
+                                return isSingleDay
+                                    ? format(new Date(date), "HH:mm")
+                                    : format(new Date(date), "dd MMM", { locale: es });
+                            }}
                             stroke="#71717a"
                             style={{ fontSize: "12px" }}
                         />
@@ -229,7 +233,12 @@ export default function FinancialSection({ dateRange }: FinancialSectionProps) {
                                 padding: "12px",
                             }}
                             formatter={(value) => [formatCurrency(Number(value || 0)), ""]}
-                            labelFormatter={(date) => format(new Date(date), "dd 'de' MMMM, yyyy", { locale: es })}
+                            labelFormatter={(date) => {
+                                const isSingleDay = dateRange.from.toDateString() === dateRange.to.toDateString();
+                                return isSingleDay
+                                    ? format(new Date(date), "HH:mm 'hs'", { locale: es })
+                                    : format(new Date(date), "dd 'de' MMMM, yyyy", { locale: es });
+                            }}
                         />
                         <Legend />
                         <Line

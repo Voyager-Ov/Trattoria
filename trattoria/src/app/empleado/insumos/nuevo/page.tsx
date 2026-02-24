@@ -54,7 +54,7 @@ export default function NuevoInsumoPage() {
         <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen">
             {/* Breadcrumbs */}
             <div className="flex items-center gap-2 text-sm font-medium text-zinc-400">
-                <Link href="/empleado/pedidos" className="hover:text-zinc-600 transition-colors">Empleado</Link>
+                <Link href="/empleado" className="hover:text-zinc-600 transition-colors">Empleado</Link>
                 <ChevronRight className="h-4 w-4" />
                 <Link href="/empleado/insumos" className="hover:text-zinc-600 transition-colors">Insumos</Link>
                 <ChevronRight className="h-4 w-4" />

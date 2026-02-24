@@ -1,7 +1,9 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { startOfDay, endOfDay, subDays } from "date-fns";
+import { startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, format } from "date-fns";
+import { es } from "date-fns/locale";
+import { getConfigs } from "@/app/actions/configActions";
 
 export async function getDashboardMetrics() {
     try {
@@ -66,14 +68,67 @@ export async function getDashboardMetrics() {
             }
         });
 
-        // 4. Monthly Goal (Mock logic based on current data)
-        // Let's assume a goal of 1,000,000 for the month
-        const monthlyGoal = 1000000;
+        // 4. Monthly Goal
+        const configsResult = await getConfigs(["goals.monthly"]);
+        let monthlyGoalSetting = { amount: 1000000, type: "revenue" };
+        if (configsResult.success && configsResult.data && configsResult.data["goals.monthly"]) {
+            monthlyGoalSetting = configsResult.data["goals.monthly"];
+        }
+
+        const monthlyGoalAmount = monthlyGoalSetting.amount;
+        const monthlyGoalType = monthlyGoalSetting.type;
+
+        // Calculate revenue for current month
+        const currentMonthStart = startOfMonth(today);
+        const currentMonthEnd = endOfMonth(today);
+
+        let currentAmount = 0;
+
         const currentMonthSales = finalizedOrders
-            .filter(o => o.recibidoEn.getMonth() === today.getMonth() && o.recibidoEn.getFullYear() === today.getFullYear())
+            .filter(o => o.recibidoEn >= currentMonthStart && o.recibidoEn <= currentMonthEnd)
             .reduce((acc, order) => acc + Number(order.total), 0);
 
-        const goalProgress = Math.min(Math.round((currentMonthSales / monthlyGoal) * 100), 100);
+        if (monthlyGoalType === "profit") {
+            // Need to calculate profit = revenue - expenses
+            const currentMonthEgresos = await prisma.egreso.aggregate({
+                _sum: {
+                    monto: true
+                },
+                where: {
+                    fecha: {
+                        gte: currentMonthStart,
+                        lte: currentMonthEnd
+                    },
+                    deletedAt: null
+                }
+            });
+            const totalEgresos = Number(currentMonthEgresos._sum.monto || 0);
+            currentAmount = currentMonthSales - totalEgresos;
+        } else {
+            // Default is revenue
+            currentAmount = currentMonthSales;
+        }
+
+        const goalProgress = monthlyGoalAmount > 0
+            ? Math.min(Math.round((currentAmount / monthlyGoalAmount) * 100), 100)
+            : 0;
+
+        // 5. Weekly Revenue (Last 7 days)
+        const weeklyRevenueData = [];
+        for (let i = 6; i >= 0; i--) {
+            const date = subDays(today, i);
+            const start = startOfDay(date);
+            const end = endOfDay(date);
+
+            const daySales = finalizedOrders
+                .filter(o => o.recibidoEn >= start && o.recibidoEn <= end)
+                .reduce((acc, order) => acc + Number(order.total), 0);
+
+            weeklyRevenueData.push({
+                day: format(date, 'eee', { locale: es }).substring(0, 3).toUpperCase(),
+                revenue: daySales
+            });
+        }
 
         return {
             success: true,
@@ -84,7 +139,13 @@ export async function getDashboardMetrics() {
                 totalOrdersToday,
                 pendingOrders,
                 activeCustomers,
-                goalProgress
+                monthlyGoal: {
+                    amount: monthlyGoalAmount,
+                    type: monthlyGoalType,
+                    currentAmount,
+                    progress: goalProgress
+                },
+                weeklyRevenue: weeklyRevenueData
             }
         };
     } catch (error) {

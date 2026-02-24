@@ -21,21 +21,13 @@ import { getEmployeeDashboardMetrics, getRecentOrders } from "./actions";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ComingSoonOverlay } from "@/components/ui/coming-soon-overlay";
-import { isFeatureEnabled } from "@/lib/features";
+
 
 export default function EmpleadoPage() {
     const { userData } = useAuth();
     const [metrics, setMetrics] = useState<any>(null);
     const [orders, setOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-
-    // Feature flag check
-    const empleadoModulesEnabled = isFeatureEnabled('empleado_modules');
-    
-    if (!empleadoModulesEnabled) {
-        return <ComingSoonOverlay />;
-    }
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -59,9 +51,9 @@ export default function EmpleadoPage() {
     }, [fetchData]);
 
     const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('es-CL', {
+        return new Intl.NumberFormat('es-AR', {
             style: 'currency',
-            currency: 'CLP',
+            currency: 'ARS',
             maximumFractionDigits: 0
         }).format(amount);
     };

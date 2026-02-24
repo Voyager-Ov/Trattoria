@@ -129,6 +129,7 @@ model User {
   ordersUpdated     Order[]          @relation("OrderUpdatedBy")
   stockMovements    StockMovement[]
   auditLogs         AuditLog[]
+  orderEvents       OrderEvent[]
   
   @@index([rol, estado])
   @@index([deletedAt])
@@ -224,7 +225,6 @@ model Promotion {
   updatedAt     DateTime     @updatedAt
   deletedAt     DateTime?
 
-  @@index([deletedAt])
   @@index([isActive, deletedAt])
   @@index([startDate, endDate, deletedAt])
   @@map("promotions")
@@ -355,13 +355,45 @@ model Order {
   deletedAt     DateTime? // Soft-delete (solo para cancelados)
   
   // Relaciones
-  items OrderItem[]
+  items  OrderItem[]
+  events OrderEvent[]
   
   @@index([estado, updatedAt(sort: Desc)])
   @@index([createdBy, recibidoEn(sort: Desc)])
   @@index([recibidoEn(sort: Desc)])
   @@index([deletedAt])
   @@map("orders")
+}
+
+/// OrderEvent - Historial de eventos de un pedido para auditoría
+model OrderEvent {
+  id          String   @id @default(cuid())
+  
+  // Pedido
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  // Quién (opcional, si es del sistema puede ser nulo o tener un username específico)
+  actorId     String?
+  actor       User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorName   String?  // Ej: "Juan C. Admin (Admin)" o "Cliente (Web)"
+  
+  // Qué
+  tipo        TipoEventoPedido
+  descripcion String   @db.Text
+  
+  // Cuándo
+  createdAt   DateTime @default(now())
+
+  @@index([orderId, createdAt(sort: Desc)])
+  @@map("order_events")
+}
+
+enum TipoEventoPedido {
+  CREACION
+  CAMBIO_ESTADO
+  COBRO
+  CANCELACION
 }
 
 /// OrderItem - Línea de pedido con snapshot de producto
@@ -430,8 +462,9 @@ model Supply {
   deletedAt DateTime? // Soft-delete
   
   // Relaciones
-  movements   StockMovement[]
-  recipeItems ProductRecipeItem[]
+  movements     StockMovement[]
+  recipeItems   ProductRecipeItem[]
+  purchaseItems PurchaseItem[]
   
   @@index([activo])
   @@index([stockActual]) // Para detectar bajos stocks
@@ -556,6 +589,10 @@ enum CategoriaEgreso {
   SERVICIOS
   NOMINA
   MANTENIMIENTO
+  IMPUESTOS
+  ALQUILER
+  PUBLICIDAD
+  EQUIPAMIENTO
   OTROS
 }
 
@@ -571,7 +608,18 @@ model Egreso {
   descripcion String   @db.Text
   monto       Decimal  @db.Decimal(10, 2)
   categoria   CategoriaEgreso @default(OTROS)
-  proveedor   String?
+  
+  // Proveedor (Snapshot texto + Relación)
+  proveedor   String?  // Snapshot legacy
+  providerId  String?
+  provider    Provider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  
+  // Relación con Compra (si aplica)
+  purchase    Purchase?
+  
+  // Pago
+  metodoPago  String   @default("EFECTIVO")
+  comprobante String?  // URL o path de comprobante
   
   // Auditoría
   createdAt DateTime @default(now())
@@ -582,6 +630,61 @@ model Egreso {
   @@index([categoria])
   @@index([deletedAt])
   @@map("egresos")
+}
+
+// =============================================================================
+// PROVEEDORES Y COMPRAS - Gestión de abastecimiento
+// =============================================================================
+
+enum EstadoCompra {
+  BORRADOR
+  SOLICITADO
+  RECIBIDO
+  CANCELADO
+}
+
+model Provider {
+  id        String     @id @default(cuid())
+  nombre    String
+  cuit      String?    @unique
+  contacto  String?
+  direccion String?
+  email     String?
+  activo    Boolean    @default(true)
+  purchases Purchase[]
+  egresos   Egreso[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("providers")
+}
+
+model Purchase {
+  id            String         @id @default(cuid())
+  providerId    String
+  provider      Provider       @relation(fields: [providerId], references: [id])
+  total         Decimal        @db.Decimal(10, 2)
+  fecha         DateTime       @default(now())
+  estado        EstadoCompra   @default(RECIBIDO)
+  items         PurchaseItem[]
+  egresoId      String?        @unique
+  egreso        Egreso?        @relation(fields: [egresoId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         String   @id @default(cuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  supplyId   String
+  supply     Supply   @relation(fields: [supplyId], references: [id])
+  cantidad   Decimal  @db.Decimal(10, 3)
+  precioUnit Decimal  @db.Decimal(10, 2)
+
+  @@map("purchase_items")
 }
 
 // =============================================================================
