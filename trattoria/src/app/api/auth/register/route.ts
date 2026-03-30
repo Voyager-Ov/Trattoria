@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase-admin';
 import { createSessionCookie, setSessionCookie } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { rateLimit, getClientIp } from '@/lib/rateLimit';
 
 const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_DAYS || '5', 10) * 24 * 60 * 60 * 1000;
 
 interface RegisterBody {
     idToken: string;
-    makeAdmin?: boolean; // For first user registration
+    // NOTE: makeAdmin removed — privilege escalation vector. Only first user auto-promotes to ADMIN.
 }
 
 /**
@@ -17,9 +18,22 @@ interface RegisterBody {
  * Optional: can promote first user to ADMIN
  */
 export async function POST(request: NextRequest) {
+    // F-06: Rate limit — 3 attempts per IP per 10 minutes
+    const ip = getClientIp(request);
+    const rl = rateLimit(`register:${ip}`, { limit: 3, windowMs: 10 * 60_000 });
+    if (!rl.allowed) {
+        return NextResponse.json(
+            { error: 'Demasiados intentos de registro. Intentá más tarde.' },
+            {
+                status: 429,
+                headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) }
+            }
+        );
+    }
+
     try {
         const body = await request.json() as RegisterBody;
-        const { idToken, makeAdmin } = body;
+        const { idToken } = body;
 
         if (!idToken) {
             return NextResponse.json(
@@ -57,7 +71,7 @@ export async function POST(request: NextRequest) {
             const userCount = await prisma.user.count();
             isFirstUser = userCount === 0;
 
-            if (isFirstUser || makeAdmin) {
+            if (isFirstUser) {
                 userRol = 'ADMIN';
             }
         } catch (error) {

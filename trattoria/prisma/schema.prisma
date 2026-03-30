@@ -440,6 +440,7 @@ model Supply {
   // Datos del insumo
   nombre      String  @unique
   descripcion String? @db.Text
+  categoria   String? // Categoría del insumo (ej: Lácteos, Carnes)
   
   // Unidad de medida
   unidad UnidadMedida
@@ -535,6 +536,16 @@ model ProductRecipeItem {
   @@index([productId])
   @@index([supplyId])
   @@map("product_recipe_items")
+}
+
+/// SupplyCategory - Categorías para organizar los insumos
+model SupplyCategory {
+  id        String   @id @default(cuid())
+  nombre    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("supply_categories")
 }
 
 // =============================================================================

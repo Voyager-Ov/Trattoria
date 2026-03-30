@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { CategoriaEgreso } from "@prisma/client";
+import { requireAdmin } from "@/lib/serverAuth";
 
 export type EgresoFilter = {
     search?: string;
@@ -12,6 +13,8 @@ export type EgresoFilter = {
 };
 
 export async function getEgresos(filters: EgresoFilter = {}) {
+    // F-04a: Only ADMIN can read financial expense data
+    await requireAdmin();
     try {
         const { search, categoria, fechaInicio, fechaFin } = filters;
 
@@ -57,6 +60,8 @@ export async function getEgresos(filters: EgresoFilter = {}) {
 }
 
 export async function getEgresoStats(filters: EgresoFilter = {}) {
+    // F-04a: Only ADMIN can read financial stats
+    await requireAdmin();
     try {
         const { fechaInicio, fechaFin } = filters;
 
@@ -104,6 +109,8 @@ export async function createEgreso(data: {
     fecha?: Date;
     proveedor?: string;
 }) {
+    // F-04a: Only ADMIN can create expenses
+    const actor = await requireAdmin();
     try {
         const newEgreso = await prisma.$transaction(async (tx) => {
             // 1. Get next sequence number
@@ -160,6 +167,8 @@ export async function updateEgreso(id: string, data: {
     fecha?: Date;
     proveedor?: string;
 }) {
+    // F-04a: Only ADMIN can update expenses
+    const actor = await requireAdmin();
     try {
         const oldEgreso = await prisma.egreso.findUnique({ where: { id } });
         if (!oldEgreso) return { success: false, error: "Egreso no encontrado" };
@@ -201,6 +210,8 @@ export async function updateEgreso(id: string, data: {
 }
 
 export async function deleteEgreso(id: string) {
+    // F-04a: Only ADMIN can delete expenses
+    await requireAdmin();
     try {
         const egreso = await prisma.egreso.findUnique({ where: { id } });
         if (!egreso) return { success: false, error: "Egreso no encontrado" };

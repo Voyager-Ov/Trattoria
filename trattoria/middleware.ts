@@ -26,8 +26,9 @@ function shouldSkipMiddleware(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-    console.log(`[Middleware Exec] ${request.method} ${request.nextUrl.pathname} at ${new Date().toISOString()}`);
+    const isDev = process.env.NODE_ENV === 'development';
     const { pathname } = request.nextUrl;
+    if (isDev) console.log(`[Middleware] ${request.method} ${pathname}`);
 
     // Skip middleware for API routes, static files, etc.
     if (shouldSkipMiddleware(pathname)) {
@@ -35,7 +36,15 @@ export async function middleware(request: NextRequest) {
     }
 
     // Public routes (no auth required)
-    if (pathname === '/' || pathname === '/login') {
+    // Includes the public catalog: /, /login, /categoria/*, /carrito
+    const isPublic = (
+        pathname === '/' ||
+        pathname === '/login' ||
+        pathname.startsWith('/categoria') ||
+        pathname.startsWith('/carrito') ||
+        pathname.startsWith('/producto')
+    );
+    if (isPublic) {
         return NextResponse.next();
     }
 
@@ -44,7 +53,7 @@ export async function middleware(request: NextRequest) {
     const sessionCookie = request.cookies.get('session')?.value;
 
     if (!sessionCookie) {
-        console.log(`❌ No session cookie for ${pathname}, redirecting to /login`);
+        if (isDev) console.log(`[Middleware] No session for ${pathname}`);
         return NextResponse.redirect(new URL('/login?error=session_expired', request.url));
     }
 
@@ -71,33 +80,25 @@ export async function middleware(request: NextRequest) {
         // data.user is where the user data lives
         const rol = responseJson.user?.rol;
 
-        console.log(`[Middleware] Path: ${pathname} | Role: ${rol}`);
+        if (isDev) console.log(`[Middleware] Path: ${pathname} | Role: ${rol}`);
 
         // Check route access based on role
         const accessResult = routeAccess(rol, pathname);
-        console.log(`[Middleware] Access Result: ${accessResult}`);
+        if (isDev) console.log(`[Middleware] Access: ${accessResult}`);
 
         if (accessResult === 'REDIRECT_LOGIN') {
-            console.log(`❌ Access denied for ${pathname} (role: ${rol}), redirecting to login`);
-            // Access denied based on valid role -> likely just wrong role, but maybe safer to logout?
-            // Actually, if they are logged in but wrong role, we shouldn't force logout, just redirect to their dashboard or login?
-            // Existing logic just redirects. That's fine.
             return NextResponse.redirect(new URL('/login?error=permission_denied', request.url));
         }
 
         if (accessResult === 'REDIRECT_HOME') {
             const dashboardUrl = rol === 'ADMIN' ? '/admin/dashboard' : '/empleado';
-            console.log(`⚠️ Insufficient permissions for ${pathname} (role: ${rol}), redirecting to ${dashboardUrl}`);
             return NextResponse.redirect(new URL(dashboardUrl, request.url));
         }
 
         if (accessResult === 'DENY') {
-            console.log(`🚫 Access strictly denied for ${pathname} (role: ${rol})`);
             return new NextResponse('Acceso denegado', { status: 403 });
         }
 
-        // Access granted
-        console.log(`✅ Access granted for ${pathname} (role: ${rol})`);
         return NextResponse.next();
 
     } catch (error) {

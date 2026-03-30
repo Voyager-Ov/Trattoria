@@ -29,41 +29,43 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
             estado: { not: EstadoPedido.CANCELADO }
         };
 
-        const whereFinalized = {
+        // Financial filter: payment is the sole source of truth for revenue.
+        // Operational status (FINALIZADO, etc.) must NOT affect financial calculations.
+        const wherePaid = {
             ...where,
-            estado: EstadoPedido.FINALIZADO,
-            cobrado: true
+            cobrado: true,
+            estado: { not: EstadoPedido.CANCELADO }
         };
 
         const [
             recentOrders,
             totalRevenueAgg,
             totalOrdersAgg,
-            allValidOrdersInRange
+            allPaidOrders
         ] = await Promise.all([
-            // Recent transactions for the table (limited to 50)
+            // Recent transactions: ONLY paid, non-cancelled orders
             prisma.order.findMany({
-                where,
-                orderBy: { recibidoEn: "desc" },
+                where: wherePaid,
+                orderBy: { cobradoEn: "desc" },
                 take: 50,
                 include: {
                     items: true
                 }
             }),
-            // Total Revenue summary (only finalized and cobrado)
+            // Total Revenue: only cobrado=true and not cancelled
             prisma.order.aggregate({
-                where: whereFinalized,
+                where: wherePaid,
                 _sum: { total: true },
                 _count: { id: true }
             }),
-            // Total Orders Count (all orders in range)
+            // Total Orders Count (all orders in range, for operational overview)
             prisma.order.count({ where }),
-            // Finalized orders for daily stats
+            // Paid orders for daily stats
             prisma.order.findMany({
-                where: whereFinalized,
+                where: wherePaid,
                 select: {
                     total: true,
-                    recibidoEn: true
+                    cobradoEn: true
                 }
             })
         ]);
@@ -79,10 +81,10 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
             _count: true
         });
 
-        // Group by Payment Method (only for finalized and paid orders)
+        // Group by Payment Method (only paid non-cancelled orders)
         const paymentGroups = await prisma.order.groupBy({
             by: ['metodoPago'],
-            where: whereFinalized,
+            where: wherePaid,
             _sum: { total: true },
             _count: true
         });
@@ -105,10 +107,12 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
         const isSingleDay = startDate && endDate && startDate.toISOString().split('T')[0] === endDate.toISOString().split('T')[0];
 
         const revenueByDay: { [key: string]: { revenue: number, count: number } } = {};
-        allValidOrdersInRange.forEach(order => {
-            let dayKey = order.recibidoEn.toISOString().split('T')[0];
+        allPaidOrders.forEach(order => {
+            const dateSource = order.cobradoEn || order.cobradoEn;
+            if (!dateSource) return;
+            let dayKey = dateSource.toISOString().split('T')[0];
             if (isSingleDay) {
-                dayKey = order.recibidoEn.toISOString().substring(0, 13);
+                dayKey = dateSource.toISOString().substring(0, 13);
             }
             if (!revenueByDay[dayKey]) {
                 revenueByDay[dayKey] = { revenue: 0, count: 0 };
@@ -136,7 +140,8 @@ export async function getReportsData(startDate?: Date, endDate?: Date) {
                     recibidoEn: order.recibidoEn.toISOString(),
                     clienteNombre: order.clienteNombre || "Cliente Final",
                     total: order.total?.toNumber() || 0,
-                    metodoPago: order.metodoPago || "N/A",
+                    // metodoPago is always set when cobrado=true (enforced in actions.ts)
+                    metodoPago: order.metodoPago || "EFECTIVO",
                     estado: order.estado,
                     items: (order.items || []).map(item => ({
                         id: item.id,

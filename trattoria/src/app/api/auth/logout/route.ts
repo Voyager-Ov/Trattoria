@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { clearSessionCookie, getSessionCookie, verifySessionCookie } from '@/lib/auth';
 import { adminAuth } from '@/lib/firebase-admin';
 
@@ -28,20 +28,13 @@ async function handleLogout() {
     }
 }
 
+
 /**
  * POST /api/auth/logout
- * Client-side logout
+ * F-10: Only POST supported — GET logout is a CSRF vector.
+ * A simple <img src="/api/auth/logout"> on any page would log out any visitor.
  */
 export async function POST() {
     await handleLogout();
     return NextResponse.json({ success: true });
-}
-
-/**
- * GET /api/auth/logout
- * Server-side redirect logout (cleanup)
- */
-export async function GET(request: NextRequest) {
-    await handleLogout();
-    return NextResponse.redirect(new URL('/login', request.url));
 }

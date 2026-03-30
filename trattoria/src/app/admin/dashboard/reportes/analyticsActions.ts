@@ -105,12 +105,12 @@ export async function getFinancialData(startDate: Date, endDate: Date) {
         // Obtener todos los días en el rango
         const daysInterval = eachDayOfInterval({ start, end });
 
-        // Ingresos por día (pedidos finalizados y cobrados)
+        // Ingresos por día: depende SOLO del estado de pago, no del estado operativo
         const orders = await prisma.order.findMany({
             where: {
-                estado: "FINALIZADO",
                 cobrado: true,
-                finalizadoEn: {
+                estado: { not: "CANCELADO" },
+                cobradoEn: {
                     gte: start,
                     lte: end,
                 },
@@ -118,7 +118,7 @@ export async function getFinancialData(startDate: Date, endDate: Date) {
             },
             select: {
                 total: true,
-                finalizadoEn: true,
+                cobradoEn: true,
             },
         });
 
@@ -147,7 +147,7 @@ export async function getFinancialData(startDate: Date, endDate: Date) {
                 hourDate.setHours(hour, 0, 0, 0);
 
                 const dayIngresos = orders
-                    .filter(o => o.finalizadoEn && o.finalizadoEn.getHours() === hour)
+                    .filter(o => o.cobradoEn && o.cobradoEn.getHours() === hour)
                     .reduce((sum, o) => sum + Number(o.total), 0);
 
                 const dayEgresos = egresos
@@ -168,7 +168,7 @@ export async function getFinancialData(startDate: Date, endDate: Date) {
                 const dayEnd = endOfDay(day);
 
                 const dayIngresos = orders
-                    .filter(o => o.finalizadoEn && o.finalizadoEn >= dayStart && o.finalizadoEn <= dayEnd)
+                    .filter(o => o.cobradoEn && o.cobradoEn >= dayStart && o.cobradoEn <= dayEnd)
                     .reduce((sum, o) => sum + Number(o.total), 0);
 
                 const dayEgresos = egresos
@@ -216,9 +216,9 @@ export async function getPaymentMethodsData(startDate: Date, endDate: Date) {
 
         const orders = await prisma.order.findMany({
             where: {
-                estado: "FINALIZADO",
                 cobrado: true,
-                finalizadoEn: {
+                estado: { not: "CANCELADO" },
+                cobradoEn: {
                     gte: start,
                     lte: end,
                 },
@@ -325,8 +325,9 @@ export async function getTopProductsData(startDate: Date, endDate: Date, limit: 
         const orderItems = await prisma.orderItem.findMany({
             where: {
                 order: {
-                    estado: "FINALIZADO",
-                    finalizadoEn: {
+                    cobrado: true,
+                    estado: { not: "CANCELADO" },
+                    cobradoEn: {
                         gte: start,
                         lte: end,
                     },
@@ -405,8 +406,9 @@ export async function getProductMarginsData(startDate: Date, endDate: Date) {
                 orderItems: {
                     where: {
                         order: {
-                            estado: "FINALIZADO",
-                            finalizadoEn: {
+                            cobrado: true,
+                            estado: { not: "CANCELADO" },
+                            cobradoEn: {
                                 gte: start,
                                 lte: end,
                             },
@@ -480,8 +482,9 @@ export async function getCategoryRevenueOverTime(startDate: Date, endDate: Date)
         const orderItems = await prisma.orderItem.findMany({
             where: {
                 order: {
-                    estado: "FINALIZADO",
-                    finalizadoEn: {
+                    cobrado: true,
+                    estado: { not: "CANCELADO" },
+                    cobradoEn: {
                         gte: start,
                         lte: end,
                     },
@@ -496,7 +499,7 @@ export async function getCategoryRevenueOverTime(startDate: Date, endDate: Date)
                 },
                 order: {
                     select: {
-                        finalizadoEn: true,
+                        cobradoEn: true,
                     },
                 },
             },
@@ -521,9 +524,9 @@ export async function getCategoryRevenueOverTime(startDate: Date, endDate: Date)
             categoryNames.forEach(catName => {
                 const revenue = orderItems
                     .filter(item =>
-                        item.order.finalizadoEn &&
-                        item.order.finalizadoEn >= dayStart &&
-                        item.order.finalizadoEn <= dayEnd &&
+                        item.order.cobradoEn &&
+                        item.order.cobradoEn >= dayStart &&
+                        item.order.cobradoEn <= dayEnd &&
                         item.product?.category?.nombre === catName
                     )
                     .reduce((sum, item) => sum + Number(item.subtotal), 0);
@@ -957,8 +960,9 @@ export async function getTicketPromedioData(startDate: Date, endDate: Date) {
 
         const orders = await prisma.order.findMany({
             where: {
-                estado: "FINALIZADO",
-                finalizadoEn: {
+                cobrado: true,
+                estado: { not: "CANCELADO" },
+                cobradoEn: {
                     gte: start,
                     lte: end,
                 },
@@ -967,7 +971,7 @@ export async function getTicketPromedioData(startDate: Date, endDate: Date) {
             select: {
                 total: true,
                 origen: true,
-                finalizadoEn: true,
+                cobradoEn: true,
             },
         });
 
@@ -977,7 +981,7 @@ export async function getTicketPromedioData(startDate: Date, endDate: Date) {
             const dayEnd = endOfDay(day);
 
             const dayOrders = orders.filter(o =>
-                o.finalizadoEn && o.finalizadoEn >= dayStart && o.finalizadoEn <= dayEnd
+                o.cobradoEn && o.cobradoEn >= dayStart && o.cobradoEn <= dayEnd
             );
 
             const internoOrders = dayOrders.filter(o => o.origen === "INTERNO");
@@ -1059,8 +1063,9 @@ export async function getProfitabilityByCategoryData(startDate: Date, endDate: D
                         orderItems: {
                             where: {
                                 order: {
-                                    estado: "FINALIZADO",
-                                    finalizadoEn: {
+                                    cobrado: true,
+                                    estado: { not: "CANCELADO" },
+                                    cobradoEn: {
                                         gte: start,
                                         lte: end,
                                     },
@@ -1155,9 +1160,9 @@ export async function getMonthlyROI(year: number) {
             // Ingresos del mes
             const orders = await prisma.order.findMany({
                 where: {
-                    estado: "FINALIZADO",
                     cobrado: true,
-                    finalizadoEn: {
+                    estado: { not: "CANCELADO" },
+                    cobradoEn: {
                         gte: startDate,
                         lte: endDate,
                     },

@@ -56,7 +56,7 @@ const ConfigFormSchema = z.object({
     integrations: z.object({
         mercadoPago: z.object({
             publicKey: z.string().optional().or(z.literal("")),
-            accessToken: z.string().optional().or(z.literal("")),
+            // accessToken omitted — F-09: stored in MERCADOPAGO_ACCESS_TOKEN env var, never in DB
             enabled: z.boolean(),
         }),
     }),
@@ -127,7 +127,7 @@ export default function ConfigFormClient({ initialData }: ConfigFormClientProps)
                 methods: initialData["payments.methods"] || DEFAULT_PAYMENT_METHODS,
             },
             integrations: {
-                mercadoPago: initialData["integrations.mercadoPago"] || { publicKey: "", accessToken: "", enabled: false },
+                mercadoPago: initialData["integrations.mercadoPago"] || { publicKey: "", enabled: false },
             },
             whatsapp: {
                 settings: initialData["whatsapp.settings"] || {
@@ -759,7 +759,11 @@ export default function ConfigFormClient({ initialData }: ConfigFormClientProps)
                                             </div>
                                             <div className="space-y-2">
                                                 <Label className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Access Token</Label>
-                                                <Input type="password" {...form.register("integrations.mercadoPago.accessToken")} className="h-12 rounded-2xl border-zinc-100 bg-zinc-50/50" />
+                                                {/* F-09: Secret never stored in DB — configure via environment variable */}
+                                                <div className="h-12 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 flex items-center gap-3 px-4">
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Configurar en Vercel via</span>
+                                                    <code className="text-[10px] font-bold bg-zinc-200 text-zinc-600 px-2 py-0.5 rounded-md">MERCADOPAGO_ACCESS_TOKEN</code>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

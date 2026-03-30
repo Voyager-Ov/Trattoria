@@ -59,6 +59,7 @@ export async function createSupply(data: {
     unidad: UnidadMedida;
     stockMinimo?: number;
     costoUnitario?: number;
+    categoria?: string;
     activo?: boolean;
 }) {
     try {
@@ -223,5 +224,84 @@ export async function softDeleteSupply(id: string) {
     } catch (error) {
         console.error("Error deleting supply:", error);
         return { success: false, error: "Error al eliminar el insumo" };
+    }
+}
+
+export async function archiveSupply(id: string) {
+    try {
+        await prisma.supply.update({
+            where: { id },
+            data: { activo: false },
+        });
+        revalidatePath("/admin/dashboard/insumos");
+        return { success: true };
+    } catch (error) {
+        console.error("Error archiving supply:", error);
+        return { success: false, error: "Error al archivar el insumo" };
+    }
+}
+
+export async function getSupplyById(id: string) {
+    try {
+        const supply = await prisma.supply.findUnique({
+            where: { id },
+            include: {
+                movements: {
+                    orderBy: { createdAt: "desc" }
+                }
+            }
+        });
+        if (!supply) return { success: false, error: "Insumo no encontrado" };
+        return { success: true, data: serializePrisma(supply) };
+    } catch (error) {
+        console.error("Error fetching supply by id:", error);
+        return { success: false, error: "Error al obtener el insumo" };
+    }
+}
+
+export async function updateSupply(id: string, data: {
+    nombre?: string;
+    unidad?: UnidadMedida;
+    stockMinimo?: number;
+    costoUnitario?: number;
+    categoria?: string;
+    activo?: boolean;
+}) {
+    try {
+        const supply = await prisma.supply.update({
+            where: { id },
+            data
+        });
+        revalidatePath("/admin/dashboard/insumos");
+        // Also revalidate the detail page if we have one
+        revalidatePath(`/admin/dashboard/insumos/${id}`);
+        return { success: true, data: serializePrisma(supply) };
+    } catch (error) {
+        console.error("Error updating supply:", error);
+        return { success: false, error: "Error al actualizar el insumo" };
+    }
+}
+
+export async function getSupplyCategories() {
+    try {
+        const categories = await prisma.supplyCategory.findMany({
+            orderBy: { nombre: 'asc' }
+        });
+        return { success: true, data: serializePrisma(categories) };
+    } catch (error) {
+        console.error("Error fetching supply categories:", error);
+        return { success: false, error: "Error al obtener categorías" };
+    }
+}
+
+export async function createSupplyCategory(nombre: string) {
+    try {
+        const category = await prisma.supplyCategory.create({
+            data: { nombre }
+        });
+        return { success: true, data: serializePrisma(category) };
+    } catch (error) {
+        console.error("Error creating supply category:", error);
+        return { success: false, error: "Error al crear la categoría" };
     }
 }

@@ -1,17 +1,29 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serializePrisma } from "@/lib/utils";
 import { Prisma, EstadoPedido } from "@prisma/client";
+import { requireAdminApiAuth } from "@/lib/serverAuth";
 
-export async function GET(request: Request) {
+const ALLOWED_ORDER_FIELDS = ['recibidoEn', 'total', 'estado', 'numero', 'updatedAt'] as const;
+type AllowedOrderField = typeof ALLOWED_ORDER_FIELDS[number];
+
+export async function GET(request: NextRequest) {
+    // F-03 fix: verify ADMIN session before exposing order data
+    const auth = await requireAdminApiAuth(request);
+    if (auth.error) return auth.error;
+
     try {
         const { searchParams } = new URL(request.url);
         const status = searchParams.get("status");
         const search = searchParams.get("search");
         const page = parseInt(searchParams.get("page") || "1");
         const limit = parseInt(searchParams.get("limit") || "10");
-        const orderBy = searchParams.get("orderBy") || "recibidoEn";
-        const orderDir = (searchParams.get("orderDir") || "desc") as 'asc' | 'desc';
+        // F-11 fix: whitelist allowed sort fields to prevent object injection
+        const rawOrderBy = searchParams.get("orderBy") ?? 'recibidoEn';
+        const orderBy: AllowedOrderField = (ALLOWED_ORDER_FIELDS as readonly string[]).includes(rawOrderBy)
+            ? rawOrderBy as AllowedOrderField
+            : 'recibidoEn';
+        const orderDir = searchParams.get("orderDir") === 'asc' ? 'asc' : 'desc';
 
         const skip = (page - 1) * limit;
 

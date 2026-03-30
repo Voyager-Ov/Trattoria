@@ -1,18 +1,14 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState, use } from "react";
 import {
     ChevronRight,
-    ArrowLeft,
     Save,
     X,
     AlertTriangle,
-    Info,
-    Package,
     Beaker,
-    TrendingUp,
-    Settings2,
-    Plus
+    Plus,
+    Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,36 +20,59 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { createSupply, getSupplyCategories } from "../actions";
+import { updateSupply, getSupplyCategories, getSupplyById } from "../../actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { UnidadMedida } from "@prisma/client";
 
-export default function NuevoInsumoPage() {
+export default function EditarInsumoPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params);
     const router = useRouter();
-    const [loading, setLoading] = React.useState(false);
+    
+    const [loadingData, setLoadingData] = useState(true);
+    const [loading, setLoading] = useState(false);
     
     // Estados para la vista previa
-    const [nombre, setNombre] = React.useState("");
-    const [unidad, setUnidad] = React.useState<UnidadMedida>(UnidadMedida.GRAMO);
-    const [descripcion, setDescripcion] = React.useState("");
-    const [stockMinimo, setStockMinimo] = React.useState("1");
-    const [costoUnitario, setCostoUnitario] = React.useState("0");
-    const [categoria, setCategoria] = React.useState<string>("Sin categoría");
+    const [nombre, setNombre] = useState("");
+    const [unidad, setUnidad] = useState<UnidadMedida>(UnidadMedida.GRAMO);
+    const [descripcion, setDescripcion] = useState("");
+    const [stockMinimo, setStockMinimo] = useState("1");
+    const [costoUnitario, setCostoUnitario] = useState("0");
+    const [categoria, setCategoria] = useState<string>("Sin categoría");
 
     // Categorias state
-    const [categories, setCategories] = React.useState<any[]>([]);
+    const [categories, setCategories] = useState<any[]>([]);
 
     useEffect(() => {
-        async function fetchCategories() {
-            const result = await getSupplyCategories();
-            if (result.success && result.data) {
-                setCategories(result.data as any[]);
+        async function fetchData() {
+            setLoadingData(true);
+            const [categoriesResult, supplyResult] = await Promise.all([
+                getSupplyCategories(),
+                getSupplyById(id)
+            ]);
+            
+            if (categoriesResult.success && categoriesResult.data) {
+                setCategories(categoriesResult.data as any[]);
             }
+
+            if (supplyResult.success && supplyResult.data) {
+                const s = supplyResult.data as any;
+                setNombre(s.nombre);
+                setUnidad(s.unidad);
+                setDescripcion(s.descripcion || "");
+                setStockMinimo(Number(s.stockMinimo).toString());
+                setCostoUnitario(Number(s.costoUnitario || 0).toString());
+                // Notice we do NOT edit actual stock from here.
+                if (s.categoria) setCategoria(s.categoria);
+            } else {
+                toast.error("Error al cargar el insumo");
+                router.push("/admin/dashboard/insumos");
+            }
+            setLoadingData(false);
         }
-        fetchCategories();
-    }, []);
+        fetchData();
+    }, [id, router]);
 
     async function handleSubmit(formData: FormData) {
         setLoading(true);
@@ -66,17 +85,27 @@ export default function NuevoInsumoPage() {
             stockMinimo: Number(formData.get("stockMinimo")),
             costoUnitario: Number(formData.get("costoUnitario")),
             categoria: selectedCat !== "Sin categoría" ? selectedCat : undefined,
+            descripcion: formData.get("descripcion") as string || undefined,
         };
 
-        const result = await createSupply(data);
+        const result = await updateSupply(id, data);
         if (result.success) {
-            toast.success("Insumo creado correctamente");
-            router.push("/admin/dashboard/insumos");
+            toast.success("Insumo actualizado correctamente");
+            router.push(`/admin/dashboard/insumos/${id}`);
             router.refresh();
         } else {
             toast.error(result.error);
             setLoading(false);
         }
+    }
+
+    if (loadingData) {
+        return (
+            <div className="flex flex-col gap-4 p-8 min-h-screen items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+                <p className="text-zinc-500 font-medium">Cargando información del insumo...</p>
+            </div>
+        );
     }
 
     return (
@@ -87,7 +116,9 @@ export default function NuevoInsumoPage() {
                 <ChevronRight className="h-4 w-4" />
                 <Link href="/admin/dashboard/insumos" className="hover:text-zinc-600 transition-colors">Inventario</Link>
                 <ChevronRight className="h-4 w-4" />
-                <span className="text-zinc-900 capitalize">Nuevo Insumo</span>
+                <Link href={`/admin/dashboard/insumos/${id}`} className="hover:text-zinc-600 transition-colors truncate max-w-[150px]">{nombre}</Link>
+                <ChevronRight className="h-4 w-4" />
+                <span className="text-zinc-900 capitalize">Editar</span>
             </div>
 
             <div className="flex justify-between items-center bg-white p-8 rounded-[2.5rem] border border-zinc-200 shadow-sm">
@@ -96,11 +127,11 @@ export default function NuevoInsumoPage() {
                         <div className="h-12 w-12 bg-zinc-900 rounded-2xl flex items-center justify-center text-white">
                             <Plus className="h-6 w-6" />
                         </div>
-                        REGISTRAR INSUMO
+                        EDITAR INSUMO
                     </h1>
-                    <p className="text-zinc-500 mt-2 font-medium">Define las propiedades básicas y niveles de stock crítico.</p>
+                    <p className="text-zinc-500 mt-2 font-medium">Modifica propiedades generales y límites de stock de la materia prima.</p>
                 </div>
-                <Link href="/admin/dashboard/insumos">
+                <Link href={`/admin/dashboard/insumos/${id}`}>
                     <Button variant="outline" className="h-14 w-14 rounded-full border-zinc-200 hover:bg-zinc-50 shadow-none p-0 transition-all active:scale-95">
                         <X className="h-6 w-6 text-zinc-400" />
                     </Button>
@@ -182,7 +213,7 @@ export default function NuevoInsumoPage() {
                             </div>
                             <div>
                                 <h3 className="text-xl font-black uppercase tracking-tight">Stock Crítico</h3>
-                                <p className="text-zinc-500 text-sm font-medium">Alertas automáticas al llegar al límite.</p>
+                                <p className="text-zinc-500 text-sm font-medium">Alertas automáticas al llegar al límite de la unidad métrica.</p>
                             </div>
                         </div>
 
@@ -215,6 +246,9 @@ export default function NuevoInsumoPage() {
                                 </div>
                             </div>
                         </div>
+                        <p className="text-[0.65rem] text-zinc-500 mt-6 font-medium px-2">
+                            Nota: Ajustes de inventario (ingresos/egresos) se modifican a través de comprobantes o inventario físico.
+                        </p>
                     </div>
                 </div>
 
@@ -267,13 +301,13 @@ export default function NuevoInsumoPage() {
                     <div className="flex flex-col gap-3">
                         <Button
                             type="submit"
-                            disabled={loading || !nombre.trim() || !stockMinimo || !costoUnitario}
+                            disabled={loading || !nombre.trim() || !stockMinimo}
                             className="h-16 w-full rounded-2xl bg-zinc-900 text-white hover:bg-zinc-800 font-black text-lg shadow-lg active:scale-95 transition-all flex items-center justify-center gap-3"
                         >
                             <Save className="h-5 w-5" />
-                            {loading ? "GUARDANDO..." : "GUARDAR INSUMO"}
+                            {loading ? "GUARDANDO..." : "GUARDAR CAMBIOS"}
                         </Button>
-                        <Link href="/admin/dashboard/insumos">
+                        <Link href={`/admin/dashboard/insumos/${id}`}>
                             <Button
                                 type="button"
                                 variant="outline"

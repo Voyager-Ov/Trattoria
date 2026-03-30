@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/serverAuth";
 
 // --- Configuration Schemas ---
 
@@ -19,10 +20,12 @@ const PaymentMethodSchema = z.object({
     sortOrder: z.number(),
 });
 
+// F-09: accessToken removed from DB schema — stored in MERCADOPAGO_ACCESS_TOKEN env var only.
+// Only publicKey (non-secret, browser-safe) and enabled status live in the DB.
 const MercadoPagoSchema = z.object({
     publicKey: z.string().optional().or(z.literal("")),
-    accessToken: z.string().optional().or(z.literal("")),
     enabled: z.boolean(),
+    // accessToken intentionally omitted — env var only, never persisted in DB
 });
 
 const BusinessClosedDaysSchema = z.array(z.string());
@@ -106,6 +109,8 @@ export async function getConfigs(keys: string[]) {
  * Save multiple configuration values in a single transaction.
  */
 export async function saveConfigs(payload: Record<string, any>) {
+    // F-04b: Only ADMIN can change business configuration
+    await requireAdmin();
     try {
         // Validation step
         const validatedData: Record<string, any> = {};

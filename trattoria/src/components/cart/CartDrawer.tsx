@@ -21,6 +21,16 @@ import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
 
 export function CartDrawer() {
     const { items, removeItem, updateQuantity, totalPrice, totalItems, clearCart } = useCart();
+    const [isBouncing, setIsBouncing] = useState(false);
+    
+    // Trigger bounce animation when totalItems changes
+    useEffect(() => {
+        if (totalItems > 0) {
+            setIsBouncing(true);
+            const timer = setTimeout(() => setIsBouncing(false), 300);
+            return () => clearTimeout(timer);
+        }
+    }, [totalItems]);
     const [step, setStep] = useState<'cart' | 'checkout'>('cart');
     const [formData, setFormData] = useState({
         nombre: '',
@@ -245,19 +255,19 @@ export function CartDrawer() {
             <SheetTrigger asChild>
                 <Button
                     variant="default"
-                    className="h-14 rounded-full px-6 flex items-center gap-3 bg-primary text-primary-foreground shadow-2xl shadow-primary/30 hover:shadow-primary/40 transition-all border-none"
+                    className={`h-16 rounded-full px-8 flex items-center gap-4 bg-[#E30909] text-white shadow-2xl shadow-[#E30909]/40 hover:shadow-[#A00101]/50 hover:bg-[#A00101] transition-all border-none ${isBouncing ? 'scale-110' : 'hover:scale-105 active:scale-95'}`}
                 >
                     <div className="relative">
-                        <ShoppingCart className="h-6 w-6" />
+                        <ShoppingCart className="h-7 w-7" />
                         {totalItems > 0 && (
-                            <span className="absolute -top-2 -right-2 bg-foreground text-background text-[10px] font-bold h-5 w-5 rounded-full flex items-center justify-center ring-2 ring-primary">
+                            <span className="absolute -top-2 -right-3 bg-zinc-900 text-white text-[11px] font-black h-6 w-6 rounded-full flex items-center justify-center ring-4 ring-[#E30909] shadow-lg">
                                 {totalItems}
                             </span>
                         )}
                     </div>
-                    <div className="flex flex-col items-start leading-none">
-                        <span className="text-[10px] opacity-80 font-medium uppercase tracking-wider">Tu Carrito</span>
-                        <span className="text-sm font-bold">${totalPrice.toLocaleString('es-CL')}</span>
+                    <div className="flex flex-col items-start leading-tight">
+                        <span className="text-[11px] font-bold uppercase tracking-widest text-[#FFF]">Tu Carrito</span>
+                        <span className="text-lg font-black font-outfit">${totalPrice.toLocaleString('es-CL')}</span>
                     </div>
                 </Button>
             </SheetTrigger>

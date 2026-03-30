@@ -3,8 +3,11 @@
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
 import { EstadoPedido } from "@prisma/client";
+import { requireEmployee } from "@/lib/serverAuth";
 
 export async function getEmployeeDashboardMetrics() {
+    // F-04d: Requires active employee or admin session
+    await requireEmployee();
     try {
         const today = new Date();
         const startOfToday = startOfDay(today);
@@ -65,6 +68,8 @@ export async function getEmployeeDashboardMetrics() {
 }
 
 export async function getRecentOrders() {
+    // F-04d: Requires active employee or admin session
+    await requireEmployee();
     try {
         const orders = await prisma.order.findMany({
             where: {

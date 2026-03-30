@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth } from '@/lib/firebase-admin';
 import { createSessionCookie, setSessionCookie } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { rateLimit, getClientIp } from '@/lib/rateLimit';
 
 const SESSION_MAX_AGE_MS = parseInt(process.env.SESSION_MAX_AGE_DAYS || '5', 10) * 24 * 60 * 60 * 1000;
 
@@ -25,6 +26,19 @@ interface LoginBody {
  * Any bugs here will cause "not authenticated" errors
  */
 export async function POST(request: NextRequest) {
+    // F-06: Rate limit — 5 attempts per IP per minute, then block 5 min
+    const ip = getClientIp(request);
+    const rl = rateLimit(`login:${ip}`, { limit: 5, windowMs: 60_000, blockMs: 5 * 60_000 });
+    if (!rl.allowed) {
+        return NextResponse.json(
+            { error: 'Demasiados intentos. Intentá de nuevo en unos minutos.' },
+            {
+                status: 429,
+                headers: { 'Retry-After': String(Math.ceil(rl.retryAfterMs / 1000)) }
+            }
+        );
+    }
+
     try {
         // 1. Parse request body
         const body = await request.json() as LoginBody;
@@ -72,7 +86,7 @@ export async function POST(request: NextRequest) {
         if (!dbUser) {
             // BOOTSTRAP LOGIC: Check if this email is allowed to be an admin
             const { isBootstrapAdmin } = await import('@/lib/auth');
-            
+
             if (isBootstrapAdmin(email)) {
                 console.log(`🚀 [Bootstrap] Creating admin user for allowlisted email: ${email}`);
                 dbUser = await prisma.user.create({

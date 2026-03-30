@@ -20,7 +20,8 @@ export type AccessResult =
  * Usa regex para match flexible con paths dinámicos
  */
 export const ROUTES = {
-    PUBLIC: /^\/($|login|register)/,
+    // Public catalog routes: /, /login, /register, /categoria/*, /carrito, /producto/*
+    PUBLIC: /^\/(login|register|categoria|carrito|producto)(\/.*)?$|^\/$/,
     ADMIN: /^\/admin(\/|$)/,
     EMPLEADO: /^\/empleado(\/|$)/,
 } as const;
@@ -35,7 +36,7 @@ export function routeAccess(
     rol: Rol | null,
     pathname: string
 ): AccessResult {
-    // 1. Public routes - always allow
+    // 1. Public routes - always allow (no auth needed)
     if (ROUTES.PUBLIC.test(pathname)) {
         return 'ALLOW';
     }
