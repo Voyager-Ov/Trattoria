@@ -14,7 +14,10 @@
     "db:studio": "prisma studio",
     "seed:admin": "tsx scripts/seed-admin.ts",
     "seed:playwright:legacy": "node scripts/seed-playwright.js",
-    "seed:pizzas:legacy": "node scripts/seed-pizzas.js"
+    "seed:pizzas:legacy": "node scripts/seed-pizzas.js",
+    "check:db": "tsx scripts/maintenance/check-db-connection.ts",
+    "check:user-role": "tsx scripts/maintenance/check-user-role.ts",
+    "qa:routes": "tsx scripts/qa/verify-routes.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
