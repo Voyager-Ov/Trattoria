@@ -2,10 +2,17 @@
 
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { Category } from "@prisma/client";
+
+type CatalogCategory = {
+  id: string;
+  slug: string;
+  nombre: string;
+  descripcion: string | null;
+  imagen: string | null;
+};
 
 interface CategoryCardProps {
-  category: Category;
+  category: CatalogCategory;
   productCount?: number;
 }
 
