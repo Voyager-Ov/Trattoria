@@ -43,6 +43,9 @@ export async function getSupplies() {
             where: {
                 deletedAt: null,
             },
+            include: {
+                category: true,
+            },
             orderBy: {
                 nombre: "asc",
             },
@@ -59,17 +62,25 @@ export async function createSupply(data: {
     unidad: UnidadMedida;
     stockMinimo?: number;
     costoUnitario?: number;
-    categoria?: string;
+    categoryId?: string;
+    descripcion?: string;
     activo?: boolean;
 }) {
     try {
         const supply = await prisma.supply.create({
             data: {
-                ...data,
+                nombre: data.nombre,
+                unidad: data.unidad,
                 stockActual: 0,
                 stockMinimo: data.stockMinimo || 0,
                 costoUnitario: data.costoUnitario || 0,
+                descripcion: data.descripcion,
+                activo: data.activo ?? true,
+                ...(data.categoryId ? { category: { connect: { id: data.categoryId } } } : {}),
             },
+            include: {
+                category: true,
+            }
         });
         revalidatePath("/admin/dashboard/insumos");
         return { success: true, data: serializePrisma(supply) };
@@ -246,6 +257,7 @@ export async function getSupplyById(id: string) {
         const supply = await prisma.supply.findUnique({
             where: { id },
             include: {
+                category: true,
                 movements: {
                     orderBy: { createdAt: "desc" }
                 }
@@ -264,13 +276,27 @@ export async function updateSupply(id: string, data: {
     unidad?: UnidadMedida;
     stockMinimo?: number;
     costoUnitario?: number;
-    categoria?: string;
+    categoryId?: string;
+    descripcion?: string;
     activo?: boolean;
 }) {
     try {
         const supply = await prisma.supply.update({
             where: { id },
-            data
+            data: {
+                nombre: data.nombre,
+                unidad: data.unidad,
+                stockMinimo: data.stockMinimo,
+                costoUnitario: data.costoUnitario,
+                descripcion: data.descripcion,
+                activo: data.activo,
+                category: data.categoryId
+                    ? { connect: { id: data.categoryId } }
+                    : { disconnect: true },
+            },
+            include: {
+                category: true,
+            }
         });
         revalidatePath("/admin/dashboard/insumos");
         // Also revalidate the detail page if we have one

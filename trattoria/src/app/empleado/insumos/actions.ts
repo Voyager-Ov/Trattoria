@@ -43,6 +43,9 @@ export async function getSupplies() {
             where: {
                 deletedAt: null,
             },
+            include: {
+                category: true,
+            },
             orderBy: {
                 nombre: "asc",
             },
@@ -59,16 +62,25 @@ export async function createSupply(data: {
     unidad: UnidadMedida;
     stockMinimo?: number;
     costoUnitario?: number;
+    categoryId?: string;
+    descripcion?: string;
     activo?: boolean;
 }) {
     try {
         const supply = await prisma.supply.create({
             data: {
-                ...data,
+                nombre: data.nombre,
+                unidad: data.unidad,
                 stockActual: 0,
                 stockMinimo: data.stockMinimo || 0,
                 costoUnitario: data.costoUnitario || 0,
+                descripcion: data.descripcion,
+                activo: data.activo ?? true,
+                ...(data.categoryId ? { category: { connect: { id: data.categoryId } } } : {}),
             },
+            include: {
+                category: true,
+            }
         });
         revalidatePath("/empleado/insumos");
         return { success: true, data: serializePrisma(supply) };
@@ -230,5 +242,17 @@ export async function softDeleteSupply(id: string) {
     } catch (error) {
         console.error("Error deleting supply:", error);
         return { success: false, error: "Error al eliminar el insumo" };
+    }
+}
+
+export async function getSupplyCategories() {
+    try {
+        const categories = await prisma.supplyCategory.findMany({
+            orderBy: { nombre: "asc" }
+        });
+        return { success: true, data: serializePrisma(categories) };
+    } catch (error) {
+        console.error("Error fetching supply categories:", error);
+        return { success: false, error: "Error al obtener categorias" };
     }
 }

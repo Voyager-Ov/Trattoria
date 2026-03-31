@@ -11,8 +11,9 @@ import {
     LogOut,
     ChevronLeft,
     ChevronRight,
-    UserCircle
+    UserCircle,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 type MenuItem = {
     name: string;
     href: string;
-    icon: any;
+    icon: LucideIcon;
 };
 
 const MENU_ITEMS: MenuItem[] = [
@@ -45,7 +46,7 @@ interface EmpleadoSidebarProps {
 
 export function EmpleadoSidebar({ className, mode = 'desktop' }: EmpleadoSidebarProps) {
     const pathname = usePathname();
-    const { logout, userData } = useAuth();
+    const { logout } = useAuth();
     const [isCollapsed, setIsCollapsed] = useState(mode === 'desktop');
 
     const toggleSidebar = () => {
@@ -93,7 +94,9 @@ export function EmpleadoSidebar({ className, mode = 'desktop' }: EmpleadoSidebar
             <div className="flex-1 px-3 space-y-1 overflow-y-auto scrollbar-hide py-2">
                 <TooltipProvider delayDuration={0}>
                     {MENU_ITEMS.map((item) => {
-                        const isActive = pathname === item.href;
+                        const isActive = item.href === "/empleado"
+                            ? pathname === "/empleado"
+                            : pathname === item.href || pathname?.startsWith(item.href + "/");
                         const showLabel = !isCollapsed || mode === 'mobile';
 
                         return (
@@ -138,6 +141,29 @@ export function EmpleadoSidebar({ className, mode = 'desktop' }: EmpleadoSidebar
             {/* Bottom Section */}
             <div className="p-3 mt-auto space-y-1 border-t border-zinc-50">
                 <TooltipProvider delayDuration={0}>
+                    {/* Profile */}
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Link
+                                href="/empleado/perfil"
+                                className={cn(
+                                    "w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-200 group",
+                                    pathname === "/empleado/perfil"
+                                        ? "bg-primary/10 text-primary"
+                                        : "text-zinc-400 hover:bg-zinc-50 hover:text-zinc-900"
+                                )}
+                            >
+                                <UserCircle className="h-5 w-5 flex-shrink-0" />
+                                {(!isCollapsed || mode === 'mobile') && <span className="font-medium text-sm">Mi Perfil</span>}
+                            </Link>
+                        </TooltipTrigger>
+                        {isCollapsed && mode === 'desktop' &&
+                            <TooltipContent side="right" className="bg-white text-zinc-900 border-zinc-200 shadow-md rounded-xl font-medium">
+                                Mi Perfil
+                            </TooltipContent>
+                        }
+                    </Tooltip>
+
                     {/* Logout Button */}
                     <Tooltip>
                         <TooltipTrigger asChild>

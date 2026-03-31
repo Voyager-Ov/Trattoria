@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/sheet";
 
 type Category = Prisma.CategoryGetPayload<{ select: { id: true; nombre: true; esPromocion: true } }>;
-type Supply = Prisma.SupplyGetPayload<{ select: { id: true; ean: true; nombre: true; descripcion: true; costoUnitario: true; unidad: true; stockActual: true; stockMinimo: true; createdAt: true; updatedAt: true; deletedAt: true } }>;
+type Supply = Prisma.SupplyGetPayload<{ select: { id: true; nombre: true; descripcion: true; costoUnitario: true; unidad: true; stockActual: true; stockMinimo: true; createdAt: true; updatedAt: true; deletedAt: true } }>;
 type Product = Prisma.ProductGetPayload<{ include: { category: true; recipeItems: { include: { supply: true } } } }>;
 
 interface RecipeItem {

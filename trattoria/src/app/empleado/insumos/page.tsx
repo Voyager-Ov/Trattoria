@@ -48,6 +48,10 @@ interface Supply {
     unidad: string;
     costoUnitario: number | string;
     activo: boolean;
+    category?: {
+        id: string;
+        nombre: string;
+    } | null;
 }
 
 interface MetricCardProps {
@@ -317,7 +321,9 @@ export default function InsumosPage() {
                                                         </div>
                                                         <div className="flex flex-col">
                                                             <span className="font-semibold text-zinc-900 text-sm">{supply.nombre}</span>
-                                                            <span className="text-[0.7rem] text-zinc-400 mt-0.5 capitalize">Materia Prima</span>
+                                                            <span className="text-[0.7rem] text-zinc-400 mt-0.5 capitalize">
+                                                                {supply.category?.nombre || "Sin categoria"}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 </td>

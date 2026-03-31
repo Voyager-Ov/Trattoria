@@ -4,8 +4,7 @@ import {
   APP_SEQUENCES,
   CATEGORY_SEEDS,
   PRODUCT_SEEDS,
-  PROMOTION_SEEDS,
-  PROVIDER_SEEDS,
+  SUPPLY_CATEGORY_SEEDS,
   SUPPLY_SEEDS,
 } from "./seed-data/masterData";
 
@@ -40,9 +39,9 @@ async function cleanDatabase() {
   await prisma.productRecipeItem.deleteMany();
   await prisma.product.deleteMany();
   await prisma.category.deleteMany();
-  await prisma.provider.deleteMany();
-  await prisma.supplyCategory.deleteMany();
   await prisma.supply.deleteMany();
+  await prisma.supplyCategory.deleteMany();
+  await prisma.provider.deleteMany();
   await prisma.customer.deleteMany();
   await prisma.appConfig.deleteMany();
   await prisma.appSequence.deleteMany();
@@ -110,19 +109,37 @@ async function seedCategories() {
   return categoryBySlug;
 }
 
-async function seedSupplies() {
+async function seedSupplyCategories() {
+  const supplyCategoryByName = new Map<string, string>();
+
+  for (const category of SUPPLY_CATEGORY_SEEDS) {
+    const created = await prisma.supplyCategory.create({ data: category });
+    supplyCategoryByName.set(category.nombre, created.id);
+  }
+
+  console.log(`Created ${SUPPLY_CATEGORY_SEEDS.length} supply category(ies).`);
+  return supplyCategoryByName;
+}
+
+async function seedSupplies(supplyCategoryByName: Map<string, string>) {
   const supplyByName = new Map<string, string>();
 
   for (const supply of SUPPLY_SEEDS) {
+    const categoryId = supplyCategoryByName.get(supply.categoryName);
+
+    if (!categoryId) {
+      throw new Error(`Missing supply category "${supply.categoryName}" for supply "${supply.nombre}".`);
+    }
+
     const created = await prisma.supply.create({
       data: {
         nombre: supply.nombre,
-        categoria: supply.categoria,
         unidad: supply.unidad,
         stockActual: 0,
         stockMinimo: supply.stockMinimo,
         costoUnitario: supply.costoUnitario,
         activo: true,
+        categoryId,
       },
     });
 
@@ -131,14 +148,6 @@ async function seedSupplies() {
 
   console.log(`Created ${SUPPLY_SEEDS.length} supply(ies).`);
   return supplyByName;
-}
-
-async function seedProviders() {
-  for (const provider of PROVIDER_SEEDS) {
-    await prisma.provider.create({ data: provider });
-  }
-
-  console.log(`Created ${PROVIDER_SEEDS.length} provider(s).`);
 }
 
 async function seedProducts(categoryBySlug: Map<string, string>) {
@@ -206,46 +215,6 @@ async function seedRecipes(productByName: Map<string, string>, supplyByName: Map
   console.log(`Created ${recipeCount} recipe item(s).`);
 }
 
-async function seedPromotions(categoryBySlug: Map<string, string>, productByName: Map<string, string>) {
-  for (const promotion of PROMOTION_SEEDS) {
-    const categoryId = categoryBySlug.get(promotion.categorySlug);
-
-    if (!categoryId) {
-      throw new Error(`Missing promotion category "${promotion.categorySlug}" for promotion "${promotion.name}".`);
-    }
-
-    await prisma.promotion.create({
-      data: {
-        name: promotion.name,
-        description: promotion.description,
-        code: promotion.code,
-        discountType: promotion.discountType,
-        discountValue: promotion.discountValue,
-        isActive: true,
-        items: {
-          create: promotion.items.map((item) => {
-            const productId = productByName.get(item.productName);
-
-            if (!productId) {
-              throw new Error(`Missing product "${item.productName}" for promotion "${promotion.name}".`);
-            }
-
-            return {
-              productId,
-              quantity: item.quantity,
-            };
-          }),
-        },
-        categories: {
-          connect: [{ id: categoryId }],
-        },
-      },
-    });
-  }
-
-  console.log(`Created ${PROMOTION_SEEDS.length} promotion(s).`);
-}
-
 async function main() {
   console.log("Starting master seed...");
 
@@ -255,11 +224,10 @@ async function main() {
   await seedConfigs();
 
   const categoryBySlug = await seedCategories();
-  const supplyByName = await seedSupplies();
-  await seedProviders();
+  const supplyCategoryByName = await seedSupplyCategories();
+  const supplyByName = await seedSupplies(supplyCategoryByName);
   const productByName = await seedProducts(categoryBySlug);
   await seedRecipes(productByName, supplyByName);
-  await seedPromotions(categoryBySlug, productByName);
 
   console.log("Master seed completed successfully.");
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
     LayoutDashboard,
     ShoppingBag,
@@ -18,6 +18,7 @@ import {
     FileText,
     User
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,7 @@ import {
 type MenuItem = {
     name: string;
     href: string;
-    icon: any;
+    icon: LucideIcon;
     activeColor: string; // Color de fondo cuando está activo
     activeTextColor: string; // Color del texto cuando está activo
     hoverColor: string; // Color en hover
@@ -104,24 +105,9 @@ interface SidebarProps {
 export function AdminSidebar({ className, mode = 'desktop' }: SidebarProps) {
     const pathname = usePathname();
     const { logout } = useAuth();
-    const [mounted, setMounted] = useState(false);
     // If mobile, always expanded. If desktop, default collapsed.
     const [isCollapsed, setIsCollapsed] = useState(mode === 'desktop');
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
-
-    // Handle hydration
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    // Auto-expand parent if on a submenu page
-    useEffect(() => {
-        MENU_ITEMS.forEach(item => {
-            if (item.subItems && (pathname === item.href || pathname?.startsWith(item.href + "/"))) {
-                setExpandedItems(prev => prev.includes(item.href) ? prev : [...prev, item.href]);
-            }
-        });
-    }, [pathname]);
 
     const toggleSidebar = () => {
         if (mode === 'mobile') return;
@@ -133,8 +119,6 @@ export function AdminSidebar({ className, mode = 'desktop' }: SidebarProps) {
             prev.includes(href) ? prev.filter(h => h !== href) : [...prev, href]
         );
     };
-
-    if (!mounted) return <div className={cn("h-screen bg-white border-r border-zinc-100", isCollapsed ? "w-[80px]" : "w-[260px]")} />;
 
     return (
         <TooltipProvider delayDuration={0}>
@@ -186,7 +170,8 @@ export function AdminSidebar({ className, mode = 'desktop' }: SidebarProps) {
                             : pathname === item.href || pathname?.startsWith(item.href + "/");
                         
                         const hasSubItems = item.subItems && item.subItems.length > 0;
-                        const isExpanded = expandedItems.includes(item.href);
+                        const isExpanded = expandedItems.includes(item.href)
+                            || !!(hasSubItems && (pathname === item.href || pathname?.startsWith(item.href + "/")));
                         const showLabel = !isCollapsed || mode === 'mobile';
 
                         const content = (
