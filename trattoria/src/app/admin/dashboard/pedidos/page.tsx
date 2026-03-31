@@ -60,6 +60,7 @@ import { cn } from "@/lib/utils";
 import { EstadoPedido } from "@prisma/client";
 import { getConfigs } from "@/app/actions/configActions";
 import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
+import { getOrderDeliveryLabel, getOrderDisplayAddress } from "@/lib/orderDelivery";
 
 interface OrderItem {
     id: string;
@@ -76,6 +77,7 @@ interface Order {
     clienteNombre: string | null;
     clienteTelefono: string | null;
     clienteDireccion: string | null;
+    tipoEntrega?: "DELIVERY" | "RETIRO" | null;
     recibidoEn: string;
     estado: EstadoPedido;
     cobrado: boolean;
@@ -534,19 +536,24 @@ export default function PedidosPage() {
                                                 </td>
                                                 <td className="px-8 py-6">
                                                     <div className="flex flex-col gap-1 max-w-[200px]">
+                                                        {getOrderDeliveryLabel(order) && (
+                                                            <Badge variant="outline" className="w-fit rounded-full text-[9px] font-black uppercase tracking-widest">
+                                                                {getOrderDeliveryLabel(order)}
+                                                            </Badge>
+                                                        )}
                                                         {order.clienteTelefono && (
                                                             <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
                                                                 <Phone size={10} className="text-zinc-300" />
                                                                 {order.clienteTelefono}
                                                             </div>
                                                         )}
-                                                        {order.clienteDireccion && (
+                                                        {getOrderDisplayAddress(order) && (
                                                             <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-medium line-clamp-1">
                                                                 <MapPin size={10} className="text-zinc-300 shrink-0" />
-                                                                {order.clienteDireccion}
+                                                                {getOrderDisplayAddress(order)}
                                                             </div>
                                                         )}
-                                                        {!order.clienteTelefono && !order.clienteDireccion && (
+                                                        {!order.clienteTelefono && !getOrderDeliveryLabel(order) && !getOrderDisplayAddress(order) && (
                                                             <span className="text-[10px] text-zinc-300 font-bold uppercase italic">Consumo Local</span>
                                                         )}
                                                     </div>

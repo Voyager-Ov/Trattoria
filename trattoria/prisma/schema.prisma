@@ -41,6 +41,11 @@ enum EstadoPedido {
   CANCELADO
 }
 
+enum TipoEntregaPedido {
+  DELIVERY
+  RETIRO
+}
+
 enum UnidadMedida {
   UNIDAD
   KILOGRAMO
@@ -345,6 +350,7 @@ model Order {
   clienteNombre    String?
   clienteTelefono  String?
   clienteDireccion String?
+  tipoEntrega      TipoEntregaPedido?
   
   // Auditoría
   createdBy     String?

@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
     Settings, Save, Plus, Trash2, CreditCard, Store, Clock,
     Loader2, Smartphone, ShieldCheck, MapPin, Truck, ChevronRight,
-    Search, Moon, Sun, CheckCircle2, AlertCircle, PhoneOff, DollarSign, ShoppingBag, Target
+    Search, Moon, Sun, CheckCircle2, AlertCircle, PhoneOff, Target
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { saveConfigs } from "@/app/actions/configActions";
 import { cn } from "@/lib/utils";
 import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
+import { DEFAULT_DELIVERY_SETTINGS, normalizeDeliverySettings } from "@/lib/deliverySettings";
 
 // --- Validations ---
 const ConfigFormSchema = z.object({
@@ -70,18 +71,12 @@ const ConfigFormSchema = z.object({
     delivery: z.object({
         settings: z.object({
             enabled: z.boolean(),
-            minPurchase: z.number().min(0),
-            deliveryFee: z.number().min(0).default(0),
+            deliveryFeeNear: z.number().min(0).default(0),
+            deliveryFeeFar: z.number().min(0).default(0),
             estimatedTimeRange: z.string().optional().or(z.literal("")),
             allowPickup: z.boolean(),
             allowDelivery: z.boolean(),
         }),
-        zones: z.array(z.object({
-            id: z.string(),
-            name: z.string(),
-            fee: z.number(),
-            enabled: z.boolean(),
-        })),
     }),
     goals: z.object({
         monthly: z.object({
@@ -103,6 +98,7 @@ export default function ConfigFormClient({ initialData }: ConfigFormClientProps)
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState("general");
     const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+    const initialDeliverySettings = normalizeDeliverySettings(initialData["delivery.settings"]);
 
     const whatsappVariables = [
         { label: "ID Pedido", value: "{id}" },
@@ -138,13 +134,8 @@ export default function ConfigFormClient({ initialData }: ConfigFormClientProps)
             },
             delivery: {
                 settings: {
-                    enabled: true,
-                    minPurchase: 0,
-                    deliveryFee: 0,
-                    estimatedTimeRange: "30-45 min",
-                    allowPickup: true,
-                    allowDelivery: true,
-                    ...initialData["delivery.settings"]
+                    ...DEFAULT_DELIVERY_SETTINGS,
+                    ...initialDeliverySettings,
                 },
             },
             goals: {
@@ -489,7 +480,7 @@ export default function ConfigFormClient({ initialData }: ConfigFormClientProps)
                                                 <Truck className="h-6 w-6" />
                                                 Logística de Envío
                                             </CardTitle>
-                                            <CardDescription className="text-zinc-400 font-medium tracking-tight">Controla costos y reglas de entrega.</CardDescription>
+                                            <CardDescription className="text-zinc-400 font-medium tracking-tight">Configura valores de referencia para delivery sin impactar el total del pedido.</CardDescription>
                                         </div>
                                         <Switch
                                             checked={form.watch("delivery.settings.enabled")}
@@ -500,45 +491,52 @@ export default function ConfigFormClient({ initialData }: ConfigFormClientProps)
                                 </CardHeader>
                                 <CardContent className="p-10 space-y-10">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        {/* Costo de Envío Fijo */}
+                                        {/* Costo de Envío Zona Cercana */}
                                         <div className="space-y-4 p-8 bg-zinc-50 rounded-[2.5rem] border border-zinc-100 hover:border-orange-200 transition-colors group">
                                             <div className="flex items-center gap-3 mb-2">
                                                 <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center shadow-sm text-orange-500">
-                                                    <DollarSign className="h-5 w-5" />
+                                                    <MapPin className="h-5 w-5" />
                                                 </div>
-                                                <Label className="text-sm font-black uppercase tracking-wide text-zinc-500 group-hover:text-orange-600 transition-colors">Costo de Envío Fijo</Label>
+                                                <Label className="text-sm font-black uppercase tracking-wide text-zinc-500 group-hover:text-orange-600 transition-colors">Envío Zona Cercana</Label>
                                             </div>
                                             <div className="relative">
                                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-zinc-300">$</span>
                                                 <Input
                                                     type="number"
-                                                    {...form.register("delivery.settings.deliveryFee", { valueAsNumber: true })}
+                                                    {...form.register("delivery.settings.deliveryFeeNear", { valueAsNumber: true })}
                                                     className="h-16 pl-10 rounded-2xl border-none bg-white text-3xl font-black shadow-sm focus:ring-0"
                                                     placeholder="0"
                                                 />
                                             </div>
-                                            <p className="text-xs text-zinc-400 font-medium ml-2">Costo único aplicado a todos los pedidos con envío.</p>
+                                            <p className="text-xs text-zinc-400 font-medium ml-2">Referencia para clientes de zona próxima.</p>
                                         </div>
 
-                                        {/* Compra Mínima */}
+                                        {/* Costo de Envío Zona Lejana */}
                                         <div className="space-y-4 p-8 bg-zinc-50 rounded-[2.5rem] border border-zinc-100 hover:border-orange-200 transition-colors group">
                                             <div className="flex items-center gap-3 mb-2">
                                                 <div className="h-10 w-10 rounded-full bg-white flex items-center justify-center shadow-sm text-orange-500">
-                                                    <ShoppingBag className="h-5 w-5" />
+                                                    <Truck className="h-5 w-5" />
                                                 </div>
-                                                <Label className="text-sm font-black uppercase tracking-wide text-zinc-500 group-hover:text-orange-600 transition-colors">Compra Mínima</Label>
+                                                <Label className="text-sm font-black uppercase tracking-wide text-zinc-500 group-hover:text-orange-600 transition-colors">Envío Zona Lejana</Label>
                                             </div>
                                             <div className="relative">
                                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-zinc-300">$</span>
                                                 <Input
                                                     type="number"
-                                                    {...form.register("delivery.settings.minPurchase", { valueAsNumber: true })}
+                                                    {...form.register("delivery.settings.deliveryFeeFar", { valueAsNumber: true })}
                                                     className="h-16 pl-10 rounded-2xl border-none bg-white text-3xl font-black shadow-sm focus:ring-0"
                                                     placeholder="0"
                                                 />
                                             </div>
-                                            <p className="text-xs text-zinc-400 font-medium ml-2">Monto mínimo requerido para realizar un pedido.</p>
+                                            <p className="text-xs text-zinc-400 font-medium ml-2">Referencia para clientes de zona alejada.</p>
                                         </div>
+                                    </div>
+
+                                    <div className="p-6 bg-orange-50 border border-orange-100 rounded-3xl">
+                                        <p className="text-xs font-bold text-orange-700 flex items-center gap-2">
+                                            <Truck className="h-3.5 w-3.5 shrink-0" />
+                                            Estos valores son informativos. El costo real del envío se confirma manualmente por WhatsApp según la zona del cliente.
+                                        </p>
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

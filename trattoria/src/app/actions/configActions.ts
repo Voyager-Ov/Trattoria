@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/serverAuth";
+import { normalizeDeliverySettings } from "@/lib/deliverySettings";
 
 // --- Configuration Schemas ---
 
@@ -41,8 +42,8 @@ const BusinessHoursSchema = z.record(
 
 const DeliverySettingsSchema = z.object({
     enabled: z.boolean(),
-    minPurchase: z.number().min(0),
-    deliveryFee: z.number().min(0).default(0),
+    deliveryFeeNear: z.number().min(0).default(0),
+    deliveryFeeFar: z.number().min(0).default(0),
     estimatedTimeRange: z.string(),
     allowPickup: z.boolean(),
     allowDelivery: z.boolean(),
@@ -95,7 +96,9 @@ export async function getConfigs(keys: string[]) {
         // Convert to a record for easier consumption
         const result: Record<string, any> = {};
         configs.forEach((c) => {
-            result[c.key] = c.value;
+            result[c.key] = c.key === "delivery.settings"
+                ? normalizeDeliverySettings(c.value)
+                : c.value;
         });
 
         return { success: true, data: result };
@@ -122,7 +125,11 @@ export async function saveConfigs(payload: Record<string, any>) {
                 continue; // Or throw error based on strictness requirements
             }
 
-            const validation = schema.safeParse(value);
+            const normalizedValue = key === "delivery.settings"
+                ? normalizeDeliverySettings(value)
+                : value;
+
+            const validation = schema.safeParse(normalizedValue);
             if (!validation.success) {
                 return {
                     success: false,

@@ -46,6 +46,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { getOrderDeliveryLabel, getOrderDisplayAddress } from "@/lib/orderDelivery";
 
 interface OrderItem {
     id: string;
@@ -62,6 +63,7 @@ interface Order {
     clienteNombre: string | null;
     clienteTelefono: string | null;
     clienteDireccion: string | null;
+    tipoEntrega?: "DELIVERY" | "RETIRO" | null;
     recibidoEn: string;
     estado: EstadoPedido;
     cobrado: boolean;
@@ -615,14 +617,26 @@ export default function EmpleadoOrderDetailPage() {
                                         </div>
                                     )}
 
-                                    {order.clienteDireccion && (
+                                    {getOrderDeliveryLabel(order) && (
+                                        <div className="flex items-start gap-3">
+                                            <div className="h-9 w-9 rounded-xl bg-zinc-100 flex items-center justify-center flex-shrink-0">
+                                                <ShoppingBag className="h-4 w-4 text-zinc-600" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Tipo de entrega</p>
+                                                <p className="font-bold text-zinc-900">{getOrderDeliveryLabel(order)}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {getOrderDisplayAddress(order) && (
                                         <div className="flex items-start gap-3">
                                             <div className="h-9 w-9 rounded-xl bg-zinc-100 flex items-center justify-center flex-shrink-0">
                                                 <MapPin className="h-4 w-4 text-zinc-600" />
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Dirección</p>
-                                                <p className="font-bold text-zinc-900">{order.clienteDireccion}</p>
+                                                <p className="font-bold text-zinc-900">{getOrderDisplayAddress(order)}</p>
                                             </div>
                                         </div>
                                     )}
