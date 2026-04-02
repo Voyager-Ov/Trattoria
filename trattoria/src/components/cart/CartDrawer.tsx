@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Minus, Plus, Send, ShoppingBag, ShoppingCart, Store, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Minus, Plus, Send, ShoppingBag, ShoppingCart, Trash2 } from "lucide-react";
 import { createPublicOrder } from "@/app/actions/orders";
 import { getConfigs } from "@/app/actions/configActions";
 import { Button } from "@/components/ui/button";
@@ -12,20 +12,38 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
-import { normalizeDeliverySettings } from "@/lib/deliverySettings";
+import { normalizeDeliverySettings, type DeliverySettings } from "@/lib/deliverySettings";
 import { getStoreStatus, type StoreStatus } from "@/lib/openingHours";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/providers/CartProvider";
 
 type Step = "cart" | "checkout";
 type DeliveryMode = "envio" | "retiro";
+type PaymentMethod = {
+    id: string;
+    label: string;
+    enabled: boolean;
+    sortOrder?: number;
+};
+type WhatsAppSettings = {
+    enabled?: boolean;
+    phoneNumber?: string;
+    templateMessage?: string;
+};
+type CartConfigs = {
+    "whatsapp.settings"?: WhatsAppSettings;
+    "payments.methods"?: PaymentMethod[];
+    "delivery.settings"?: DeliverySettings;
+    "business.hours"?: Record<string, unknown>;
+    "business.closedDays"?: string[];
+};
 
 export function CartDrawer() {
     const { items, removeItem, updateQuantity, totalPrice, totalItems, clearCart } = useCart();
     const [isBouncing, setIsBouncing] = useState(false);
     const [step, setStep] = useState<Step>("cart");
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [configs, setConfigs] = useState<any>(null);
+    const [configs, setConfigs] = useState<CartConfigs | null>(null);
     const [storeStatus, setStoreStatus] = useState<StoreStatus>({ isOpen: true });
     const [formData, setFormData] = useState({
         nombre: "",
@@ -47,23 +65,33 @@ export function CartDrawer() {
         async function load() {
             const res = await getConfigs(["whatsapp.settings", "payments.methods", "delivery.settings", "business.hours", "business.closedDays"]);
             if (!res.success || !res.data) return;
-            setConfigs(res.data);
-            const methods = res.data["payments.methods"]?.length ? res.data["payments.methods"] : DEFAULT_PAYMENT_METHODS;
-            const firstEnabled = methods.find((method: any) => method.enabled);
-            const deliverySettings = normalizeDeliverySettings(res.data["delivery.settings"]);
+            const data = res.data as CartConfigs;
+            setConfigs(data);
+            const methods: PaymentMethod[] = data["payments.methods"]?.length ? data["payments.methods"] : DEFAULT_PAYMENT_METHODS;
+            const firstEnabled = methods.find((method) => method.enabled);
+            const deliverySettings = normalizeDeliverySettings(data["delivery.settings"]);
             setFormData((prev) => ({
                 ...prev,
                 metodoPago: firstEnabled?.id || prev.metodoPago,
                 tipoEntrega: !deliverySettings.allowDelivery && deliverySettings.allowPickup ? "retiro" : prev.tipoEntrega,
             }));
-            setStoreStatus(getStoreStatus(res.data["business.hours"] || {}, res.data["business.closedDays"] || []));
+            setStoreStatus(getStoreStatus(data["business.hours"] || {}, data["business.closedDays"] || []));
         }
         load();
     }, []);
 
     const deliverySettings = normalizeDeliverySettings(configs?.["delivery.settings"]);
-    const paymentMethods = (configs?.["payments.methods"]?.length ? configs["payments.methods"] : DEFAULT_PAYMENT_METHODS).filter((method: any) => method.enabled);
+    const paymentMethods: PaymentMethod[] = (configs?.["payments.methods"]?.length ? configs["payments.methods"] : DEFAULT_PAYMENT_METHODS).filter((method) => method.enabled);
     const isDelivery = formData.tipoEntrega === "envio";
+    const isCashPayment = formData.metodoPago === "EFECTIVO";
+    const cashAmount = Number(formData.pagaCon);
+    const hasValidCashAmount = !isCashPayment || (formData.pagaCon.trim() !== "" && Number.isFinite(cashAmount) && cashAmount > 0);
+    const isCheckoutFormValid =
+        formData.nombre.trim() !== "" &&
+        formData.telefono.trim() !== "" &&
+        formData.metodoPago !== "" &&
+        (!isDelivery || formData.direccion.trim() !== "") &&
+        hasValidCashAmount;
     const nearFee = deliverySettings.deliveryFeeNear.toLocaleString("es-CL");
     const farFee = deliverySettings.deliveryFeeFar.toLocaleString("es-CL");
 
@@ -76,6 +104,7 @@ export function CartDrawer() {
         if (isSubmitting) return;
         if (!formData.nombre || !formData.telefono || !formData.metodoPago) return toast.error("Por favor completa todos los campos requeridos");
         if (isDelivery && !formData.direccion.trim()) return toast.error("Por favor ingresa una dirección de entrega");
+        if (!hasValidCashAmount) return toast.error("Por favor indica con cuánto vas a pagar en efectivo");
         const whatsappSettings = configs?.["whatsapp.settings"];
         if (!whatsappSettings?.enabled || !whatsappSettings?.phoneNumber) return toast.error("La confirmación por WhatsApp no está disponible en este momento.");
 
@@ -93,7 +122,7 @@ export function CartDrawer() {
             if (!result.success) return toast.error(result.error || "Error al procesar el pedido");
 
             const itemsText = items.map((item) => `• ${item.nombre} x${item.quantity} - $${(Number(item.precio) * item.quantity).toLocaleString("es-CL")}`).join("\n");
-            const paymentLabel = paymentMethods.find((method: any) => method.id === formData.metodoPago)?.label || formData.metodoPago;
+            const paymentLabel = paymentMethods.find((method) => method.id === formData.metodoPago)?.label || formData.metodoPago;
             const addressLabel = isDelivery ? formData.direccion.trim() : "Retiro en el local";
             let message = (whatsappSettings.templateMessage || "Hola {nombre}, recibimos tu pedido #{id}.")
                 .replace(/{id}/g, result.orderNumber?.toString() || "")
@@ -111,7 +140,7 @@ export function CartDrawer() {
                 message += `\n• Zona lejana: $${farFee}`;
                 message += `\nEl monto final de envío será informado por el local.`;
             }
-            if (formData.metodoPago === "EFECTIVO" && formData.pagaCon) {
+            if (isCashPayment && formData.pagaCon) {
                 const pagaCon = Number(formData.pagaCon);
                 message += `\n\n💰 *Paga con:* $${pagaCon.toLocaleString("es-CL")}`;
                 message += `\n💵 *Vuelto aprox (sin envío):* $${(pagaCon - totalPrice).toLocaleString("es-CL")}`;
@@ -154,19 +183,19 @@ export function CartDrawer() {
                     </div>
                 </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0 bg-background border-none rounded-l-[2rem]">
-                <SheetHeader className="p-6 pb-2">
-                    <div className="flex items-center gap-3 mb-2">
+            <SheetContent side="right" className="flex w-full flex-col rounded-l-[2rem] border-none bg-background p-0 sm:max-w-md">
+                <SheetHeader className="p-5 pb-1">
+                    <div className="mb-1.5 flex items-center gap-3">
                         {step === "checkout" && <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setStep("cart")}><ArrowLeft className="h-5 w-5" /></Button>}
-                        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center"><ShoppingBag className="h-5 w-5 text-primary" /></div>
-                        <SheetTitle className="text-2xl font-bold font-outfit">{step === "cart" ? "Mi Pedido" : "Datos de Entrega"}</SheetTitle>
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10"><ShoppingBag className="h-4.5 w-4.5 text-primary" /></div>
+                        <SheetTitle className="font-outfit text-[1.9rem] font-bold leading-none">{step === "cart" ? "Mi Pedido" : "Datos de Entrega"}</SheetTitle>
                     </div>
                     <p className="text-sm text-muted-foreground">{step === "cart" ? "Revisa tus productos antes de confirmar" : "Completa la información para tu pedido"}</p>
                 </SheetHeader>
 
-                {!storeStatus.isOpen && <div className="mx-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-600 font-medium">{storeStatus.message || "Por el momento no estamos recibiendo pedidos."}</div>}
+                {!storeStatus.isOpen && <div className="mx-5 rounded-2xl border border-red-100 bg-red-50 p-3 text-sm font-medium text-red-600">{storeStatus.message || "Por el momento no estamos recibiendo pedidos."}</div>}
 
-                <div className="flex-1 overflow-y-auto px-6 my-4 scrollbar-hide">
+                <div className="my-3 flex-1 overflow-y-auto px-5 scrollbar-hide">
                     {items.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-center space-y-4">
                             <div className="h-20 w-20 rounded-full bg-secondary/50 flex items-center justify-center"><ShoppingCart className="h-10 w-10 text-muted-foreground" /></div>
@@ -192,31 +221,32 @@ export function CartDrawer() {
                             ))}
                         </div>
                     ) : (
-                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                            {(deliverySettings.allowDelivery || deliverySettings.allowPickup) && <div className="flex p-1 bg-secondary/50 rounded-2xl">{deliverySettings.allowDelivery && <button onClick={() => setFormData((prev) => ({ ...prev, tipoEntrega: "envio" }))} className={`flex-1 py-3 rounded-xl font-bold ${isDelivery ? "bg-background shadow-md text-primary" : "text-muted-foreground"}`}>Delivery</button>}{deliverySettings.allowPickup && <button onClick={() => setFormData((prev) => ({ ...prev, tipoEntrega: "retiro" }))} className={`flex-1 py-3 rounded-xl font-bold ${!isDelivery ? "bg-background shadow-md text-primary" : "text-muted-foreground"}`}>Retiro</button>}</div>}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2"><Label htmlFor="nombre">Tu Nombre</Label><Input id="nombre" name="nombre" value={formData.nombre} onChange={onInput} className="rounded-xl h-12" /></div>
-                                <div className="space-y-2"><Label htmlFor="telefono">Teléfono</Label><Input id="telefono" name="telefono" value={formData.telefono} onChange={onInput} className="rounded-xl h-12" /></div>
+                        <div className="space-y-3 animate-in fade-in slide-in-from-right-4 duration-300">
+                            {(deliverySettings.allowDelivery || deliverySettings.allowPickup) && <div className="flex gap-1 rounded-xl bg-secondary/55 p-1">{deliverySettings.allowDelivery && <button onClick={() => setFormData((prev) => ({ ...prev, tipoEntrega: "envio" }))} className={cn("flex-1 rounded-lg px-3 py-2.5 text-[15px] font-bold transition-all", isDelivery ? "border border-zinc-200 bg-background text-zinc-950 shadow-[0_6px_18px_rgba(15,23,42,0.12)]" : "text-muted-foreground hover:text-zinc-700")}>Delivery</button>}{deliverySettings.allowPickup && <button onClick={() => setFormData((prev) => ({ ...prev, tipoEntrega: "retiro" }))} className={cn("flex-1 rounded-lg px-3 py-2.5 text-[15px] font-bold transition-all", !isDelivery ? "border border-zinc-200 bg-background text-zinc-950 shadow-[0_6px_18px_rgba(15,23,42,0.12)]" : "text-muted-foreground hover:text-zinc-700")}>Retiro</button>}</div>}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5"><Label htmlFor="nombre" className="text-[13px] font-semibold text-zinc-800">Tu Nombre</Label><Input id="nombre" name="nombre" value={formData.nombre} onChange={onInput} className="h-10 rounded-lg border-[1.5px] px-3 text-sm" /></div>
+                                <div className="space-y-1.5"><Label htmlFor="telefono" className="text-[13px] font-semibold text-zinc-800">Teléfono</Label><Input id="telefono" name="telefono" type="tel" inputMode="tel" value={formData.telefono} onChange={onInput} className="h-10 rounded-lg border-[1.5px] px-3 text-sm" /></div>
                             </div>
-                            {isDelivery && <div className="space-y-2"><Label htmlFor="direccion">Dirección de Entrega</Label><Input id="direccion" name="direccion" value={formData.direccion} onChange={onInput} className="rounded-xl h-12" /></div>}
-                            {isDelivery && <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 space-y-2"><p className="text-[11px] font-black uppercase tracking-wider text-orange-700">Envío informativo</p><div className="flex justify-between text-sm"><span className="text-orange-800">Zona cercana</span><span className="font-bold text-orange-900">${nearFee}</span></div><div className="flex justify-between text-sm"><span className="text-orange-800">Zona lejana</span><span className="font-bold text-orange-900">${farFee}</span></div><p className="text-[11px] text-orange-700">El costo final del envío se confirma por WhatsApp según la zona.</p></div>}
-                            <div className="space-y-3">
-                                <Label className="text-sm font-black text-zinc-900 uppercase tracking-tight">Método de Pago</Label>
-                                <RadioGroup value={formData.metodoPago} onValueChange={(value) => setFormData((prev) => ({ ...prev, metodoPago: value }))} className="grid grid-cols-1 gap-2">
-                                    {paymentMethods.map((method: any) => (
-                                        <div key={method.id} onClick={() => setFormData((prev) => ({ ...prev, metodoPago: method.id }))} className={cn("relative flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer", formData.metodoPago === method.id ? "border-emerald-500 bg-emerald-50/50" : "border-zinc-100 hover:border-zinc-200 bg-white")}>
-                                            <div className="flex items-center gap-3"><div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center", formData.metodoPago === method.id ? "border-emerald-500" : "border-zinc-300")}>{formData.metodoPago === method.id && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}</div><span className={cn("font-bold", formData.metodoPago === method.id ? "text-emerald-900" : "text-zinc-600")}>{method.label}</span></div>
+                            {isDelivery && <div className="space-y-1.5"><Label htmlFor="direccion" className="text-[13px] font-semibold text-zinc-800">Dirección de Entrega</Label><Input id="direccion" name="direccion" value={formData.direccion} onChange={onInput} className="h-10 rounded-lg border-[1.5px] px-3 text-sm" /></div>}
+                            {isDelivery && <div className="space-y-1.5 rounded-xl border border-orange-100 bg-orange-50 px-3 py-2.5"><p className="text-[10px] font-black uppercase tracking-[0.12em] text-orange-700">Envío informativo</p><div className="flex justify-between text-[13px]"><span className="text-orange-800">Zona cercana</span><span className="font-bold text-orange-900">${nearFee}</span></div><div className="flex justify-between text-[13px]"><span className="text-orange-800">Zona lejana</span><span className="font-bold text-orange-900">${farFee}</span></div><p className="text-[10px] leading-tight text-orange-700">El costo final del envío se confirma por WhatsApp según la zona.</p></div>}
+                            <div className="space-y-2.5">
+                                <Label className="text-[13px] font-black uppercase tracking-[0.08em] text-zinc-900">Método de Pago</Label>
+                                <RadioGroup value={formData.metodoPago} onValueChange={(value) => setFormData((prev) => ({ ...prev, metodoPago: value }))} className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                    {paymentMethods.map((method) => (
+                                        <div key={method.id} onClick={() => setFormData((prev) => ({ ...prev, metodoPago: method.id }))} className={cn("relative flex min-h-[52px] cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 transition-all", formData.metodoPago === method.id ? "border-emerald-500 bg-emerald-50 shadow-[0_6px_16px_rgba(16,185,129,0.16)]" : "border-zinc-200 bg-white hover:border-zinc-300")}>
+                                            <div className={cn("mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border", formData.metodoPago === method.id ? "border-emerald-500" : "border-zinc-300")}>{formData.metodoPago === method.id && <div className="h-2 w-2 rounded-full bg-emerald-500" />}</div>
+                                            <span className={cn("text-sm font-semibold leading-tight", formData.metodoPago === method.id ? "text-emerald-900" : "text-zinc-700")}>{method.label}</span>
                                             <RadioGroupItem value={method.id} id={method.id} className="sr-only" />
                                         </div>
                                     ))}
                                 </RadioGroup>
                             </div>
-                            {formData.metodoPago === "EFECTIVO" && <div className="space-y-2"><Label htmlFor="pagaCon">¿Con cuánto vas a pagar? (Opcional)</Label><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">$</span><Input id="pagaCon" name="pagaCon" type="number" value={formData.pagaCon} onChange={onInput} className="rounded-xl h-12 pl-8" /></div><p className="text-[10px] text-muted-foreground italic pl-1">{isDelivery ? "Para que el repartidor lleve el vuelto justo." : "Para agilizar tu pago en el local."}</p></div>}
+                            {isCashPayment && <div className="space-y-1.5"><Label htmlFor="pagaCon" className="text-[13px] font-semibold text-zinc-800">¿Con cuánto vas a pagar? *</Label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span><Input id="pagaCon" name="pagaCon" type="number" inputMode="numeric" min="1" value={formData.pagaCon} onChange={onInput} className="h-10 rounded-lg border-[1.5px] pl-7 text-sm" /></div><p className="pl-1 text-[10px] leading-tight text-muted-foreground">{isDelivery ? "Obligatorio para que el repartidor lleve cambio." : "Obligatorio para preparar tu vuelto en caja."}</p></div>}
                         </div>
                     )}
                 </div>
 
-                {items.length > 0 && <div className="p-6 bg-secondary/30 rounded-t-[2.5rem] space-y-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]"><div className="space-y-2"><div className="flex justify-between text-sm"><span className="text-muted-foreground">Productos ({totalItems})</span><span>${totalPrice.toLocaleString("es-CL")}</span></div>{isDelivery && <div className="flex flex-col gap-1 pt-1 pb-1"><span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Envío a confirmar por WhatsApp:</span><div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Zona cercana</span><span className="text-orange-600 font-semibold">${nearFee}</span></div><div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Zona lejana</span><span className="text-orange-600 font-semibold">${farFee}</span></div></div>}<Separator className="bg-border/50 my-2" /><div className="flex justify-between items-end"><span className="text-lg font-bold">Total productos</span><span className="text-2xl font-bold font-outfit text-primary">${totalPrice.toLocaleString("es-CL")}</span></div>{isDelivery && <p className="text-[10px] text-muted-foreground italic text-right">El envío se confirma manualmente según la zona.</p>}</div>{step === "cart" ? <Button onClick={() => setStep("checkout")} disabled={!storeStatus.isOpen} className="w-full h-14 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-lg shadow-xl shadow-primary/20">Continuar Pedido</Button> : <Button onClick={handleConfirmOrder} disabled={!formData.nombre || !formData.telefono || !formData.metodoPago || (isDelivery && !formData.direccion.trim()) || isSubmitting || !storeStatus.isOpen} className="w-full h-14 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-bold text-lg shadow-xl shadow-green-600/20 flex items-center justify-center gap-2">{isSubmitting ? <><Loader2 className="h-5 w-5 animate-spin" />Procesando...</> : <><Send className="h-5 w-5" />Confirmar vía WhatsApp</>}</Button>}</div>}
+                {items.length > 0 && <div className="space-y-3 rounded-t-[2.2rem] bg-secondary/30 p-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]"><div className="space-y-2"><div className="flex justify-between text-sm"><span className="text-muted-foreground">Productos ({totalItems})</span><span>${totalPrice.toLocaleString("es-CL")}</span></div>{isDelivery && <div className="flex flex-col gap-0.5 pt-0.5"><span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Envío a confirmar por WhatsApp:</span><div className="flex justify-between text-[11px]"><span className="pl-2 text-muted-foreground">Zona cercana</span><span className="font-semibold text-orange-600">${nearFee}</span></div><div className="flex justify-between text-[11px]"><span className="pl-2 text-muted-foreground">Zona lejana</span><span className="font-semibold text-orange-600">${farFee}</span></div></div>}<Separator className="my-1.5 bg-border/50" /><div className="flex items-end justify-between"><span className="text-base font-bold">Total productos</span><span className="font-outfit text-[2rem] font-bold leading-none text-primary">${totalPrice.toLocaleString("es-CL")}</span></div>{isDelivery && <p className="text-[10px] italic text-muted-foreground text-right">El envío se confirma manualmente según la zona.</p>}</div>{step === "cart" ? <Button onClick={() => setStep("checkout")} disabled={!storeStatus.isOpen} className="h-12 w-full rounded-xl bg-primary text-base font-bold text-white shadow-xl shadow-primary/20 hover:bg-primary/90">Continuar Pedido</Button> : <Button onClick={handleConfirmOrder} disabled={!isCheckoutFormValid || isSubmitting || !storeStatus.isOpen} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-green-600 text-base font-bold text-white shadow-xl shadow-green-600/20 hover:bg-green-700">{isSubmitting ? <><Loader2 className="h-5 w-5 animate-spin" />Procesando...</> : <><Send className="h-5 w-5" />Confirmar vía WhatsApp</>}</Button>}</div>}
             </SheetContent>
         </Sheet>
     );
