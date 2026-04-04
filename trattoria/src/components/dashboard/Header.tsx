@@ -14,8 +14,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DynamicBreadcrumb } from "./DynamicBreadcrumb";
 import { HeaderSearch } from "./HeaderSearch";
@@ -54,11 +52,8 @@ export function Header() {
     const userInitials = userDisplayName.substring(0, 2).toUpperCase();
 
     return (
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-zinc-200/70 bg-white/90 px-4 backdrop-blur-xl md:h-20 md:px-6">
+        <header className="app-header-safe sticky top-0 z-30 flex min-h-16 items-end gap-3 border-b border-zinc-200/60 bg-transparent pb-3 md:min-h-20 md:items-center md:pb-0">
             <div className="min-w-0 flex flex-1 items-center gap-3">
-                <div className="hidden items-center gap-3 md:flex">
-                </div>
-
                 <div className="min-w-0 flex-1 md:hidden">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Panel admin</p>
                     <p className="truncate text-base font-semibold tracking-tight text-zinc-950">{currentPageLabel}</p>

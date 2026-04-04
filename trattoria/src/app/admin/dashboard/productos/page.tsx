@@ -1,26 +1,51 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { Search, Plus, Filter, X, ChevronUp, ChevronDown, MoreVertical, Image as ImageIcon, Loader2, ListTree, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { getProducts, getCategories, toggleProductAvailability, softDeleteProduct, createProduct, updateProduct, createPromotion, deletePromotion } from "./actions";
 import { Prisma, UnidadMedida } from "@prisma/client";
+import {
+    ChevronDown,
+    ChevronUp,
+    Copy,
+    Filter,
+    Image as ImageIcon,
+    ListTree,
+    Loader2,
+    MoreVertical,
+    Package2,
+    Pencil,
+    Plus,
+    Search,
+    Trash2,
+    X,
+} from "lucide-react";
 import { toast } from "sonner";
-import { CreateCategorySheet } from "./components/CreateCategorySheet";
-import { CreateProductSheet } from "./components/CreateProductSheet";
-import { CreatePromotionSheet } from "./components/CreatePromotionSheet";
 
-// Unified Menu Item type
+import { createProduct, deletePromotion, softDeleteProduct, toggleProductAvailability } from "./actions";
+import { CreateCategorySheet } from "./components/CreateCategorySheet";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { ResponsivePanel } from "@/components/ui/responsive-panel";
+
+type Category = Prisma.CategoryGetPayload<{ select: { id: true; nombre: true } }>;
+type SortField = "codigo" | "nombre" | "categoria" | "precio" | "costo" | "margen" | "unidad" | "fecha" | "estado";
+type SortDirection = "asc" | "desc";
+type StatusFilter = "todos" | "activos" | "disponibles" | "agotados";
+
 interface MenuItem {
     id: string;
-    type: 'PRODUCTO' | 'PROMOCION';
+    type: "PRODUCTO" | "PROMOCION";
     nombre: string;
     descripcion: string | null;
     precio: number;
@@ -30,187 +55,269 @@ interface MenuItem {
     activo: boolean;
     disponible: boolean;
     unidad: UnidadMedida;
-    createdAt: Date;
-    updatedAt?: Date;
-    deletedAt?: Date | null;
-    costoUnitario?: number;
-    // Original Prisma objects for actions if needed
-    category?: Category;
-};
-
-type Category = Prisma.CategoryGetPayload<{ select: { id: true; nombre: true } }>;
-
-
-// Mock products with all fields
-
-type SortField = "codigo" | "nombre" | "categoria" | "precio" | "costo" | "margen" | "unidad" | "fecha" | "estado";
-type SortDirection = "asc" | "desc";
-
-interface MetricCardProps {
-    title: string;
-    value: string | number;
-    change?: string;
-    trend?: "up" | "down";
-    headerColor: string;
-    icon?: React.ReactNode;
+    createdAt: string | Date;
+    updatedAt?: string | Date;
+    deletedAt?: string | Date | null;
+    costoUnitario?: number | null;
 }
 
-function MetricCard({ title, value, change, headerColor, icon }: MetricCardProps) {
+const SORT_OPTIONS: Array<{ value: SortField; label: string }> = [
+    { value: "nombre", label: "Nombre" },
+    { value: "categoria", label: "Categoria" },
+    { value: "precio", label: "Precio" },
+    { value: "costo", label: "Costo" },
+    { value: "margen", label: "Margen" },
+    { value: "unidad", label: "Unidad" },
+    { value: "fecha", label: "Fecha" },
+    { value: "estado", label: "Estado" },
+    { value: "codigo", label: "Codigo" },
+];
+
+function formatCurrency(value: number) {
+    return new Intl.NumberFormat("es-AR", {
+        style: "currency",
+        currency: "ARS",
+        maximumFractionDigits: 0,
+    }).format(Number(value || 0));
+}
+
+function formatDate(value: string | Date) {
+    const date = new Date(value);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}.${month}.${year}`;
+}
+
+function calculateMargin(precio: number, costo?: number | null) {
+    if (!costo || !precio) {
+        return 0;
+    }
+
+    return ((precio - costo) / precio) * 100;
+}
+
+function getTypeBadgeClasses(type: MenuItem["type"]) {
+    return type === "PRODUCTO" ? "bg-blue-50 text-blue-600 border-none" : "bg-violet-50 text-violet-600 border-none";
+}
+
+function getStatusLabel(status: StatusFilter) {
+    switch (status) {
+        case "activos":
+            return "Activos";
+        case "disponibles":
+            return "Disponibles";
+        case "agotados":
+            return "Agotados";
+        default:
+            return "Todos";
+    }
+}
+
+function MetricCard({
+    title,
+    value,
+    subtitle,
+    headerColor,
+}: {
+    title: string;
+    value: string | number;
+    subtitle?: string;
+    headerColor: string;
+}) {
     return (
-        <div className="bg-white rounded-[2rem] border border-zinc-200 shadow-sm overflow-hidden flex flex-col h-full group hover:shadow-md transition-shadow duration-300">
-            {/* Colored Header Strip */}
-            <div className={`h-12 ${headerColor} flex items-center px-6 text-white font-medium text-sm`}>
-                {title}
-                {icon && <div className="ml-auto opacity-80">{icon}</div>}
-            </div>
-            {/* Body */}
-            <div className="p-6 flex flex-col justify-between flex-grow">
-                <div className="flex items-end gap-3">
-                    <span className="text-3xl font-bold text-zinc-900 tracking-tight">{value}</span>
-                    {change && (
-                        <span className="mb-1 bg-zinc-100 text-zinc-600 px-3 py-1 rounded-full text-[0.65rem] font-bold uppercase tracking-wider">
-                            {change}
-                        </span>
-                    )}
-                </div>
+        <div className="overflow-hidden rounded-[1.75rem] border border-zinc-200 bg-white shadow-sm md:rounded-[2rem]">
+            <div className={`flex items-center px-4 py-3 text-sm font-semibold text-white md:px-5 ${headerColor}`}>{title}</div>
+            <div className="p-4 md:p-6">
+                <p className="break-words text-2xl font-black tracking-tight text-zinc-900 md:text-3xl">{value}</p>
+                {subtitle ? <p className="mt-1 text-sm text-zinc-500">{subtitle}</p> : null}
             </div>
         </div>
     );
+}
+
+function SortIcon({
+    field,
+    currentField,
+    currentDirection,
+}: {
+    field: SortField;
+    currentField: SortField;
+    currentDirection: SortDirection;
+}) {
+    if (currentField !== field) {
+        return null;
+    }
+
+    return currentDirection === "asc" ? <ChevronUp className="ml-1 inline h-3 w-3" /> : <ChevronDown className="ml-1 inline h-3 w-3" />;
 }
 
 export default function ProductosPage() {
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
+    const [sortField, setSortField] = useState<SortField>("nombre");
+    const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+    const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);
 
     const refreshData = useCallback(async () => {
         setIsLoading(true);
+
         try {
             const [menuRes, catRes] = await Promise.all([
-                fetch('/api/admin/dashboard/productos').then(res => res.json()),
-                fetch('/api/admin/dashboard/productos/categorias').then(res => res.json())
+                fetch("/api/admin/dashboard/productos").then((res) => res.json()),
+                fetch("/api/admin/dashboard/productos/categorias").then((res) => res.json()),
             ]);
 
             if (menuRes.success) {
-                setMenuItems(menuRes.data);
+                const nextItems = menuRes.data as MenuItem[];
+                setMenuItems(nextItems);
+                setSelectedItem((current) => (current ? nextItems.find((item) => item.id === current.id) ?? null : null));
             } else {
-                toast.error(menuRes.error || "Error al cargar el menú");
+                toast.error(menuRes.error || "Error al cargar el menu");
             }
 
             if (catRes.success && catRes.data) {
                 setCategories(catRes.data as Category[]);
             } else {
-                toast.error(catRes.error || "Error al cargar categorías");
+                toast.error(catRes.error || "Error al cargar categorias");
             }
         } catch (error) {
             console.error("Error refreshing data:", error);
-            toast.error("Error de conexión");
+            toast.error("Error de conexion");
         } finally {
             setIsLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        refreshData();
+        void refreshData();
     }, [refreshData]);
 
-    const handleToggleAvailability = async (id: string, currentStatus: boolean) => {
-        const res = await toggleProductAvailability(id, currentStatus);
-        if (res.success) {
-            toast.success("Disponibilidad actualizada");
-            refreshData();
-        } else {
-            toast.error(res.error || "Error al actualizar");
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+            return;
         }
+
+        setSortField(field);
+        setSortDirection("asc");
     };
 
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const toggleCategorySelection = (categoryId: string) => {
+        setSelectedCategories((current) =>
+            current.includes(categoryId) ? current.filter((item) => item !== categoryId) : [...current, categoryId]
+        );
+    };
 
-    // Sheets state
-    const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);
-    const [isProductSheetOpen, setIsProductSheetOpen] = useState(false);
-    const [isPromotionSheetOpen, setIsPromotionSheetOpen] = useState(false);
-
-
-    type ProductWithCategory = Prisma.ProductGetPayload<{
-        include: { category: true }
-    }>;
+    const clearFilters = () => {
+        setSearchQuery("");
+        setSelectedCategories([]);
+        setStatusFilter("todos");
+        setSortField("nombre");
+        setSortDirection("asc");
+    };
 
     const handleDuplicate = async (product: MenuItem) => {
         setIsSubmitting(true);
-        const { id, createdAt, updatedAt, deletedAt, category, ...rest } = product;
-        const res = await createProduct({
-            ...rest,
-            descripcion: rest.descripcion ?? undefined,
-            nombre: `${rest.nombre} (Copia)`,
-        });
-        if (res.success) {
-            toast.success("Producto duplicado");
-            refreshData();
-        } else {
-            toast.error(res.error || "Error al duplicar");
+
+        try {
+            const res = await createProduct({
+                nombre: `${product.nombre} (Copia)`,
+                descripcion: product.descripcion ?? undefined,
+                precio: product.precio,
+                costoUnitario: product.costoUnitario ?? undefined,
+                categoryId: product.categoryId,
+                imagen: product.imagen,
+                unidad: product.unidad,
+            });
+
+            if (res.success) {
+                toast.success("Producto duplicado");
+                await refreshData();
+            } else {
+                toast.error(res.error || "Error al duplicar");
+            }
+        } finally {
+            setIsSubmitting(false);
         }
-        setIsSubmitting(false);
     };
 
     const handleDelete = async (item: MenuItem) => {
-        if (!confirm(`¿Estás seguro de eliminar esta ${item.type.toLowerCase()}?`)) return;
+        const confirmed = window.confirm(`Estas seguro de eliminar ${item.type === "PRODUCTO" ? "este producto" : "esta promocion"}?`);
+        if (!confirmed) {
+            return;
+        }
 
-        // In the future, we might need a separate deletePromotion action
-        // For now, if it's a product, use softDeleteProduct
-        if (item.type === 'PRODUCTO') {
+        if (item.type === "PRODUCTO") {
             const res = await softDeleteProduct(item.id);
             if (res.success) {
                 toast.success("Producto eliminado");
-                refreshData();
+                setSelectedItem((current) => (current?.id === item.id ? null : current));
+                await refreshData();
             } else {
                 toast.error(res.error || "Error al eliminar");
             }
+            return;
+        }
+
+        const res = await deletePromotion(item.id);
+        if (res.success) {
+            toast.success("Promocion eliminada");
+            setSelectedItem((current) => (current?.id === item.id ? null : current));
+            await refreshData();
         } else {
-            const res = await deletePromotion(item.id);
-            if (res.success) {
-                toast.success("Promoción eliminada");
-                refreshData();
-            } else {
-                toast.error(res.error || "Error al eliminar");
-            }
+            toast.error(res.error || "Error al eliminar");
         }
     };
 
-    // Metrics calculations using real data
-    const totalProducts = menuItems.filter(item => item.type === 'PRODUCTO').length;
-    const activeProducts = menuItems.filter(item => item.type === 'PRODUCTO' && item.activo).length;
-    const categoriesCount = categories.length;
-    const outOfStockCount = menuItems.filter((item) => item.type === 'PRODUCTO' && !item.disponible).length;
+    const handleToggleAvailability = async (item: MenuItem) => {
+        if (item.type !== "PRODUCTO") {
+            return;
+        }
 
-    const [searchQuery, setSearchQuery] = useState("");
-    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-    const [statusFilter, setStatusFilter] = useState<"todos" | "activos" | "disponibles" | "agotados">("todos");
-    const [sortField, setSortField] = useState<SortField>("nombre");
-    const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+        setIsSubmitting(true);
+        try {
+            const res = await toggleProductAvailability(item.id, item.disponible);
+            if (res.success) {
+                toast.success(item.disponible ? "Producto marcado como agotado" : "Producto marcado como disponible");
+                await refreshData();
+            } else {
+                toast.error(res.error || "Error al actualizar");
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
-    // Filter & sort logic
     const filteredAndSortedItems = useMemo(() => {
+        const term = searchQuery.toLowerCase();
+
         const filtered = menuItems.filter((item) => {
             const matchesSearch =
                 searchQuery === "" ||
-                item.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.descripcion?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.categoria.toLowerCase().includes(searchQuery.toLowerCase());
+                item.nombre.toLowerCase().includes(term) ||
+                item.descripcion?.toLowerCase().includes(term) ||
+                item.categoria.toLowerCase().includes(term) ||
+                item.id.toLowerCase().includes(term);
 
-            const matchesCategory =
-                selectedCategories.length === 0 || selectedCategories.includes(item.categoryId);
+            const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(item.categoryId);
 
             const matchesStatus =
                 statusFilter === "todos" ||
                 (statusFilter === "activos" && item.activo) ||
-                (statusFilter === "disponibles" && item.disponible) ||
-                (statusFilter === "agotados" && !item.disponible);
+                (statusFilter === "disponibles" && item.type === "PRODUCTO" && item.disponible) ||
+                (statusFilter === "agotados" && item.type === "PRODUCTO" && !item.disponible);
 
             return matchesSearch && matchesCategory && matchesStatus;
         });
 
-        // Sorting
         filtered.sort((a, b) => {
             let compareValue = 0;
 
@@ -228,23 +335,11 @@ export default function ProductosPage() {
                     compareValue = Number(a.precio) - Number(b.precio);
                     break;
                 case "costo":
-                    // Promotions might not have cost, use 0
-                    const costoA = a.costoUnitario || 0;
-                    const costoB = b.costoUnitario || 0;
-                    compareValue = Number(costoA) - Number(costoB);
+                    compareValue = Number(a.costoUnitario || 0) - Number(b.costoUnitario || 0);
                     break;
-                case "margen": {
-                    const costoA = a.costoUnitario || 0;
-                    const costoB = b.costoUnitario || 0;
-                    const marginA = costoA
-                        ? ((Number(a.precio) - Number(costoA)) / Number(a.precio)) * 100
-                        : 0;
-                    const marginB = costoB
-                        ? ((Number(b.precio) - Number(costoB)) / Number(b.precio)) * 100
-                        : 0;
-                    compareValue = marginA - marginB;
+                case "margen":
+                    compareValue = calculateMargin(Number(a.precio), Number(a.costoUnitario)) - calculateMargin(Number(b.precio), Number(b.costoUnitario));
                     break;
-                }
                 case "unidad":
                     compareValue = a.unidad.localeCompare(b.unidad);
                     break;
@@ -252,7 +347,7 @@ export default function ProductosPage() {
                     compareValue = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
                     break;
                 case "estado":
-                    compareValue = (a.activo ? 1 : 0) - (b.activo ? 1 : 0);
+                    compareValue = Number(a.activo) - Number(b.activo);
                     break;
             }
 
@@ -262,373 +357,394 @@ export default function ProductosPage() {
         return filtered;
     }, [menuItems, searchQuery, selectedCategories, statusFilter, sortField, sortDirection]);
 
-    const handleSort = (field: SortField) => {
-        if (sortField === field) {
-            setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-        } else {
-            setSortField(field);
-            setSortDirection("asc");
-        }
-    };
-
-
-
-    const removeCategoryFilter = (cat: string) => {
-        setSelectedCategories(prev => prev.filter(c => c !== cat));
-    };
-
-    const formatDate = (date: Date) => {
-        const day = String(date.getDate()).padStart(2, "0");
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const year = date.getFullYear();
-        return `${day}.${month}.${year}`;
-    };
-
-    const calculateMargin = (precio: number, costo?: number) => {
-        if (!costo) return 0;
-        return ((precio - costo) / precio) * 100;
-    };
-
-    const truncateId = (id: string) => {
-        return id.length > 12 ? `${id.slice(0, 12)}...` : id;
-    };
-
-    const SortIcon = ({ field }: { field: SortField }) => {
-        if (sortField !== field) return null;
-        return sortDirection === "asc" ? (
-            <ChevronUp className="h-3 w-3 inline ml-1" />
-        ) : (
-            <ChevronDown className="h-3 w-3 inline ml-1" />
-        );
-    };
-
+    const totalMenuItems = menuItems.length;
+    const activeProducts = menuItems.filter((item) => item.type === "PRODUCTO" && item.activo).length;
+    const promotionsCount = menuItems.filter((item) => item.type === "PROMOCION").length;
+    const outOfStockCount = menuItems.filter((item) => item.type === "PRODUCTO" && !item.disponible).length;
+    const activeFilterCount = (searchQuery ? 1 : 0) + (selectedCategories.length > 0 ? selectedCategories.length : 0) + (statusFilter !== "todos" ? 1 : 0);
     const hasActiveFilters = searchQuery !== "" || selectedCategories.length > 0 || statusFilter !== "todos";
 
     return (
-        <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Catálogo de Productos</h1>
-                    <p className="text-zinc-500 mt-1">Gestiona el inventario y precios de tu trattoria.</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="rounded-full border-zinc-200 hover:bg-zinc-50 transition-all font-medium text-sm h-11 px-6 shadow-sm">
-                                <ListTree className="h-4 w-4 mr-2" />
-                                Categorías
-                                <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100">
-                            <DropdownMenuLabel className="px-3 pb-2 text-[0.65rem] font-bold uppercase tracking-widest text-zinc-400">Gestión de Categorías</DropdownMenuLabel>
-                            <Link href="/admin/dashboard/productos/categorias">
-                                <DropdownMenuItem className="rounded-xl cursor-pointer">
-                                    <ListTree className="h-3.5 w-3.5 mr-2" />
-                                    Ver Todas
+        <div className="app-page-safe-bottom space-y-5 pb-6 md:space-y-8 md:pb-10">
+            <section className="space-y-4">
+                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                    <div>
+                        <div className="mb-1 flex items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-100 text-orange-600">
+                                <Package2 className="h-5 w-5" />
+                            </div>
+                            <h1 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-3xl">Menu y productos</h1>
+                        </div>
+                        <p className="text-sm font-medium text-zinc-500 md:text-base">Gestiona productos, promociones y categorias del menu.</p>
+                    </div>
+
+                    <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-3">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="h-11 justify-between rounded-2xl border-zinc-200 bg-white px-4 font-medium text-zinc-700 shadow-sm md:rounded-full md:px-5">
+                                    <span className="flex items-center gap-2">
+                                        <ListTree className="h-4 w-4" />
+                                        Categorias
+                                    </span>
+                                    <ChevronDown className="h-4 w-4 opacity-50" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56 rounded-2xl border-zinc-100 p-2 shadow-xl">
+                                <DropdownMenuLabel className="px-3 pb-2 text-[0.65rem] font-bold uppercase tracking-widest text-zinc-400">
+                                    Gestion de categorias
+                                </DropdownMenuLabel>
+                                <DropdownMenuItem asChild className="my-0.5 cursor-pointer rounded-xl">
+                                    <Link href="/admin/dashboard/productos/categorias">Ver todas</Link>
                                 </DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-zinc-100" />
+                                <DropdownMenuItem
+                                    className="my-0.5 cursor-pointer rounded-xl focus:bg-orange-50 focus:text-orange-600"
+                                    onClick={() => setIsCategorySheetOpen(true)}
+                                >
+                                    <Plus className="mr-2 h-3.5 w-3.5" />
+                                    Nueva categoria
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        <Button asChild className="h-11 rounded-2xl bg-zinc-900 text-white hover:bg-zinc-800 md:rounded-full">
+                            <Link href="/admin/dashboard/productos/promociones/nueva">
+                                <Plus className="mr-2 h-4 w-4" />
+                                Nueva promocion
                             </Link>
-                            <DropdownMenuSeparator className="bg-zinc-100" />
-                            <DropdownMenuItem className="rounded-xl cursor-pointer focus:bg-orange-50 focus:text-orange-600" onClick={() => setIsCategorySheetOpen(true)}>
-                                <Plus className="h-3.5 w-3.5 mr-2" />
-                                Nueva Categoría
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    <Link href="/admin/dashboard/productos/promociones/nueva">
-                        <Button
-                            className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 transition-all font-medium text-sm h-11 px-6 shadow-md"
-                        >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Nueva Promoción
                         </Button>
-                    </Link>
 
-                    <Link href="/admin/dashboard/productos/nuevo">
-                        <Button
-                            className="rounded-full bg-orange-500 text-white hover:bg-orange-600 shadow-md transition-all font-medium text-sm h-11 px-6"
-                        >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Nuevo Producto
+                        <Button asChild className="h-11 rounded-2xl bg-orange-500 text-white hover:bg-orange-600 md:rounded-full">
+                            <Link href="/admin/dashboard/productos/nuevo">
+                                <Plus className="mr-2 h-4 w-4" />
+                                Nuevo producto
+                            </Link>
                         </Button>
-                    </Link>
+                    </div>
                 </div>
+            </section>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 md:gap-6">
+                <MetricCard title="Items en menu" value={totalMenuItems} subtitle="productos y promociones" headerColor="bg-blue-600" />
+                <MetricCard title="Productos activos" value={activeProducts} subtitle="visibles en operacion" headerColor="bg-orange-500" />
+                <MetricCard title="Promociones" value={promotionsCount} subtitle="paquetes configurados" headerColor="bg-violet-500" />
+                <MetricCard title="Productos agotados" value={outOfStockCount} subtitle="requieren revision" headerColor="bg-emerald-500" />
             </div>
 
-            {/* Metrics Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard
-                    title="Total productos"
-                    value={totalProducts}
-                    change="+12%"
-                    headerColor="bg-blue-600"
-                />
-                <MetricCard
-                    title="Productos activos"
-                    value={activeProducts}
-                    change="+5%"
-                    headerColor="bg-orange-500"
-                />
-                <MetricCard
-                    title="Categorías"
-                    value={categoriesCount}
-                    headerColor="bg-amber-400"
-                />
-                <MetricCard
-                    title="Sin stock / Alertas"
-                    value={outOfStockCount}
-                    change="Revisar"
-                    headerColor="bg-emerald-500"
-                />
-            </div>
-
-            {/* Search and Filters */}
-            <div className="flex flex-col gap-4 bg-white p-5 rounded-[2rem] border border-zinc-200 shadow-sm">
-                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                    <div className="relative w-full md:w-96 group">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 group-focus-within:text-zinc-600 transition-colors" />
+            <section className="rounded-[1.75rem] border border-zinc-200 bg-white p-4 shadow-sm md:rounded-[2rem] md:p-5">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="relative w-full md:w-96">
+                        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                         <Input
-                            placeholder="Buscar por nombre o código..."
-                            className="pl-11 h-12 bg-zinc-50 border-zinc-200 rounded-full focus-visible:ring-zinc-400 transition-all text-sm"
+                            placeholder="Buscar por nombre, categoria o codigo..."
+                            className="h-12 rounded-[2rem] border-zinc-200 bg-zinc-50 pl-11 text-sm shadow-none"
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(event) => setSearchQuery(event.target.value)}
                         />
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="h-12 rounded-full px-6 border-zinc-200 hover:bg-zinc-50 text-zinc-600 font-medium">
-                                    <Filter className="mr-2 h-4 w-4" />
-                                    Categorías
-                                    {selectedCategories.length > 0 && (
-                                        <Badge variant="secondary" className="ml-2 bg-zinc-100 text-zinc-900 font-bold px-2 py-0">
-                                            {selectedCategories.length}
-                                        </Badge>
-                                    )}
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100">
-                                <DropdownMenuLabel className="px-3 pb-2 text-[0.65rem] font-bold uppercase tracking-widest text-zinc-400">Seleccionar Categorías</DropdownMenuLabel>
-                                {categories.map((cat) => (
-                                    <DropdownMenuCheckboxItem
-                                        key={cat.id}
-                                        className="rounded-xl focus:bg-zinc-50 my-0.5"
-                                        checked={selectedCategories.includes(cat.id)}
-                                        onCheckedChange={(checked) => {
-                                            if (checked) {
-                                                setSelectedCategories([...selectedCategories, cat.id]);
-                                            } else {
-                                                setSelectedCategories(selectedCategories.filter((c) => c !== cat.id));
-                                            }
-                                        }}
-                                    >
-                                        {cat.nombre}
-                                    </DropdownMenuCheckboxItem>
-                                ))}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                    <div className="flex w-full items-center gap-3 md:w-auto">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setFiltersOpen(true)}
+                            className="h-12 flex-1 rounded-[1.5rem] border-zinc-200 bg-white text-zinc-700 md:hidden"
+                        >
+                            <Filter className="mr-2 h-4 w-4" />
+                            Filtros
+                            {activeFilterCount > 0 ? (
+                                <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-bold text-zinc-700">{activeFilterCount}</span>
+                            ) : null}
+                        </Button>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="h-12 rounded-full px-6 border-zinc-200 hover:bg-zinc-50 text-zinc-600 font-medium capitalize">
-                                    {statusFilter === "todos" ? "Todos los estados" : statusFilter}
-                                    <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100">
-                                <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setStatusFilter("todos")}>Todos los estados</DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setStatusFilter("activos")}>Solo activos</DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setStatusFilter("disponibles")}>Solo disponibles</DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setStatusFilter("agotados")}>Agotados</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <div className="hidden items-center gap-3 md:flex">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="h-12 rounded-full border-zinc-200 px-6 text-zinc-600">
+                                        <Filter className="mr-2 h-4 w-4" />
+                                        Categorias
+                                        {selectedCategories.length > 0 ? (
+                                            <Badge variant="secondary" className="ml-2 bg-zinc-100 px-2 py-0 text-zinc-900">
+                                                {selectedCategories.length}
+                                            </Badge>
+                                        ) : null}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-60 rounded-2xl border-zinc-100 p-2 shadow-xl">
+                                    <DropdownMenuLabel className="px-3 pb-2 text-[0.65rem] font-bold uppercase tracking-widest text-zinc-400">
+                                        Seleccionar categorias
+                                    </DropdownMenuLabel>
+                                    {categories.map((category) => (
+                                        <DropdownMenuCheckboxItem
+                                            key={category.id}
+                                            checked={selectedCategories.includes(category.id)}
+                                            className="my-0.5 rounded-xl"
+                                            onCheckedChange={() => toggleCategorySelection(category.id)}
+                                        >
+                                            {category.nombre}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
 
-                        <div className="h-8 w-[1px] bg-zinc-200 mx-1 hidden md:block"></div>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="h-12 rounded-full border-zinc-200 px-6 text-zinc-600">
+                                        {getStatusLabel(statusFilter)}
+                                        <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56 rounded-2xl border-zinc-100 p-2 shadow-xl">
+                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("todos")}>Todos</DropdownMenuItem>
+                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("activos")}>Activos</DropdownMenuItem>
+                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("disponibles")}>Disponibles</DropdownMenuItem>
+                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("agotados")}>Agotados</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
+
+                        <span className="hidden text-sm font-medium text-zinc-400 md:inline">{filteredAndSortedItems.length} resultados</span>
                     </div>
                 </div>
 
-                {/* Active Filters Pill Badges Row */}
-                {hasActiveFilters && (
-                    <>
-                        <div className="h-[1px] bg-zinc-100 w-full my-1"></div>
-                        <div className="flex flex-wrap items-center gap-2 px-1 py-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                            <span className="text-[0.65rem] font-bold text-zinc-400 uppercase tracking-widest mr-2">Filtros activos:</span>
-                            {searchQuery && (
-                                <Badge variant="secondary" className="bg-white border-zinc-200 text-zinc-600 pl-3 pr-1 py-1 h-8 rounded-full gap-1 shadow-sm font-medium">
-                                    Búsqueda: {searchQuery}
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-zinc-100" onClick={() => setSearchQuery("")}>
+                {hasActiveFilters ? (
+                    <div className="mt-4 border-t border-zinc-100 pt-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="mr-2 text-[0.65rem] font-bold uppercase tracking-widest text-zinc-400">Filtros activos</span>
+                            {searchQuery ? (
+                                <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 shadow-sm">
+                                    Busqueda: {searchQuery}
+                                    <button type="button" onClick={() => setSearchQuery("")} className="rounded-full p-1 hover:bg-zinc-100">
                                         <X className="h-3 w-3" />
-                                    </Button>
-                                </Badge>
-                            )}
-                            {selectedCategories.map(catId => {
-                                const catName = categories.find(c => c.id === catId)?.nombre || catId;
+                                    </button>
+                                </div>
+                            ) : null}
+                            {selectedCategories.map((categoryId) => {
+                                const categoryName = categories.find((item) => item.id === categoryId)?.nombre || categoryId;
                                 return (
-                                    <Badge key={catId} variant="secondary" className="bg-white border-zinc-200 text-zinc-600 pl-3 pr-1 py-1 h-8 rounded-full gap-1 shadow-sm font-medium">
-                                        {catName}
-                                        <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-zinc-100" onClick={() => removeCategoryFilter(catId)}>
+                                    <div
+                                        key={categoryId}
+                                        className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 shadow-sm"
+                                    >
+                                        {categoryName}
+                                        <button type="button" onClick={() => toggleCategorySelection(categoryId)} className="rounded-full p-1 hover:bg-zinc-100">
                                             <X className="h-3 w-3" />
-                                        </Button>
-                                    </Badge>
+                                        </button>
+                                    </div>
                                 );
                             })}
-                            {statusFilter !== "todos" && (
-                                <Badge variant="secondary" className="bg-white border-zinc-200 text-zinc-600 pl-3 pr-1 py-1 h-8 rounded-full gap-1 shadow-sm font-medium">
-                                    Estado: {statusFilter}
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-zinc-100" onClick={() => setStatusFilter("todos")}>
+                            {statusFilter !== "todos" ? (
+                                <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 shadow-sm">
+                                    Estado: {getStatusLabel(statusFilter)}
+                                    <button type="button" onClick={() => setStatusFilter("todos")} className="rounded-full p-1 hover:bg-zinc-100">
                                         <X className="h-3 w-3" />
-                                    </Button>
-                                </Badge>
-                            )}
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs text-zinc-400 hover:text-zinc-600 h-8 rounded-full px-3 hover:bg-transparent ml-auto"
-                                onClick={() => {
-                                    setSearchQuery("");
-                                    setSelectedCategories([]);
-                                    setStatusFilter("todos");
-                                }}
-                            >
-                                Limpiar todos
+                                    </button>
+                                </div>
+                            ) : null}
+                            <Button type="button" variant="ghost" size="sm" className="ml-auto rounded-full px-3 text-xs text-zinc-400 hover:text-zinc-600" onClick={clearFilters}>
+                                Limpiar todo
                             </Button>
                         </div>
-                    </>
-                )}
-            </div>
+                    </div>
+                ) : null}
+            </section>
 
-            {/* Products Table Container */}
-            <div className="bg-white rounded-[2rem] border border-zinc-200 shadow-sm overflow-hidden mb-12">
+            <section className="space-y-3 md:hidden">
+                {isLoading ? (
+                    Array.from({ length: 4 }).map((_, index) => (
+                        <div key={index} className="animate-pulse rounded-[1.75rem] border border-zinc-200 bg-white p-4 shadow-sm">
+                            <div className="h-4 w-28 rounded bg-zinc-100" />
+                            <div className="mt-3 h-20 rounded-2xl bg-zinc-50" />
+                        </div>
+                    ))
+                ) : filteredAndSortedItems.length === 0 ? (
+                    <div className="rounded-[1.75rem] border border-zinc-200 bg-white px-6 py-12 text-center shadow-sm">
+                        <p className="text-sm font-semibold text-zinc-500">No se encontraron items del menu</p>
+                        <p className="mt-1 text-xs text-zinc-400">Prueba ajustando los filtros o la busqueda.</p>
+                    </div>
+                ) : (
+                    filteredAndSortedItems.map((item) => (
+                        <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setSelectedItem(item)}
+                            className="w-full rounded-[1.75rem] border border-zinc-200 bg-white p-4 text-left shadow-sm transition-colors hover:bg-zinc-50"
+                        >
+                            <div className="flex items-start gap-4">
+                                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[1.25rem] border border-zinc-100 bg-zinc-50">
+                                    {item.imagen ? (
+                                        <img
+                                            src={item.imagen}
+                                            alt={item.nombre}
+                                            className="h-full w-full object-cover"
+                                            onError={(event) => {
+                                                event.currentTarget.style.display = "none";
+                                            }}
+                                        />
+                                    ) : (
+                                        <ImageIcon className="h-5 w-5 text-zinc-300" />
+                                    )}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="mb-2 flex flex-wrap gap-2">
+                                                <Badge variant="secondary" className={`font-bold ${getTypeBadgeClasses(item.type)}`}>
+                                                    {item.type}
+                                                </Badge>
+                                                <Badge variant="outline" className="border-zinc-200 text-zinc-500">
+                                                    {item.categoria}
+                                                </Badge>
+                                            </div>
+                                            <h3 className="truncate text-base font-black tracking-tight text-zinc-900">{item.nombre}</h3>
+                                            {item.descripcion ? <p className="mt-1 line-clamp-2 text-sm text-zinc-500">{item.descripcion}</p> : null}
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-base font-black text-zinc-900">{formatCurrency(Number(item.precio))}</p>
+                                            {item.costoUnitario ? (
+                                                <p className="text-xs text-zinc-400">Margen {calculateMargin(Number(item.precio), Number(item.costoUnitario)).toFixed(0)}%</p>
+                                            ) : null}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                                        <Badge variant="secondary" className={item.activo ? "bg-emerald-50 text-emerald-600 border-none" : "bg-red-50 text-red-600 border-none"}>
+                                            {item.activo ? "Activo" : "Inactivo"}
+                                        </Badge>
+                                        {item.type === "PRODUCTO" && !item.disponible ? (
+                                            <Badge variant="secondary" className="border-none bg-orange-50 text-orange-600">
+                                                Agotado
+                                            </Badge>
+                                        ) : null}
+                                        <Badge variant="outline" className="border-zinc-200 text-zinc-500">
+                                            {item.unidad}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </div>
+                        </button>
+                    ))
+                )}
+            </section>
+
+            <section className="hidden overflow-hidden rounded-[2rem] border border-zinc-200 bg-white shadow-sm md:block">
                 <div className="overflow-x-auto">
                     <table className="w-full">
-                        <thead className="bg-zinc-50/50 border-b border-zinc-100">
+                        <thead className="border-b border-zinc-100 bg-zinc-50/50">
                             <tr>
-                                <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
-                                    Tipo
+                                <th className="px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500">Tipo</th>
+                                <th
+                                    onClick={() => handleSort("nombre")}
+                                    className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
+                                >
+                                    Nombre
+                                    <SortIcon field="nombre" currentField={sortField} currentDirection={sortDirection} />
                                 </th>
-                                <th onClick={() => handleSort("nombre")} className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors">
-                                    Nombre <SortIcon field="nombre" />
+                                <th
+                                    onClick={() => handleSort("categoria")}
+                                    className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
+                                >
+                                    Categoria
+                                    <SortIcon field="categoria" currentField={sortField} currentDirection={sortDirection} />
                                 </th>
-                                <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
-                                    Imagen
+                                <th
+                                    onClick={() => handleSort("precio")}
+                                    className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
+                                >
+                                    Precio
+                                    <SortIcon field="precio" currentField={sortField} currentDirection={sortDirection} />
                                 </th>
-                                <th onClick={() => handleSort("categoria")} className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors">
-                                    Categoría <SortIcon field="categoria" />
+                                <th
+                                    onClick={() => handleSort("costo")}
+                                    className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
+                                >
+                                    Costo
+                                    <SortIcon field="costo" currentField={sortField} currentDirection={sortDirection} />
                                 </th>
-                                <th onClick={() => handleSort("precio")} className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors">
-                                    Precio <SortIcon field="precio" />
+                                <th
+                                    onClick={() => handleSort("margen")}
+                                    className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
+                                >
+                                    Margen
+                                    <SortIcon field="margen" currentField={sortField} currentDirection={sortDirection} />
                                 </th>
-                                <th onClick={() => handleSort("costo")} className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors">
-                                    Costo <SortIcon field="costo" />
+                                <th
+                                    onClick={() => handleSort("unidad")}
+                                    className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
+                                >
+                                    Unidad
+                                    <SortIcon field="unidad" currentField={sortField} currentDirection={sortDirection} />
                                 </th>
-                                <th onClick={() => handleSort("margen")} className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors">
-                                    Margen <SortIcon field="margen" />
+                                <th
+                                    onClick={() => handleSort("fecha")}
+                                    className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
+                                >
+                                    Fecha
+                                    <SortIcon field="fecha" currentField={sortField} currentDirection={sortDirection} />
                                 </th>
-                                <th onClick={() => handleSort("unidad")} className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors">
-                                    Unidad <SortIcon field="unidad" />
+                                <th
+                                    onClick={() => handleSort("estado")}
+                                    className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
+                                >
+                                    Estado
+                                    <SortIcon field="estado" currentField={sortField} currentDirection={sortDirection} />
                                 </th>
-                                <th onClick={() => handleSort("fecha")} className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors">
-                                    Fecha <SortIcon field="fecha" />
-                                </th>
-                                <th onClick={() => handleSort("estado")} className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500 cursor-pointer hover:text-zinc-700 transition-colors">
-                                    Estado <SortIcon field="estado" />
-                                </th>
-                                <th className="text-right px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
-                                    Acciones
-                                </th>
+                                <th className="px-6 py-5 text-right text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-zinc-100">
-                            {filteredAndSortedItems.length === 0 ? (
+                        <tbody className="divide-y divide-zinc-100 bg-white">
+                            {isLoading ? (
                                 <tr>
-                                    <td colSpan={11} className="text-center py-20">
-                                        <div className="flex flex-col items-center gap-3">
-                                            <div className="h-16 w-16 bg-zinc-50 rounded-full flex items-center justify-center">
-                                                <Search className="h-8 w-8 text-zinc-300" />
-                                            </div>
-                                            <p className="text-zinc-500 font-medium">No se encontraron elementos</p>
-                                            <p className="text-xs text-zinc-400">Intenta ajustando los filtros de búsqueda</p>
+                                    <td colSpan={9} className="py-20 text-center">
+                                        <div className="flex flex-col items-center gap-2">
+                                            <Loader2 className="h-6 w-6 animate-spin text-zinc-300" />
+                                            <span className="text-sm font-medium text-zinc-400">Cargando items...</span>
                                         </div>
                                     </td>
                                 </tr>
+                            ) : filteredAndSortedItems.length === 0 ? (
+                                <tr>
+                                    <td colSpan={9} className="py-20 text-center">
+                                        <p className="font-medium text-zinc-500">No se encontraron items del menu</p>
+                                    </td>
+                                </tr>
                             ) : (
-                                filteredAndSortedItems.map(item => (
-                                    <tr
-                                        key={item.id}
-                                        className="group border-b border-zinc-100 hover:bg-zinc-50/50 transition-all duration-150"
-                                    >
+                                filteredAndSortedItems.map((item) => (
+                                    <tr key={item.id} className="transition-all duration-150 hover:bg-zinc-50/50">
                                         <td className="px-6 py-4">
-                                            <Badge
-                                                variant="secondary"
-                                                className={
-                                                    item.type === 'PRODUCTO'
-                                                        ? "bg-blue-50 text-blue-600 border-none font-bold text-[0.6rem] px-2 py-0.5 rounded-full"
-                                                        : "bg-purple-50 text-purple-600 border-none font-bold text-[0.6rem] px-2 py-0.5 rounded-full"
-                                                }
-                                            >
+                                            <Badge variant="secondary" className={`font-bold ${getTypeBadgeClasses(item.type)}`}>
                                                 {item.type}
                                             </Badge>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex flex-col">
-                                                <span className="font-semibold text-zinc-900 text-sm">{item.nombre}</span>
-                                                {item.descripcion && (
-                                                    <span className="text-[0.7rem] text-zinc-400 line-clamp-1 mt-0.5">{item.descripcion}</span>
-                                                )}
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-100 bg-zinc-50">
+                                                    {item.imagen ? (
+                                                        <img
+                                                            src={item.imagen}
+                                                            alt={item.nombre}
+                                                            className="h-full w-full object-cover"
+                                                            onError={(event) => {
+                                                                event.currentTarget.style.display = "none";
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <ImageIcon className="h-4 w-4 text-zinc-300" />
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-semibold text-zinc-900">{item.nombre}</p>
+                                                    {item.descripcion ? <p className="line-clamp-1 text-[0.7rem] text-zinc-400">{item.descripcion}</p> : null}
+                                                </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            {item.imagen ? (
-                                                <div className="h-12 w-12 rounded-2xl overflow-hidden border border-zinc-100 shadow-sm bg-zinc-50 flex items-center justify-center">
-                                                    <img
-                                                        src={item.imagen}
-                                                        alt={item.nombre}
-                                                        className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                                        onError={(e) => {
-                                                            const target = e.currentTarget;
-                                                            target.style.display = 'none';
-                                                            const parent = target.parentElement;
-                                                            if (parent && !parent.querySelector('svg')) {
-                                                                const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                                                                icon.setAttribute('class', 'h-5 w-5 text-zinc-300');
-                                                                icon.setAttribute('fill', 'none');
-                                                                icon.setAttribute('stroke', 'currentColor');
-                                                                icon.setAttribute('viewBox', '0 0 24 24');
-                                                                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                                                                path.setAttribute('stroke-linecap', 'round');
-                                                                path.setAttribute('stroke-linejoin', 'round');
-                                                                path.setAttribute('stroke-width', '2');
-                                                                path.setAttribute('d', 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z');
-                                                                icon.appendChild(path);
-                                                                parent.appendChild(icon);
-                                                            }
-                                                        }}
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <div className="h-12 w-12 rounded-2xl bg-zinc-50 flex items-center justify-center border border-zinc-100">
-                                                    <ImageIcon className="h-5 w-5 text-zinc-300" />
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-medium text-zinc-500">
-                                            {item.categoria}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="font-bold text-zinc-900 text-sm">${Number(item.precio).toFixed(2)}</span>
-                                        </td>
+                                        <td className="px-6 py-4 text-xs font-medium text-zinc-500">{item.categoria}</td>
+                                        <td className="px-6 py-4 text-sm font-bold text-zinc-900">{formatCurrency(Number(item.precio))}</td>
+                                        <td className="px-6 py-4 text-xs text-zinc-400">{item.costoUnitario ? formatCurrency(Number(item.costoUnitario)) : "-"}</td>
                                         <td className="px-6 py-4">
                                             {item.costoUnitario ? (
-                                                <span className="text-xs text-zinc-400">${Number(item.costoUnitario).toFixed(2)}</span>
-                                            ) : (
-                                                <span className="text-xs text-zinc-300">-</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {item.costoUnitario ? (
-                                                <span className="text-xs font-bold text-zinc-500 bg-zinc-50 px-2 py-1 rounded-md">
+                                                <span className="rounded-md bg-zinc-50 px-2 py-1 text-xs font-bold text-zinc-500">
                                                     {calculateMargin(Number(item.precio), Number(item.costoUnitario)).toFixed(1)}%
                                                 </span>
                                             ) : (
@@ -636,87 +752,57 @@ export default function ProductosPage() {
                                             )}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <Badge variant="outline" className="border-zinc-200 text-zinc-500 font-medium text-[0.6rem] uppercase tracking-tighter px-2 py-0">
+                                            <Badge variant="outline" className="border-zinc-200 text-zinc-500">
                                                 {item.unidad}
                                             </Badge>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className="text-xs text-zinc-500 font-medium">{formatDate(new Date(item.createdAt))}</span>
-                                        </td>
+                                        <td className="px-6 py-4 text-xs font-medium text-zinc-500">{formatDate(item.createdAt)}</td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-2">
-                                                <Badge
-                                                    variant="secondary"
-                                                    className={
-                                                        item.activo
-                                                            ? "bg-emerald-50 text-emerald-600 border-none font-bold text-[0.6rem] px-2 py-0.5 rounded-full"
-                                                            : "bg-red-50 text-red-600 border-none font-bold text-[0.6rem] px-2 py-0.5 rounded-full"
-                                                    }
-                                                >
-                                                    {item.activo ? "ACTIVO" : "INACTIVO"}
+                                                <Badge variant="secondary" className={item.activo ? "bg-emerald-50 text-emerald-600 border-none" : "bg-red-50 text-red-600 border-none"}>
+                                                    {item.activo ? "Activo" : "Inactivo"}
                                                 </Badge>
-                                                {item.type === 'PRODUCTO' && !item.disponible && (
-                                                    <Badge variant="secondary" className="bg-orange-50 text-orange-600 border-none font-bold text-[0.6rem] px-2 py-0.5 rounded-full">
-                                                        AGOTADO
+                                                {item.type === "PRODUCTO" && !item.disponible ? (
+                                                    <Badge variant="secondary" className="border-none bg-orange-50 text-orange-600">
+                                                        Agotado
                                                     </Badge>
-                                                )}
+                                                ) : null}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full hover:bg-zinc-100">
+                                                    <Button variant="ghost" size="sm" className="h-8 w-8 rounded-full p-0 hover:bg-zinc-100">
                                                         <MoreVertical className="h-4 w-4 text-zinc-400" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" className="w-48 rounded-2xl p-2 shadow-xl border-zinc-100">
-                                                    <DropdownMenuItem className="rounded-xl my-0.5">
-                                                        <Link
-                                                            href={item.type === 'PRODUCTO'
-                                                                ? `/admin/dashboard/productos/${item.id}`
-                                                                : `/admin/dashboard/productos/promociones/${item.id}`
-                                                            }
-                                                            className="w-full"
-                                                        >
-                                                            Ver detalles
+                                                <DropdownMenuContent align="end" className="w-48 rounded-2xl border-zinc-100 p-2 shadow-xl">
+                                                    <DropdownMenuItem asChild className="my-0.5 rounded-xl">
+                                                        <Link href={item.type === "PRODUCTO" ? `/admin/dashboard/productos/${item.id}` : `/admin/dashboard/productos/promociones/${item.id}`}>
+                                                            Ver detalle
                                                         </Link>
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem className="rounded-xl my-0.5">
+                                                    <DropdownMenuItem asChild className="my-0.5 rounded-xl">
                                                         <Link
-                                                            href={item.type === 'PRODUCTO'
-                                                                ? `/admin/dashboard/productos/${item.id}/editar`
-                                                                : `/admin/dashboard/productos/promociones/${item.id}/editar`
+                                                            href={
+                                                                item.type === "PRODUCTO"
+                                                                    ? `/admin/dashboard/productos/${item.id}/editar`
+                                                                    : `/admin/dashboard/productos/promociones/${item.id}/editar`
                                                             }
-                                                            className="w-full"
                                                         >
                                                             Editar
                                                         </Link>
                                                     </DropdownMenuItem>
-                                                    {item.type === 'PRODUCTO' && (
-                                                        <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => handleDuplicate(item)}>Duplicar</DropdownMenuItem>
-                                                    )}
-                                                    <DropdownMenuSeparator className="bg-zinc-50" />
-                                                    {item.type === 'PRODUCTO' && (
-                                                        <DropdownMenuItem
-                                                            className="rounded-xl my-0.5"
-                                                            onClick={async () => {
-                                                                setIsSubmitting(true);
-                                                                const res = await toggleProductAvailability(item.id, item.disponible);
-                                                                if (res.success) {
-                                                                    toast.success(item.disponible ? "Producto marcado como agotado" : "Producto marcado como disponible");
-                                                                    refreshData();
-                                                                } else {
-                                                                    toast.error(res.error || "Error al actualizar");
-                                                                }
-                                                                setIsSubmitting(false);
-                                                            }}
-                                                        >
-                                                            {item.disponible ? "Marcar como agotado" : "Marcar como disponible"}
+                                                    {item.type === "PRODUCTO" ? <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => void handleDuplicate(item)}>Duplicar</DropdownMenuItem> : null}
+                                                    {item.type === "PRODUCTO" ? (
+                                                        <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => void handleToggleAvailability(item)}>
+                                                            {item.disponible ? "Marcar agotado" : "Marcar disponible"}
                                                         </DropdownMenuItem>
-                                                    )}
+                                                    ) : null}
+                                                    <DropdownMenuSeparator className="bg-zinc-100" />
                                                     <DropdownMenuItem
-                                                        className="rounded-xl my-0.5 text-red-600 hover:bg-red-50 focus:bg-red-50 focus:text-red-700"
-                                                        onClick={() => handleDelete(item)}
+                                                        className="my-0.5 rounded-xl text-red-600 hover:bg-red-50 focus:bg-red-50 focus:text-red-700"
+                                                        onClick={() => void handleDelete(item)}
                                                     >
                                                         Eliminar
                                                     </DropdownMenuItem>
@@ -729,7 +815,245 @@ export default function ProductosPage() {
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </section>
+
+            <ResponsivePanel
+                open={filtersOpen}
+                onOpenChange={setFiltersOpen}
+                title="Filtros y orden"
+                description="Refina la vista del menu desde mobile."
+                mobileSide="bottom"
+                desktopMode="sheet"
+                contentClassName="sm:max-w-lg"
+            >
+                <div className="space-y-6">
+                    <section className="space-y-3">
+                        <h3 className="text-sm font-black uppercase tracking-[0.18em] text-zinc-400">Estado</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                            {(["todos", "activos", "disponibles", "agotados"] as StatusFilter[]).map((status) => (
+                                <button
+                                    key={status}
+                                    type="button"
+                                    onClick={() => setStatusFilter(status)}
+                                    className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                                        statusFilter === status ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                    }`}
+                                >
+                                    {getStatusLabel(status)}
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+
+                    <section className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                            <h3 className="text-sm font-black uppercase tracking-[0.18em] text-zinc-400">Categorias</h3>
+                            {selectedCategories.length > 0 ? (
+                                <button type="button" onClick={() => setSelectedCategories([])} className="text-xs font-semibold text-zinc-500 hover:text-zinc-700">
+                                    Limpiar
+                                </button>
+                            ) : null}
+                        </div>
+                        <div className="max-h-56 space-y-2 overflow-y-auto">
+                            {categories.map((category) => {
+                                const active = selectedCategories.includes(category.id);
+                                return (
+                                    <button
+                                        key={category.id}
+                                        type="button"
+                                        onClick={() => toggleCategorySelection(category.id)}
+                                        className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                                            active ? "bg-orange-500 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                        }`}
+                                    >
+                                        <span className="truncate">{category.nombre}</span>
+                                        {active ? <span className="text-xs font-black">ON</span> : null}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </section>
+
+                    <section className="space-y-3">
+                        <h3 className="text-sm font-black uppercase tracking-[0.18em] text-zinc-400">Orden</h3>
+                        <div className="grid grid-cols-1 gap-2">
+                            {SORT_OPTIONS.map((option) => (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => setSortField(option.value)}
+                                    className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                                        sortField === option.value ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                    }`}
+                                >
+                                    {option.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setSortDirection("asc")}
+                                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
+                                    sortDirection === "asc" ? "bg-orange-500 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                }`}
+                            >
+                                Ascendente
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSortDirection("desc")}
+                                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
+                                    sortDirection === "desc" ? "bg-orange-500 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                }`}
+                            >
+                                Descendente
+                            </button>
+                        </div>
+                    </section>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                        <Button type="button" variant="outline" className="h-11 rounded-2xl" onClick={clearFilters}>
+                            Limpiar
+                        </Button>
+                        <Button type="button" className="h-11 rounded-2xl bg-zinc-900 hover:bg-zinc-800" onClick={() => setFiltersOpen(false)}>
+                            Ver resultados
+                        </Button>
+                    </div>
+                </div>
+            </ResponsivePanel>
+
+            <ResponsivePanel
+                open={selectedItem != null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setSelectedItem(null);
+                    }
+                }}
+                title={selectedItem?.nombre || "Detalle del item"}
+                description="Resumen del producto o promocion seleccionada."
+                mobileSide="bottom"
+                desktopMode="sheet"
+                contentClassName="sm:max-w-lg"
+            >
+                {selectedItem ? (
+                    <div className="space-y-5">
+                        <div className="flex items-start gap-4">
+                            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-[1.5rem] border border-zinc-100 bg-zinc-50">
+                                {selectedItem.imagen ? (
+                                    <img
+                                        src={selectedItem.imagen}
+                                        alt={selectedItem.nombre}
+                                        className="h-full w-full object-cover"
+                                        onError={(event) => {
+                                            event.currentTarget.style.display = "none";
+                                        }}
+                                    />
+                                ) : (
+                                    <ImageIcon className="h-6 w-6 text-zinc-300" />
+                                )}
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                                <div className="mb-2 flex flex-wrap gap-2">
+                                    <Badge variant="secondary" className={`font-bold ${getTypeBadgeClasses(selectedItem.type)}`}>
+                                        {selectedItem.type}
+                                    </Badge>
+                                    <Badge variant="outline" className="border-zinc-200 text-zinc-500">
+                                        {selectedItem.categoria}
+                                    </Badge>
+                                </div>
+                                <p className="text-2xl font-black tracking-tight text-zinc-900">{formatCurrency(Number(selectedItem.precio))}</p>
+                                {selectedItem.descripcion ? <p className="mt-2 text-sm text-zinc-500">{selectedItem.descripcion}</p> : null}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="rounded-[1.25rem] bg-zinc-50 p-4">
+                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Costo</p>
+                                <p className="mt-1 text-sm font-bold text-zinc-900">
+                                    {selectedItem.costoUnitario ? formatCurrency(Number(selectedItem.costoUnitario)) : "-"}
+                                </p>
+                            </div>
+                            <div className="rounded-[1.25rem] bg-zinc-50 p-4">
+                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Margen</p>
+                                <p className="mt-1 text-sm font-bold text-zinc-900">
+                                    {selectedItem.costoUnitario ? `${calculateMargin(Number(selectedItem.precio), Number(selectedItem.costoUnitario)).toFixed(1)}%` : "-"}
+                                </p>
+                            </div>
+                            <div className="rounded-[1.25rem] bg-zinc-50 p-4">
+                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Unidad</p>
+                                <p className="mt-1 text-sm font-bold text-zinc-900">{selectedItem.unidad}</p>
+                            </div>
+                            <div className="rounded-[1.25rem] bg-zinc-50 p-4">
+                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Alta</p>
+                                <p className="mt-1 text-sm font-bold text-zinc-900">{formatDate(selectedItem.createdAt)}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                            <Badge variant="secondary" className={selectedItem.activo ? "bg-emerald-50 text-emerald-600 border-none" : "bg-red-50 text-red-600 border-none"}>
+                                {selectedItem.activo ? "Activo" : "Inactivo"}
+                            </Badge>
+                            {selectedItem.type === "PRODUCTO" ? (
+                                <Badge variant="secondary" className={selectedItem.disponible ? "bg-blue-50 text-blue-600 border-none" : "bg-orange-50 text-orange-600 border-none"}>
+                                    {selectedItem.disponible ? "Disponible" : "Agotado"}
+                                </Badge>
+                            ) : null}
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3">
+                            <Button asChild className="h-11 rounded-2xl bg-zinc-900 hover:bg-zinc-800">
+                                <Link
+                                    href={
+                                        selectedItem.type === "PRODUCTO"
+                                            ? `/admin/dashboard/productos/${selectedItem.id}`
+                                            : `/admin/dashboard/productos/promociones/${selectedItem.id}`
+                                    }
+                                >
+                                    Ver detalle completo
+                                </Link>
+                            </Button>
+                            <Button asChild variant="outline" className="h-11 rounded-2xl border-zinc-200">
+                                <Link
+                                    href={
+                                        selectedItem.type === "PRODUCTO"
+                                            ? `/admin/dashboard/productos/${selectedItem.id}/editar`
+                                            : `/admin/dashboard/productos/promociones/${selectedItem.id}/editar`
+                                    }
+                                >
+                                    <Pencil className="mr-2 h-4 w-4" />
+                                    Editar
+                                </Link>
+                            </Button>
+                            {selectedItem.type === "PRODUCTO" ? (
+                                <Button type="button" variant="outline" className="h-11 rounded-2xl border-zinc-200" disabled={isSubmitting} onClick={() => void handleDuplicate(selectedItem)}>
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Duplicar
+                                </Button>
+                            ) : null}
+                            {selectedItem.type === "PRODUCTO" ? (
+                                <Button type="button" variant="outline" className="h-11 rounded-2xl border-zinc-200" disabled={isSubmitting} onClick={() => void handleToggleAvailability(selectedItem)}>
+                                    {selectedItem.disponible ? "Marcar agotado" : "Marcar disponible"}
+                                </Button>
+                            ) : null}
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="h-11 rounded-2xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                onClick={() => void handleDelete(selectedItem)}
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Eliminar
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
+            </ResponsivePanel>
+
+            <CreateCategorySheet open={isCategorySheetOpen} onOpenChange={setIsCategorySheetOpen} onSuccess={() => void refreshData()} />
+
+            <div aria-hidden className="rounded-[1.75rem] bg-white/55 md:hidden" style={{ minHeight: "calc(var(--admin-mobile-nav-height) - 0.5rem)" }} />
         </div>
     );
 }

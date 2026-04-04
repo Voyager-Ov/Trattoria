@@ -3,7 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ChevronRight, LogOut } from "lucide-react"
+import { ChevronRight, LogOut, PanelLeft } from "lucide-react"
 import { useState } from "react"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -21,9 +21,7 @@ import {
     SidebarMenuSub,
     SidebarMenuSubButton,
     SidebarMenuSubItem,
-    SidebarRail,
     SidebarSeparator,
-    SidebarTrigger,
     useSidebar,
 } from "@/components/ui/sidebar"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -37,7 +35,7 @@ interface SidebarProps {
 
 function getMenuButtonClass(item: AdminNavItem, isActive: boolean) {
     return cn(
-        "relative h-11 rounded-xl px-2.5 text-sm font-medium text-zinc-600 shadow-none transition-all duration-200",
+        "relative h-11 min-w-0 rounded-xl px-2.5 text-sm font-medium text-zinc-600 shadow-none transition-all duration-200 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0",
         !isActive && "hover:bg-zinc-50 hover:text-zinc-950",
         isActive && cn("border shadow-sm", item.tone.softBg, item.tone.softBorder, item.tone.softText)
     )
@@ -66,7 +64,7 @@ function AdminSidebarItem({ item, pathname }: { item: AdminNavItem; pathname: st
                     >
                         <item.icon className="h-4.5 w-4.5" />
                     </span>
-                    <span className="truncate">{item.name}</span>
+                    <span className="truncate group-data-[collapsible=icon]:hidden">{item.name}</span>
                 </Link>
             </SidebarMenuButton>
         </SidebarMenuItem>
@@ -77,7 +75,7 @@ export function AdminSidebar({ className }: SidebarProps) {
     const pathname = usePathname()
     const { logout } = useAuth()
     const isMobile = useIsMobile()
-    const { state } = useSidebar()
+    const { state, toggleSidebar } = useSidebar()
     const [manualExpandedKey, setManualExpandedKey] = useState<string | null>(null)
 
     if (isMobile) {
@@ -90,7 +88,7 @@ export function AdminSidebar({ className }: SidebarProps) {
         <Sidebar collapsible="icon" variant="inset" className={cn("transition-all duration-300", className)}>
             {/* ─── HEADER ─── */}
             <SidebarHeader className="border-b border-sidebar-border/70 p-2">
-                <div className="flex items-center justify-between gap-2 overflow-hidden px-1">
+                <div className="flex items-center gap-2 overflow-hidden px-1">
                     <Link
                         href="/admin/dashboard"
                         className={cn(
@@ -114,17 +112,7 @@ export function AdminSidebar({ className }: SidebarProps) {
                             </div>
                         )}
                     </Link>
-
-                    {!isCollapsed && (
-                        <SidebarTrigger className="h-8 w-8 shrink-0 rounded-lg border-zinc-200 bg-white shadow-sm hover:bg-zinc-50 hover:text-zinc-950" />
-                    )}
                 </div>
-
-                {isCollapsed && (
-                    <div className="flex justify-center pt-2">
-                        <SidebarTrigger className="h-8 w-8 rounded-lg border-zinc-200 bg-white shadow-sm hover:bg-zinc-50 hover:text-zinc-950" />
-                    </div>
-                )}
             </SidebarHeader>
 
             {/* ─── CONTENT ─── */}
@@ -147,6 +135,19 @@ export function AdminSidebar({ className }: SidebarProps) {
 
                     <SidebarGroupContent>
                         <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    onClick={toggleSidebar}
+                                    tooltip={isCollapsed ? "Expandir sidebar" : "Colapsar sidebar"}
+                                    className="relative h-11 min-w-0 rounded-xl border border-zinc-200 bg-white px-2.5 text-sm font-medium text-zinc-600 shadow-sm transition-all duration-200 hover:bg-zinc-50 hover:text-zinc-950 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+                                >
+                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-500">
+                                        <PanelLeft className="h-4.5 w-4.5" />
+                                    </span>
+                                    <span className="truncate group-data-[collapsible=icon]:hidden">{isCollapsed ? "Expandir sidebar" : "Colapsar sidebar"}</span>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
+
                             {ADMIN_NAV_ITEMS.map((item) => {
                                 if (!item.subItems?.length) {
                                     return <AdminSidebarItem key={item.key} item={item} pathname={pathname} />
@@ -189,7 +190,7 @@ export function AdminSidebar({ className }: SidebarProps) {
                                                     >
                                                         <item.icon className="h-4.5 w-4.5" />
                                                     </span>
-                                                    <span className="truncate">{item.name}</span>
+                                                    <span className="truncate group-data-[collapsible=icon]:hidden">{item.name}</span>
                                                 </Link>
                                             </SidebarMenuButton>
 
@@ -277,12 +278,12 @@ export function AdminSidebar({ className }: SidebarProps) {
                         <SidebarMenuButton
                             onClick={() => logout()}
                             tooltip="Cerrar sesión"
-                            className="h-11 rounded-xl border border-red-100 bg-red-50 px-2.5 text-sm font-medium text-red-600 transition-colors duration-200 hover:bg-red-100 hover:text-red-700"
+                            className="h-11 min-w-0 rounded-xl border border-red-100 bg-red-50 px-2.5 text-sm font-medium text-red-600 transition-colors duration-200 hover:bg-red-100 hover:text-red-700 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
                         >
                             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600">
                                 <LogOut className="h-4.5 w-4.5" />
                             </span>
-                            <span className="truncate">Cerrar sesión</span>
+                            <span className="truncate group-data-[collapsible=icon]:hidden">Cerrar sesión</span>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>

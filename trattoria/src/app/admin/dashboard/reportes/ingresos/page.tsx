@@ -1,18 +1,33 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { BarChart3, Calendar, TrendingUp, DollarSign, CreditCard, Search, ChevronDown, FileText } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { getReportsData, FinancialSummary } from "../actions";
-import { toast } from "sonner";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import {
+    Calendar,
+    ChevronDown,
+    CreditCard,
+    DollarSign,
+    FileText,
+    ReceiptText,
+    Search,
+    TrendingUp,
+    UserRound,
+} from "lucide-react";
+import { toast } from "sonner";
 
+import { getReportsData, type FinancialSummary } from "../actions";
+import { ReportSurface } from "../reportes-ui";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { ResponsivePanel } from "@/components/ui/responsive-panel";
 
-// --- Types ---
+interface TransactionItem {
+    cantidad: number;
+}
+
 interface Transaction {
     id: string;
     numero: string;
@@ -21,50 +36,65 @@ interface Transaction {
     total: number;
     metodoPago: string;
     estado: string;
-    items: { cantidad: number }[];
+    items: TransactionItem[];
 }
 
-interface MetricCardProps {
+type RangePreset = "today" | "week" | "month" | "all";
+
+function MetricCard({
+    title,
+    value,
+    subValue,
+    icon: Icon,
+    accent,
+}: {
     title: string;
-    value: string | number;
+    value: string;
     subValue?: string;
-    headerColor: string;
-    icon?: React.ReactNode;
-}
-
-// --- Components ---
-function MetricCard({ title, value, subValue, headerColor, icon }: MetricCardProps) {
+    icon: React.ComponentType<{ className?: string }>;
+    accent: string;
+}) {
     return (
-        <div className="bg-white rounded-[2rem] border border-zinc-200 shadow-sm overflow-hidden flex flex-col h-full group hover:shadow-md transition-shadow duration-300">
-            <div className={`h-12 ${headerColor} flex items-center px-6 text-white font-medium text-sm`}>
+        <div className="overflow-hidden rounded-[1.75rem] border border-zinc-200 bg-white shadow-sm md:rounded-[2rem]">
+            <div className={`flex items-center justify-between px-4 py-3 text-sm font-semibold text-white md:px-5 ${accent}`}>
                 {title}
-                {icon && <div className="ml-auto opacity-80">{icon}</div>}
+                <Icon className="h-5 w-5 text-white/80" />
             </div>
-            <div className="p-6 flex flex-col justify-between flex-grow">
-                <div className="flex flex-col gap-1">
-                    <span className="text-3xl font-bold text-zinc-900 tracking-tight">{value}</span>
-                    {subValue && <span className="text-sm text-zinc-500 font-medium">{subValue}</span>}
-                </div>
+            <div className="px-4 py-5 md:px-6 md:py-6">
+                <p className="break-words text-2xl font-black tracking-tight text-zinc-900 md:text-3xl">{value}</p>
+                {subValue ? <p className="mt-1 text-sm text-zinc-500">{subValue}</p> : null}
             </div>
         </div>
     );
 }
 
-// --- Main Component ---
-export default function IngresosPage() {
+function formatCurrency(amount: number) {
+    return new Intl.NumberFormat("es-AR", {
+        style: "currency",
+        currency: "ARS",
+        maximumFractionDigits: 0,
+    }).format(amount);
+}
 
+function formatDate(dateStr: string) {
+    return format(new Date(dateStr), "dd MMM yyyy, HH:mm", { locale: es });
+}
+
+export default function IngresosPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [dateRange, setDateRange] = useState<"today" | "week" | "month" | "all">("month");
+    const [dateRange, setDateRange] = useState<RangePreset>("month");
     const [searchQuery, setSearchQuery] = useState("");
+    const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
     const fetchData = useCallback(async () => {
         setIsLoading(true);
+
         try {
             const now = new Date();
             let startDate: Date | undefined;
-            let endDate: Date = new Date();
+            let endDate: Date | undefined = new Date();
 
             if (dateRange === "today") {
                 startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
@@ -77,191 +107,242 @@ export default function IngresosPage() {
                 startDate = new Date(now);
                 startDate.setDate(startDate.getDate() - 30);
                 startDate.setHours(0, 0, 0, 0);
+            } else {
+                endDate = undefined;
             }
-            // "all": no startDate, fetches everything
 
             const res = await getReportsData(startDate, endDate);
-
             if (res.success && res.data) {
                 setSummary(res.data.summary);
                 setTransactions(res.data.recentTransactions as Transaction[]);
             } else {
                 toast.error(res.error || "Error al cargar datos");
+                setSummary(null);
+                setTransactions([]);
             }
-        } catch (error) {
-            console.error("Error fetching data:", error);
-            toast.error("Error de conexión");
+        } catch {
+            toast.error("Error de conexion");
+            setSummary(null);
+            setTransactions([]);
         } finally {
             setIsLoading(false);
         }
     }, [dateRange]);
 
     useEffect(() => {
-        fetchData();
+        void fetchData();
     }, [fetchData]);
 
-    const filteredTransactions = transactions.filter(t =>
-        t.numero.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.clienteNombre?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.metodoPago?.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredTransactions = useMemo(
+        () =>
+            transactions.filter((transaction) => {
+                const term = searchQuery.toLowerCase();
+                return (
+                    transaction.numero.toLowerCase().includes(term) ||
+                    transaction.clienteNombre?.toLowerCase().includes(term) ||
+                    transaction.metodoPago?.toLowerCase().includes(term) ||
+                    transaction.estado?.toLowerCase().includes(term)
+                );
+            }),
+        [searchQuery, transactions]
     );
 
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(amount);
-    };
-
-    const formatDate = (dateStr: string) => {
-        return format(new Date(dateStr), "dd MMM yyyy, HH:mm", { locale: es });
-    };
-
+    const currentRangeLabel =
+        dateRange === "today" ? "Hoy" : dateRange === "week" ? "Ultimos 7 dias" : dateRange === "month" ? "Ultimos 30 dias" : "Historico completo";
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
-                            <TrendingUp size={20} />
+        <div className="app-page-safe-bottom space-y-5 pb-6 md:space-y-8 md:pb-10">
+            <section className="space-y-4">
+                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                    <div>
+                        <div className="mb-1 flex items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
+                                <TrendingUp className="h-5 w-5" />
+                            </div>
+                            <h2 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-3xl">Reporte de ingresos</h2>
                         </div>
-                        <h2 className="text-3xl font-bold tracking-tight text-zinc-900">Reporte de Ingresos</h2>
+                        <p className="text-sm font-medium text-zinc-500 md:text-base">Seguimiento de ventas cobradas y transacciones recientes.</p>
                     </div>
-                    <p className="text-zinc-500 font-medium">Seguimiento de ventas y transacciones recientes.</p>
-                </div>
 
-                <div className="flex items-center gap-3">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="h-10 rounded-full px-5 border-zinc-200 hover:bg-zinc-50 text-zinc-600 font-medium bg-white">
-                                <Calendar className="mr-2 h-4 w-4 text-zinc-400" />
-                                {dateRange === "today" ? "Hoy" :
-                                    dateRange === "week" ? "Últimos 7 días" :
-                                        dateRange === "month" ? "Últimos 30 días" : "Histórico completo"}
-                                <ChevronDown className="ml-2 h-3 w-3 opacity-50" />
+                            <Button
+                                variant="outline"
+                                className="h-11 w-full justify-between rounded-2xl border-zinc-200 bg-white px-4 font-medium text-zinc-600 shadow-sm md:w-auto md:rounded-full md:px-5"
+                            >
+                                <span className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4 text-zinc-400" />
+                                    {currentRangeLabel}
+                                </span>
+                                <ChevronDown className="h-3 w-3 opacity-50" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100">
-                            <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setDateRange("today")}>Hoy</DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setDateRange("week")}>Últimos 7 días</DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setDateRange("month")}>Últimos 30 días</DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setDateRange("all")}>Histórico completo</DropdownMenuItem>
+                        <DropdownMenuContent align="end" className="w-56 rounded-2xl border-zinc-100 p-2 shadow-xl">
+                            <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setDateRange("today")}>Hoy</DropdownMenuItem>
+                            <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setDateRange("week")}>Ultimos 7 dias</DropdownMenuItem>
+                            <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setDateRange("month")}>Ultimos 30 dias</DropdownMenuItem>
+                            <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setDateRange("all")}>Historico completo</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
-            </div>
+            </section>
 
-            {/* Metric Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 md:gap-6">
                 <MetricCard
-                    title="Ingresos Totales"
+                    title="Ingresos totales"
                     value={isLoading ? "..." : formatCurrency(summary?.totalRevenue || 0)}
-                    subValue={isLoading ? "" : `${summary?.totalOrders} órdenes`}
-                    headerColor="bg-zinc-900"
-                    icon={<DollarSign className="h-5 w-5" />}
+                    subValue={isLoading ? undefined : `${summary?.totalOrders || 0} ordenes`}
+                    accent="bg-zinc-900"
+                    icon={DollarSign}
                 />
                 <MetricCard
-                    title="Ticket Promedio"
+                    title="Ticket promedio"
                     value={isLoading ? "..." : formatCurrency(summary?.averageTicket || 0)}
-                    headerColor="bg-blue-600"
-                    icon={<TrendingUp className="h-5 w-5" />}
+                    accent="bg-blue-600"
+                    icon={TrendingUp}
                 />
                 <MetricCard
-                    title="Ventas Efectivo"
-                    value={isLoading ? "..." : formatCurrency(summary?.ordersByPaymentMethod['EFECTIVO'] || 0)}
-                    headerColor="bg-emerald-500"
-                    icon={<DollarSign className="h-5 w-5" />}
+                    title="Ventas efectivo"
+                    value={isLoading ? "..." : formatCurrency(summary?.ordersByPaymentMethod?.EFECTIVO || 0)}
+                    accent="bg-emerald-500"
+                    icon={DollarSign}
                 />
                 <MetricCard
-                    title="Ventas Digitales"
-                    value={isLoading ? "..." : formatCurrency((summary?.totalRevenue || 0) - (summary?.ordersByPaymentMethod['EFECTIVO'] || 0))}
-                    headerColor="bg-violet-500"
-                    icon={<CreditCard className="h-5 w-5" />}
+                    title="Ventas digitales"
+                    value={
+                        isLoading
+                            ? "..."
+                            : formatCurrency(Math.max(0, (summary?.totalRevenue || 0) - (summary?.ordersByPaymentMethod?.EFECTIVO || 0)))
+                    }
+                    accent="bg-violet-500"
+                    icon={CreditCard}
                 />
             </div>
 
-            {/* Transactions Section */}
-            <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-xl font-bold text-zinc-900">Transacciones Recientes</h3>
-                    <div className="relative w-64 md:w-80 group">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 group-focus-within:text-zinc-600 transition-colors" />
+            <ReportSurface title="Transacciones recientes" description="Lista filtrable de ingresos cobrados.">
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="relative w-full md:w-80">
+                        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                         <Input
-                            placeholder="Buscar orden, cliente..."
-                            className="pl-11 h-10 bg-white border-zinc-200 rounded-full focus-visible:ring-zinc-400 transition-all text-sm shadow-sm"
+                            placeholder="Buscar orden, cliente o metodo..."
+                            className="h-12 rounded-[2rem] border-zinc-200 bg-white pl-11 text-sm shadow-sm"
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(event) => setSearchQuery(event.target.value)}
                         />
                     </div>
+                    <p className="text-sm font-medium text-zinc-400">{filteredTransactions.length} registros</p>
                 </div>
 
-                <div className="bg-white rounded-[2rem] border border-zinc-200 shadow-sm overflow-hidden min-h-[400px]">
+                <div className="space-y-3 md:hidden">
+                    {isLoading ? (
+                        Array.from({ length: 4 }).map((_, index) => (
+                            <div key={index} className="animate-pulse rounded-[1.75rem] border border-zinc-200 bg-white p-4 shadow-sm">
+                                <div className="h-4 w-24 rounded bg-zinc-100" />
+                                <div className="mt-3 h-20 rounded-2xl bg-zinc-50" />
+                            </div>
+                        ))
+                    ) : filteredTransactions.length === 0 ? (
+                        <div className="rounded-[1.75rem] border border-zinc-200 bg-white px-6 py-12 text-center">
+                            <p className="text-sm font-semibold text-zinc-500">No se encontraron transacciones</p>
+                        </div>
+                    ) : (
+                        filteredTransactions.map((transaction) => {
+                            const itemCount = transaction.items.reduce((sum, item) => sum + item.cantidad, 0);
+                            return (
+                                <button
+                                    key={transaction.id}
+                                    type="button"
+                                    onClick={() => setSelectedTransaction(transaction)}
+                                    className="w-full rounded-[1.75rem] border border-zinc-200 bg-white p-4 text-left shadow-sm transition-colors hover:bg-zinc-50"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-base font-black tracking-tight text-zinc-900">{transaction.numero}</p>
+                                            <p className="truncate text-sm text-zinc-500">{transaction.clienteNombre || "Cliente final"}</p>
+                                        </div>
+                                        <p className="shrink-0 text-base font-black text-zinc-900">{formatCurrency(transaction.total)}</p>
+                                    </div>
+
+                                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                                        <div>
+                                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Fecha</p>
+                                            <p className="mt-1 text-zinc-700">{formatDate(transaction.recibidoEn)}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Metodo</p>
+                                            <p className="mt-1 text-zinc-700">{transaction.metodoPago || "N/A"}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                                        <Badge variant="secondary" className="border-none bg-zinc-100 text-zinc-600">
+                                            {transaction.estado}
+                                        </Badge>
+                                        <Badge variant="outline" className="border-zinc-200 bg-zinc-50 text-zinc-500">
+                                            {itemCount} items
+                                        </Badge>
+                                    </div>
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
+
+                <div className="hidden overflow-hidden rounded-[1.75rem] border border-zinc-200 md:block">
                     <div className="overflow-x-auto">
                         <table className="w-full">
-                            <thead className="bg-zinc-50/50 border-b border-zinc-100">
+                            <thead className="border-b border-zinc-100 bg-zinc-50/60">
                                 <tr>
-                                    <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">Orden</th>
-                                    <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">Fecha</th>
-                                    <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">Cliente</th>
-                                    <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">Estado</th>
-                                    <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">Método Pago</th>
-                                    <th className="text-right px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">Total</th>
+                                    <th className="px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500">Orden</th>
+                                    <th className="px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500">Fecha</th>
+                                    <th className="px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500">Cliente</th>
+                                    <th className="px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500">Estado</th>
+                                    <th className="px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500">Metodo pago</th>
+                                    <th className="px-6 py-5 text-right text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500">Total</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-zinc-100">
+                            <tbody className="divide-y divide-zinc-100 bg-white">
                                 {isLoading ? (
                                     <tr>
-                                        <td colSpan={6} className="text-center py-20">
+                                        <td colSpan={6} className="py-20 text-center">
                                             <div className="flex flex-col items-center gap-2">
-                                                <div className="h-6 w-6 border-2 border-zinc-200 border-t-zinc-900 rounded-full animate-spin"></div>
-                                                <span className="text-sm text-zinc-400 font-medium">Cargando datos...</span>
+                                                <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900" />
+                                                <span className="text-sm font-medium text-zinc-400">Cargando datos...</span>
                                             </div>
                                         </td>
                                     </tr>
                                 ) : filteredTransactions.length === 0 ? (
                                     <tr>
-                                        <td colSpan={6} className="text-center py-20">
+                                        <td colSpan={6} className="py-20 text-center">
                                             <div className="flex flex-col items-center gap-3">
-                                                <div className="h-16 w-16 bg-zinc-50 rounded-full flex items-center justify-center">
+                                                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-50">
                                                     <FileText className="h-8 w-8 text-zinc-300" />
                                                 </div>
-                                                <p className="text-zinc-500 font-medium">No se encontraron transacciones</p>
+                                                <p className="font-medium text-zinc-500">No se encontraron transacciones</p>
                                             </div>
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredTransactions.map((tx) => (
-                                        <tr key={tx.id} className="group border-b border-zinc-100 hover:bg-zinc-50/50 transition-all duration-150">
+                                    filteredTransactions.map((transaction) => (
+                                        <tr
+                                            key={transaction.id}
+                                            className="cursor-pointer border-b border-zinc-100 transition-all duration-150 hover:bg-zinc-50/50"
+                                            onClick={() => setSelectedTransaction(transaction)}
+                                        >
+                                            <td className="px-6 py-4 text-sm font-bold text-zinc-900">{transaction.numero}</td>
+                                            <td className="whitespace-nowrap px-6 py-4 text-xs font-medium capitalize text-zinc-500">{formatDate(transaction.recibidoEn)}</td>
+                                            <td className="px-6 py-4 text-sm font-semibold text-zinc-700">{transaction.clienteNombre || "Cliente final"}</td>
                                             <td className="px-6 py-4">
-                                                <span className="font-bold text-zinc-900 text-sm">{tx.numero}</span>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className="text-xs text-zinc-500 font-medium capitalize">{formatDate(tx.recibidoEn)}</span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className="font-semibold text-zinc-700 text-sm">{tx.clienteNombre || "Cliente Final"}</span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <Badge
-                                                    variant="secondary"
-                                                    className={`
-                                                        border-none font-bold text-[0.6rem] px-2 py-0.5 rounded-full
-                                                        ${tx.estado === 'FINALIZADO' ? 'bg-emerald-50 text-emerald-600' :
-                                                            tx.estado === 'CANCELADO' ? 'bg-red-50 text-red-600' :
-                                                                tx.estado === 'PENDIENTE' ? 'bg-amber-50 text-amber-600' :
-                                                                    'bg-blue-50 text-blue-600'}
-                                                    `}
-                                                >
-                                                    {tx.estado}
+                                                <Badge variant="secondary" className="border-none bg-zinc-100 text-zinc-600">
+                                                    {transaction.estado}
                                                 </Badge>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <Badge variant="outline" className="border-zinc-200 text-zinc-500 font-medium text-[0.6rem] uppercase tracking-tighter px-2 py-0">
-                                                    {tx.metodoPago || "N/A"}
+                                                <Badge variant="outline" className="border-zinc-200 text-zinc-500">
+                                                    {transaction.metodoPago || "N/A"}
                                                 </Badge>
                                             </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className="font-bold text-zinc-900 text-sm">{formatCurrency(tx.total)}</span>
-                                            </td>
+                                            <td className="px-6 py-4 text-right text-sm font-bold text-zinc-900">{formatCurrency(transaction.total)}</td>
                                         </tr>
                                     ))
                                 )}
@@ -269,7 +350,73 @@ export default function IngresosPage() {
                         </table>
                     </div>
                 </div>
-            </div>
+            </ReportSurface>
+
+            <ResponsivePanel
+                open={selectedTransaction != null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setSelectedTransaction(null);
+                    }
+                }}
+                title={selectedTransaction?.numero || "Detalle de ingreso"}
+                description="Resumen completo de la transaccion seleccionada."
+                mobileSide="bottom"
+                desktopMode="sheet"
+                contentClassName="sm:max-w-lg"
+            >
+                {selectedTransaction ? (
+                    <div className="space-y-5">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="rounded-[1.25rem] bg-zinc-50 p-4">
+                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Monto</p>
+                                <p className="mt-1 text-lg font-black text-zinc-900">{formatCurrency(selectedTransaction.total)}</p>
+                            </div>
+                            <div className="rounded-[1.25rem] bg-zinc-50 p-4">
+                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Items</p>
+                                <p className="mt-1 text-lg font-black text-zinc-900">
+                                    {selectedTransaction.items.reduce((sum, item) => sum + item.cantidad, 0)}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3 rounded-[1.4rem] border border-zinc-200 bg-white p-4">
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
+                                    <ReceiptText className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Fecha</p>
+                                    <p className="mt-1 font-semibold text-zinc-800">{formatDate(selectedTransaction.recibidoEn)}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600">
+                                    <UserRound className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Cliente</p>
+                                    <p className="mt-1 font-semibold text-zinc-800">{selectedTransaction.clienteNombre || "Cliente final"}</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Estado</p>
+                                    <p className="mt-1 font-semibold text-zinc-800">{selectedTransaction.estado}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Metodo</p>
+                                    <p className="mt-1 font-semibold text-zinc-800">{selectedTransaction.metodoPago || "N/A"}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+            </ResponsivePanel>
+
+            <div aria-hidden className="rounded-[1.75rem] bg-white/55 md:hidden" style={{ minHeight: "calc(var(--admin-mobile-nav-height) - 0.5rem)" }} />
         </div>
     );
 }

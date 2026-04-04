@@ -1,27 +1,33 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { CategoriaEgreso } from "@prisma/client";
 import {
-    Sheet,
-    SheetContent,
-    SheetHeader,
-    SheetTitle,
-    SheetDescription,
-    SheetFooter
-} from "@/components/ui/sheet";
+    Calendar,
+    CreditCard,
+    DollarSign,
+    FileText,
+    Home,
+    Loader2,
+    Megaphone,
+    MoreHorizontal,
+    Receipt,
+    Save,
+    ShoppingCart,
+    TrendingDown,
+    Users,
+    Wrench,
+    Zap,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { createEgreso, updateEgreso } from "@/app/actions/egresoActions";
+import { getConfigs } from "@/app/actions/configActions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ResponsivePanel } from "@/components/ui/responsive-panel";
 import { Textarea } from "@/components/ui/textarea";
-import { CategoriaEgreso } from "@prisma/client";
-import { createEgreso, updateEgreso } from "@/app/actions/egresoActions";
-import { getConfigs } from "@/app/actions/configActions";
-import { toast } from "sonner";
-import {
-    Loader2, Save, FileText, DollarSign, Calendar, TrendingDown,
-    ShoppingCart, Zap, Users, MoreHorizontal, Home, Megaphone, Wrench,
-    Receipt, CreditCard
-} from "lucide-react";
 
 interface PaymentMethod {
     id: string;
@@ -33,14 +39,21 @@ interface CreateEgresoDrawerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onSuccess: () => void;
-    editingEgreso?: any;
+    editingEgreso?: {
+        id: string;
+        descripcion?: string;
+        monto: number;
+        categoria?: CategoriaEgreso | string;
+        metodoPago?: string;
+        fecha: Date | string;
+    };
 }
 
 export function CreateEgresoDrawer({
     open,
     onOpenChange,
     onSuccess,
-    editingEgreso
+    editingEgreso,
 }: CreateEgresoDrawerProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -49,19 +62,21 @@ export function CreateEgresoDrawer({
         monto: "",
         categoria: "OTROS" as CategoriaEgreso,
         metodoPago: "EFECTIVO",
-        fecha: new Date().toISOString().split('T')[0]
+        fecha: new Date().toISOString().split("T")[0],
     });
 
     useEffect(() => {
         async function fetchPaymentMethods() {
             const res = await getConfigs(["payments.methods"]);
             if (res.success && res.data && res.data["payments.methods"]) {
-                const methods = (res.data["payments.methods"] as PaymentMethod[]).filter(m => m.enabled);
+                const methods = (res.data["payments.methods"] as PaymentMethod[]).filter((method) => method.enabled);
                 setPaymentMethods(methods.length > 0 ? methods : [{ id: "EFECTIVO", label: "Efectivo", enabled: true }]);
-            } else {
-                setPaymentMethods([{ id: "EFECTIVO", label: "Efectivo", enabled: true }]);
+                return;
             }
+
+            setPaymentMethods([{ id: "EFECTIVO", label: "Efectivo", enabled: true }]);
         }
+
         fetchPaymentMethods();
     }, []);
 
@@ -69,24 +84,25 @@ export function CreateEgresoDrawer({
         if (editingEgreso) {
             setFormData({
                 descripcion: editingEgreso.descripcion || "",
-                monto: editingEgreso.monto.toString() || "",
+                monto: editingEgreso.monto.toString(),
                 categoria: (editingEgreso.categoria as CategoriaEgreso) || "OTROS",
                 metodoPago: editingEgreso.metodoPago || "EFECTIVO",
-                fecha: new Date(editingEgreso.fecha).toISOString().split('T')[0]
+                fecha: new Date(editingEgreso.fecha).toISOString().split("T")[0],
             });
-        } else {
-            setFormData({
-                descripcion: "",
-                monto: "",
-                categoria: "OTROS",
-                metodoPago: paymentMethods.length > 0 ? paymentMethods[0].id : "EFECTIVO",
-                fecha: new Date().toISOString().split('T')[0]
-            });
+            return;
         }
-    }, [editingEgreso, open]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+        setFormData({
+            descripcion: "",
+            monto: "",
+            categoria: "OTROS",
+            metodoPago: paymentMethods.length > 0 ? paymentMethods[0].id : "EFECTIVO",
+            fecha: new Date().toISOString().split("T")[0],
+        });
+    }, [editingEgreso, open, paymentMethods]);
+
+    const handleSubmit = async (event: React.FormEvent) => {
+        event.preventDefault();
 
         if (!formData.descripcion || !formData.monto) {
             toast.error("Por favor completa los campos obligatorios");
@@ -101,21 +117,17 @@ export function CreateEgresoDrawer({
                 fecha: new Date(formData.fecha),
             };
 
-            let result;
-            if (editingEgreso) {
-                result = await updateEgreso(editingEgreso.id, data);
-            } else {
-                result = await createEgreso(data);
+            const result = editingEgreso ? await updateEgreso(editingEgreso.id, data) : await createEgreso(data);
+
+            if (!result.success) {
+                toast.error(result.error || "Ocurrio un error");
+                return;
             }
 
-            if (result.success) {
-                toast.success(editingEgreso ? "Gasto actualizado" : "Gasto registrado correctamente");
-                onSuccess();
-                onOpenChange(false);
-            } else {
-                toast.error(result.error || "Ocurrió un error");
-            }
-        } catch (error) {
+            toast.success(editingEgreso ? "Gasto actualizado" : "Gasto registrado correctamente");
+            onSuccess();
+            onOpenChange(false);
+        } catch {
             toast.error("Error al procesar la solicitud");
         } finally {
             setIsLoading(false);
@@ -125,66 +137,77 @@ export function CreateEgresoDrawer({
     const categories = [
         { id: "INSUMOS", label: "Insumos", icon: ShoppingCart },
         { id: "SERVICIOS", label: "Servicios", icon: Zap },
-        { id: "NOMINA", label: "Nómina", icon: Users },
+        { id: "NOMINA", label: "Nomina", icon: Users },
         { id: "ALQUILER", label: "Alquiler", icon: Home },
         { id: "IMPUESTOS", label: "Impuestos", icon: Receipt },
         { id: "PUBLICIDAD", label: "Publicidad", icon: Megaphone },
         { id: "EQUIPAMIENTO", label: "Equipamiento", icon: Wrench },
         { id: "MANTENIMIENTO", label: "Mantenimiento", icon: TrendingDown },
         { id: "OTROS", label: "Otros", icon: MoreHorizontal },
-    ];
+    ] as const;
 
     return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="sm:max-w-xl rounded-l-[3rem] border-zinc-100 overflow-y-auto p-10 bg-white">
-                <form onSubmit={handleSubmit} className="flex flex-col min-h-full">
-                    <SheetHeader className="mb-8 text-left">
-                        <div className="flex items-center gap-4 mb-4">
-                            <div className="h-14 w-14 bg-red-600 rounded-[1.25rem] flex items-center justify-center text-white shadow-xl shadow-red-100">
-                                {editingEgreso ? <FileText size={28} /> : <TrendingDown size={20} />}
+        <ResponsivePanel
+            open={open}
+            onOpenChange={onOpenChange}
+            title={<span className="sr-only">{editingEgreso ? "Editar gasto" : "Registrar gasto"}</span>}
+            description={<span className="sr-only">Formulario de carga y edicion de egresos</span>}
+            contentClassName="overflow-hidden border-zinc-100 bg-white px-0 pt-0 sm:max-w-xl"
+            desktopContentClassName="p-0"
+        >
+            <div className="flex h-full min-h-0 flex-col overflow-hidden">
+                <form onSubmit={handleSubmit} className="flex min-h-full flex-col">
+                    <div className="mb-6 px-5 pt-5 text-left md:mb-8 md:px-10 md:pt-10">
+                        <div className="mb-4 flex items-center gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-[1.15rem] bg-red-600 text-white shadow-xl shadow-red-100 md:h-14 md:w-14 md:rounded-[1.25rem]">
+                                {editingEgreso ? <FileText size={24} /> : <TrendingDown size={18} />}
                             </div>
                         </div>
-                        <SheetTitle className="text-4xl font-bold text-zinc-900 tracking-tight">
+                        <h2 className="text-3xl font-bold tracking-tight text-zinc-900 md:text-4xl">
                             {editingEgreso ? "Editar Gasto" : "Registrar Gasto"}
-                        </SheetTitle>
-                        <SheetDescription className="text-zinc-500 text-lg">
+                        </h2>
+                        <p className="text-sm text-zinc-500 md:text-lg">
                             {editingEgreso
                                 ? "Modifica los detalles del gasto registrado."
                                 : "Registra un nuevo egreso de dinero para tu negocio."}
-                        </SheetDescription>
-                    </SheetHeader>
+                        </p>
+                    </div>
 
-                    <div className="flex-1 space-y-8 pb-8">
-                        {/* Categorías */}
+                    <div className="flex-1 space-y-6 overflow-y-auto px-5 pb-6 md:space-y-8 md:px-10 md:pb-8">
                         <div className="space-y-3">
                             <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">
-                                Seleccionar Categoría
+                                Seleccionar categoria
                             </Label>
-                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                                {categories.map((cat) => {
-                                    const Icon = cat.icon;
-                                    const isSelected = formData.categoria === cat.id;
+                            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                {categories.map((category) => {
+                                    const Icon = category.icon;
+                                    const isSelected = formData.categoria === category.id;
+
                                     return (
                                         <button
-                                            key={cat.id}
+                                            key={category.id}
                                             type="button"
-                                            onClick={() => setFormData({ ...formData, categoria: cat.id as CategoriaEgreso })}
-                                            className={`
-                                                flex flex-col items-center justify-center gap-1.5 p-2.5 rounded-xl border-2 transition-all duration-200
-                                                ${isSelected
-                                                    ? `border-red-500 bg-red-50 text-red-600 shadow-sm scale-[1.02]`
+                                            onClick={() =>
+                                                setFormData((current) => ({
+                                                    ...current,
+                                                    categoria: category.id as CategoriaEgreso,
+                                                }))
+                                            }
+                                            className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-2.5 transition-all duration-200 ${
+                                                isSelected
+                                                    ? "scale-[1.02] border-red-500 bg-red-50 text-red-600 shadow-sm"
                                                     : "border-zinc-100 bg-zinc-50 text-zinc-400 hover:border-zinc-200 hover:bg-zinc-100 hover:text-zinc-500"
-                                                }
-                                            `}
+                                            }`}
                                         >
-                                            <div className={`
-                                                h-8 w-8 rounded-lg flex items-center justify-center transition-colors
-                                                ${isSelected ? "bg-red-600 text-white" : "bg-white text-zinc-400"}
-                                            `}>
+                                            <div
+                                                className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                                                    isSelected ? "bg-red-600 text-white" : "bg-white text-zinc-400"
+                                                }`}
+                                            >
                                                 <Icon size={16} />
                                             </div>
-                                            <span className="font-bold text-[0.6rem] uppercase tracking-wider text-center leading-tight">
-                                                {cat.label}
+                                            <span className="text-center text-[0.6rem] font-bold uppercase tracking-wider leading-tight">
+                                                {category.label}
                                             </span>
                                         </button>
                                     );
@@ -192,27 +215,30 @@ export function CreateEgresoDrawer({
                             </div>
                         </div>
 
-                        {/* Método de Pago */}
                         <div className="space-y-3">
-                            <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400 flex items-center gap-2">
+                            <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-zinc-400">
                                 <CreditCard size={14} />
-                                Método de Pago
+                                Metodo de Pago
                             </Label>
                             <div className="flex flex-wrap gap-2">
                                 {paymentMethods.map((method) => {
                                     const isSelected = formData.metodoPago === method.id;
+
                                     return (
                                         <button
                                             key={method.id}
                                             type="button"
-                                            onClick={() => setFormData({ ...formData, metodoPago: method.id })}
-                                            className={`
-                                                px-4 py-2 rounded-xl border-2 font-semibold text-sm transition-all duration-200
-                                                ${isSelected
+                                            onClick={() =>
+                                                setFormData((current) => ({
+                                                    ...current,
+                                                    metodoPago: method.id,
+                                                }))
+                                            }
+                                            className={`rounded-xl border-2 px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                                                isSelected
                                                     ? "border-red-500 bg-red-50 text-red-600 shadow-sm"
                                                     : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-zinc-200 hover:bg-zinc-100"
-                                                }
-                                            `}
+                                            }`}
                                         >
                                             {method.label}
                                         </button>
@@ -221,47 +247,59 @@ export function CreateEgresoDrawer({
                             </div>
                         </div>
 
-                        {/* Detalles del Gasto */}
                         <div className="space-y-5">
-                            <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">Detalles del Gasto</Label>
+                            <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">
+                                Detalles del Gasto
+                            </Label>
 
                             <div className="space-y-2">
-                                <Label htmlFor="descripcion" className="text-zinc-700 font-bold flex items-center gap-2">
+                                <Label htmlFor="descripcion" className="flex items-center gap-2 font-bold text-zinc-700">
                                     <FileText size={14} className="text-zinc-400" />
-                                    Descripción *
+                                    Descripcion *
                                 </Label>
                                 <Textarea
                                     id="descripcion"
                                     placeholder="Ej. Pago de luz local principal"
                                     value={formData.descripcion}
-                                    onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                                    className="min-h-[90px] rounded-xl border-zinc-200 bg-white focus-visible:ring-red-400 text-base font-medium shadow-sm resize-none"
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            descripcion: event.target.value,
+                                        }))
+                                    }
+                                    className="min-h-[90px] resize-none rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm focus-visible:ring-red-400"
                                     required
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div className="space-y-2">
-                                    <Label htmlFor="monto" className="text-zinc-700 font-bold flex items-center gap-2">
+                                    <Label htmlFor="monto" className="flex items-center gap-2 font-bold text-zinc-700">
                                         <DollarSign size={14} className="text-zinc-400" />
                                         Monto *
                                     </Label>
                                     <div className="relative">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 font-bold">$</span>
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-zinc-400">$</span>
                                         <Input
                                             id="monto"
                                             type="number"
                                             step="0.01"
                                             placeholder="0.00"
                                             value={formData.monto}
-                                            onChange={(e) => setFormData({ ...formData, monto: e.target.value })}
-                                            className="h-12 pl-8 rounded-xl border-zinc-200 bg-white focus-visible:ring-red-400 text-base font-medium shadow-sm"
+                                            onChange={(event) =>
+                                                setFormData((current) => ({
+                                                    ...current,
+                                                    monto: event.target.value,
+                                                }))
+                                            }
+                                            className="h-12 rounded-xl border-zinc-200 bg-white pl-8 text-base font-medium shadow-sm focus-visible:ring-red-400"
                                             required
                                         />
                                     </div>
                                 </div>
+
                                 <div className="space-y-2">
-                                    <Label htmlFor="fecha" className="text-zinc-700 font-bold flex items-center gap-2">
+                                    <Label htmlFor="fecha" className="flex items-center gap-2 font-bold text-zinc-700">
                                         <Calendar size={14} className="text-zinc-400" />
                                         Fecha
                                     </Label>
@@ -269,18 +307,23 @@ export function CreateEgresoDrawer({
                                         id="fecha"
                                         type="date"
                                         value={formData.fecha}
-                                        onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-                                        className="h-12 rounded-xl border-zinc-200 bg-white focus-visible:ring-red-400 text-base font-medium shadow-sm"
+                                        onChange={(event) =>
+                                            setFormData((current) => ({
+                                                ...current,
+                                                fecha: event.target.value,
+                                            }))
+                                        }
+                                        className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm focus-visible:ring-red-400"
                                     />
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="pt-8 mt-auto border-t border-zinc-100">
+                    <div className="mt-auto border-t border-zinc-100 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-6 md:px-10 md:pb-10 md:pt-8">
                         <Button
                             type="submit"
-                            className="w-full h-14 rounded-[1.5rem] bg-red-600 hover:bg-red-700 text-white shadow-xl shadow-red-100 transition-all font-bold text-lg gap-3 disabled:grayscale"
+                            className="w-full gap-3 rounded-[1.35rem] bg-red-600 text-base font-bold text-white shadow-xl shadow-red-100 transition-all hover:bg-red-700 disabled:grayscale md:rounded-[1.5rem] md:text-lg"
                             disabled={isLoading}
                         >
                             {isLoading ? (
@@ -298,14 +341,14 @@ export function CreateEgresoDrawer({
                         <Button
                             type="button"
                             variant="ghost"
-                            className="w-full mt-2 h-12 rounded-xl font-medium text-zinc-500 hover:bg-zinc-50"
+                            className="mt-2 h-11 w-full rounded-xl font-medium text-zinc-500 hover:bg-zinc-50 md:h-12"
                             onClick={() => onOpenChange(false)}
                         >
                             Cancelar
                         </Button>
                     </div>
                 </form>
-            </SheetContent>
-        </Sheet>
+            </div>
+        </ResponsivePanel>
     );
 }

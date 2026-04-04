@@ -1,36 +1,44 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import {
-    BarChart3, Calendar, ChevronDown, TrendingUp,
-    DollarSign, ShoppingCart, XCircle,
-    Clock, Package, Warehouse,
-    CreditCard
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getReportsData, FinancialSummary } from "./actions";
-import { getConfigs } from "@/app/actions/configActions";
-import { toast } from "sonner";
+import { useEffect, useMemo, useState } from "react";
 import { format, subDays, startOfDay, endOfDay, eachDayOfInterval } from "date-fns";
 import { es } from "date-fns/locale";
+import {
+    Bar,
+    BarChart,
+    CartesianGrid,
+    ResponsiveContainer,
+    Tooltip,
+    XAxis,
+    YAxis,
+} from "recharts";
+import {
+    BarChart3,
+    Calendar,
+    ChevronDown,
+    DollarSign,
+    Package,
+    ShoppingCart,
+    TrendingUp,
+    Warehouse,
+    XCircle,
+} from "lucide-react";
+import { toast } from "sonner";
 
-// Import analytics sections
+import { getConfigs } from "@/app/actions/configActions";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ResponsivePanel } from "@/components/ui/responsive-panel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+import { getReportsData, type FinancialSummary } from "./actions";
 import FinancialSection from "./FinancialSection";
-import ProductsSection from "./ProductsSection";
-import OrdersSection from "./OrdersSection";
 import InventorySection from "./InventorySection";
+import OrdersSection from "./OrdersSection";
+import ProductsSection from "./ProductsSection";
 import ProfitabilitySection from "./ProfitabilitySection";
-
-// --- Types ---
-interface Transaction {
-    id: string;
-    total: number;
-    recibidoEn: string;
-    metodoPago: string;
-    estado: string;
-}
+import { ReportLegendList, ReportSurface } from "./reportes-ui";
 
 interface ChartDataPoint {
     day: string;
@@ -46,124 +54,134 @@ interface PaymentMethodData {
 }
 
 type DatePreset = "hoy" | "7d" | "30d" | "90d" | "year";
+type ReportTab = "resumen" | "financiero" | "productos" | "pedidos" | "inventario" | "rentabilidad";
 
-// --- Utility Functions ---
-const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(amount);
-};
+const REPORT_TABS: Array<{
+    value: ReportTab;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    activeClass: string;
+}> = [
+    { value: "resumen", label: "Resumen", icon: BarChart3, activeClass: "data-[state=active]:bg-emerald-500" },
+    { value: "financiero", label: "Financiero", icon: DollarSign, activeClass: "data-[state=active]:bg-emerald-500" },
+    { value: "productos", label: "Productos", icon: Package, activeClass: "data-[state=active]:bg-blue-500" },
+    { value: "pedidos", label: "Pedidos", icon: ShoppingCart, activeClass: "data-[state=active]:bg-violet-500" },
+    { value: "inventario", label: "Inventario", icon: Warehouse, activeClass: "data-[state=active]:bg-amber-500" },
+    { value: "rentabilidad", label: "Rentabilidad", icon: TrendingUp, activeClass: "data-[state=active]:bg-pink-500" },
+];
 
-// --- Dashboard Card Component ---
-function DashboardCard({
+const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("es-AR", {
+        style: "currency",
+        currency: "ARS",
+        maximumFractionDigits: 0,
+    }).format(amount);
+
+function SummaryMetricCard({
     title,
     value,
     subValue,
     icon: Icon,
-    iconBgColor = "bg-zinc-100",
-    iconColor = "text-zinc-600"
+    iconBgClass,
+    iconColorClass,
 }: {
     title: string;
     value: string;
     subValue?: string;
-    icon: React.ElementType;
-    iconBgColor?: string;
-    iconColor?: string;
+    icon: React.ComponentType<{ className?: string }>;
+    iconBgClass: string;
+    iconColorClass: string;
 }) {
     return (
-        <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm p-6 hover:shadow-md transition-all duration-300">
-            <div className="flex items-start justify-between mb-4">
-                <div className={`h-12 w-12 ${iconBgColor} rounded-2xl flex items-center justify-center`}>
-                    <Icon className={`h-6 w-6 ${iconColor}`} />
+        <div className="rounded-[1.75rem] border border-zinc-200 bg-white p-4 shadow-sm md:rounded-[2rem] md:p-6">
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl md:h-12 md:w-12">
+                <div className={`flex h-full w-full items-center justify-center rounded-2xl ${iconBgClass}`}>
+                    <Icon className={`h-5 w-5 ${iconColorClass}`} />
                 </div>
             </div>
-            <div>
-                <p className="text-sm text-zinc-500 font-medium mb-1">{title}</p>
-                <p className="text-2xl font-bold text-zinc-900">{value}</p>
-                {subValue && <p className="text-xs text-zinc-400 mt-1">{subValue}</p>}
-            </div>
+            <p className="text-sm font-medium text-zinc-500">{title}</p>
+            <p className="mt-1 break-words text-2xl font-black tracking-tight text-zinc-900 md:text-3xl">{value}</p>
+            {subValue ? <p className="mt-1 text-xs text-zinc-400">{subValue}</p> : null}
         </div>
     );
 }
 
-// --- Revenue Chart Component ---
-function RevenueChart({ data }: { data: ChartDataPoint[] }) {
-    const maxAmount = Math.max(...data.map(d => d.amount), 1);
-
+function RevenueChart({
+    data,
+    isMobile,
+}: {
+    data: ChartDataPoint[];
+    isMobile: boolean;
+}) {
     return (
-        <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm p-6 hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col h-full">
-            <div className="flex flex-shrink-0 items-center justify-between mb-6">
-                <div>
-                    <h3 className="text-lg font-bold text-zinc-900">Ingresos por Día</h3>
-                    <p className="text-sm text-zinc-500">Tendencia de ventas del período</p>
-                </div>
-                <div className="h-10 w-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-                    <BarChart3 className="h-5 w-5 text-emerald-600" />
-                </div>
+        <ReportSurface title="Ingresos por periodo" description="Tendencia de ventas y volumen de ordenes.">
+            <div className="h-[250px] w-full md:h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="day" minTickGap={isMobile ? 24 : 14} stroke="#71717a" style={{ fontSize: "12px" }} />
+                        <YAxis hide={isMobile} tickFormatter={(value) => formatCurrency(Number(value || 0))} stroke="#71717a" style={{ fontSize: "12px" }} />
+                        <Tooltip
+                            contentStyle={{
+                                backgroundColor: "#ffffff",
+                                border: "1px solid #e5e7eb",
+                                borderRadius: "12px",
+                                padding: "12px",
+                            }}
+                            formatter={(value: number | string | undefined) => [formatCurrency(Number(value || 0)), "Ingresos"]}
+                            labelFormatter={(label) => `Periodo ${label}`}
+                        />
+                        <Bar dataKey="amount" fill="#10b981" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                </ResponsiveContainer>
             </div>
-
-            <div className="flex-1 w-full overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-zinc-200 scrollbar-track-transparent">
-                <div className="h-48 flex items-end gap-2 min-w-max px-2 pt-16 mt-auto">
-                    {data.map((point, i) => (
-                        <div key={i} className="flex-1 flex flex-col items-center group min-w-[32px]">
-                            <div className="relative w-full flex justify-center">
-                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-zinc-900 text-white text-xs py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                                    {formatCurrency(point.amount)}
-                                    <br />
-                                    <span className="text-zinc-400">{point.orders} órdenes</span>
-                                </div>
-                                <div
-                                    className="w-full max-w-[40px] bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-lg transition-all duration-500 hover:from-emerald-600 hover:to-emerald-500 cursor-pointer"
-                                    style={{ height: `${Math.max((point.amount / maxAmount) * 160, 8)}px` }}
-                                />
-                            </div>
-                            <span className="text-[10px] text-zinc-400 mt-2 font-medium break-keep whitespace-nowrap capitalize">{point.day}</span>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
+        </ReportSurface>
     );
 }
 
-// --- Payment Methods Chart Component ---
 function PaymentMethodsChart({ data }: { data: PaymentMethodData[] }) {
     return (
-        <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm p-6 hover:shadow-md transition-all duration-300">
-            <div className="flex items-center justify-between mb-6">
-                <div>
-                    <h3 className="text-lg font-bold text-zinc-900">Métodos de Pago</h3>
-                    <p className="text-sm text-zinc-500">Distribución de ventas</p>
-                </div>
-                <div className="h-10 w-10 bg-violet-100 rounded-xl flex items-center justify-center">
-                    <CreditCard className="h-5 w-5 text-violet-600" />
-                </div>
-            </div>
-
-            <div className="space-y-4">
-                {data.map((item, i) => (
-                    <div key={i}>
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-zinc-700">{item.method}</span>
-                            <span className="text-sm font-bold text-zinc-900">{formatCurrency(item.amount)}</span>
-                        </div>
-                        <div className="h-3 bg-zinc-100 rounded-full overflow-hidden">
-                            <div
-                                className={`h-full ${item.color} rounded-full transition-all duration-700`}
-                                style={{ width: `${item.percentage}%` }}
-                            />
-                        </div>
-                        <p className="text-xs text-zinc-400 mt-1">{item.percentage.toFixed(1)}% del total</p>
+        <ReportSurface title="Metodos de pago" description="Distribucion de ventas por canal de cobro.">
+            {data.length > 0 ? (
+                <div className="space-y-5">
+                    <div className="space-y-4">
+                        {data.map((item) => (
+                            <div key={item.method}>
+                                <div className="mb-2 flex items-center justify-between gap-3">
+                                    <span className="truncate text-sm font-semibold text-zinc-700">{item.method}</span>
+                                    <span className="shrink-0 text-sm font-bold text-zinc-900">{formatCurrency(item.amount)}</span>
+                                </div>
+                                <div className="h-3 overflow-hidden rounded-full bg-zinc-100">
+                                    <div
+                                        className="h-full rounded-full transition-all duration-500"
+                                        style={{ width: `${item.percentage}%`, backgroundColor: item.color }}
+                                    />
+                                </div>
+                                <p className="mt-1 text-xs text-zinc-400">{item.percentage.toFixed(1)}% del total</p>
+                            </div>
+                        ))}
                     </div>
-                ))}
-            </div>
-        </div>
+
+                    <ReportLegendList
+                        items={data.map((item) => ({
+                            label: item.method,
+                            value: `${item.percentage.toFixed(1)}%`,
+                            meta: formatCurrency(item.amount),
+                            color: item.color,
+                        }))}
+                    />
+                </div>
+            ) : (
+                <div className="py-12 text-center text-sm font-medium text-zinc-500">No hay ventas por metodo de pago en este periodo.</div>
+            )}
+        </ReportSurface>
     );
 }
 
-// --- Main Dashboard Component ---
 export default function ReportesDashboardPage() {
+    const isMobile = useIsMobile();
     const [isLoading, setIsLoading] = useState(true);
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [datePreset, setDatePreset] = useState<DatePreset>("hoy");
     const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>(() => {
         const now = new Date();
@@ -173,12 +191,13 @@ export default function ReportesDashboardPage() {
         };
     });
     const [paymentMethodsConfig, setPaymentMethodsConfig] = useState<unknown[]>([]);
-    const [activeTab, setActiveTab] = useState("resumen");
+    const [activeTab, setActiveTab] = useState<ReportTab>("resumen");
+    const [viewsOpen, setViewsOpen] = useState(false);
 
     const updateDateRange = (preset: DatePreset) => {
         const now = new Date();
+        const to = endOfDay(now);
         let from: Date;
-        const to: Date = endOfDay(now);
 
         switch (preset) {
             case "hoy":
@@ -196,44 +215,56 @@ export default function ReportesDashboardPage() {
             case "year":
                 from = startOfDay(subDays(now, 365));
                 break;
-            default:
-                return;
         }
 
         setDateRange({ from, to });
         setDatePreset(preset);
-        localStorage.setItem("reportes-date-preset", preset);
+
+        if (typeof window !== "undefined") {
+            localStorage.setItem("reportes-date-preset", preset);
+        }
     };
 
     useEffect(() => {
-        const saved = localStorage.getItem("reportes-date-preset");
-        if (saved) {
-            setDatePreset(saved as DatePreset);
+        const saved = typeof window !== "undefined" ? localStorage.getItem("reportes-date-preset") : null;
+        if (saved && ["hoy", "7d", "30d", "90d", "year"].includes(saved)) {
             updateDateRange(saved as DatePreset);
         }
     }, []);
 
     useEffect(() => {
+        let active = true;
+
         async function fetchConfig() {
             const res = await getConfigs(["payments.methods"]);
-            if (res.success && res.data && res.data["payments.methods"]) {
+            if (active && res.success && res.data && res.data["payments.methods"]) {
                 setPaymentMethodsConfig(res.data["payments.methods"]);
             }
         }
-        fetchConfig();
+
+        void fetchConfig();
+
+        return () => {
+            active = false;
+        };
     }, []);
 
     useEffect(() => {
+        let active = true;
+
         async function fetchData() {
             setIsLoading(true);
+
             try {
                 const res = await getReportsData(dateRange.from, dateRange.to);
 
+                if (!active) {
+                    return;
+                }
+
                 if (res.success && res.data) {
                     setSummary(res.data.summary);
-                    setTransactions(res.data.recentTransactions as Transaction[]);
                 } else {
-                    console.error("Error loading dashboard:", res.error);
                     toast.error(res.error || "Error al cargar datos del dashboard");
                     setSummary({
                         totalRevenue: 0,
@@ -241,47 +272,50 @@ export default function ReportesDashboardPage() {
                         averageTicket: 0,
                         ordersByStatus: {},
                         ordersByPaymentMethod: {},
-                        revenueByDay: {}
+                        revenueByDay: {},
                     });
-                    setTransactions([]);
                 }
-            } catch (err) {
-                console.error("Dashboard fetch error:", err);
-                toast.error("Error de conexión con el servidor");
-                setSummary({
-                    totalRevenue: 0,
-                    totalOrders: 0,
-                    averageTicket: 0,
-                    ordersByStatus: {},
-                    ordersByPaymentMethod: {},
-                    revenueByDay: {}
-                });
-                setTransactions([]);
+            } catch {
+                toast.error("Error de conexion con el servidor");
+                if (active) {
+                    setSummary({
+                        totalRevenue: 0,
+                        totalOrders: 0,
+                        averageTicket: 0,
+                        ordersByStatus: {},
+                        ordersByPaymentMethod: {},
+                        revenueByDay: {},
+                    });
+                }
             } finally {
-                setIsLoading(false);
+                if (active) {
+                    setIsLoading(false);
+                }
             }
         }
 
-        fetchData();
+        void fetchData();
+
+        return () => {
+            active = false;
+        };
     }, [dateRange]);
 
-    // Process chart data
     const chartData = useMemo(() => {
-        if (!summary || !summary.revenueByDay) return [];
+        if (!summary?.revenueByDay) {
+            return [];
+        }
 
         if (datePreset === "hoy") {
             const todayStr = format(dateRange.from, "yyyy-MM-dd");
-            const hours = Array.from({ length: 24 }, (_, i) => i);
-
-            return hours.map(hour => {
-                const hourStr = hour.toString().padStart(2, '0');
-                const key = `${todayStr}T${hourStr}`;
-                const hourStats = summary.revenueByDay[key] || { revenue: 0, count: 0 };
+            return Array.from({ length: 24 }, (_, hour) => {
+                const hourKey = `${todayStr}T${hour.toString().padStart(2, "0")}`;
+                const hourStats = summary.revenueByDay[hourKey] || { revenue: 0, count: 0 };
 
                 return {
-                    day: `${hourStr}:00`,
+                    day: `${hour.toString().padStart(2, "0")}:00`,
                     amount: hourStats.revenue || 0,
-                    orders: hourStats.count || 0
+                    orders: hourStats.count || 0,
                 };
             });
         }
@@ -289,298 +323,320 @@ export default function ReportesDashboardPage() {
         const days = datePreset === "7d" ? 7 : datePreset === "30d" ? 30 : datePreset === "90d" ? 90 : 365;
         const interval = eachDayOfInterval({
             start: subDays(dateRange.to, days - 1),
-            end: dateRange.to
+            end: dateRange.to,
         });
 
-        return interval.map(day => {
+        return interval.map((day) => {
             const dayStr = format(day, "yyyy-MM-dd");
             const dayStats = summary.revenueByDay[dayStr] || { revenue: 0, count: 0 };
 
             return {
                 day: days <= 7 ? format(day, "EEE", { locale: es }) : format(day, "dd/MM", { locale: es }),
                 amount: dayStats.revenue || 0,
-                orders: dayStats.count || 0
+                orders: dayStats.count || 0,
             };
         });
     }, [summary, datePreset, dateRange]);
 
-    // Process payment methods data
     const paymentData = useMemo((): PaymentMethodData[] => {
-        if (!summary || !summary.ordersByPaymentMethod) return [];
+        if (!summary?.ordersByPaymentMethod) {
+            return [];
+        }
 
         const methods = summary.ordersByPaymentMethod;
-        const total = Object.values(methods).reduce((sum, val) => sum + (val || 0), 0);
-
+        const total = Object.values(methods).reduce((sum, value) => sum + (value || 0), 0);
         const colors: Record<string, string> = {
-            "EFECTIVO": "bg-emerald-500",
-            "MERCADOPAGO": "bg-sky-500",
-            "TRANSFERENCIA": "bg-amber-500",
-            "DEBITO": "bg-blue-500",
-            "CREDITO": "bg-violet-500"
+            EFECTIVO: "#10b981",
+            MERCADOPAGO: "#0ea5e9",
+            TRANSFERENCIA: "#f59e0b",
+            DEBITO: "#3b82f6",
+            CREDITO: "#8b5cf6",
         };
 
         return Object.entries(methods)
             .filter(([, amount]) => amount > 0)
             .map(([methodId, amount]) => {
-                const config = (paymentMethodsConfig as { id: string; label: string }[]).find(m => m.id === methodId);
+                const config = (paymentMethodsConfig as { id: string; label: string }[]).find((method) => method.id === methodId);
                 return {
                     method: config ? config.label : methodId,
-                    amount: amount,
+                    amount,
                     percentage: total > 0 ? (amount / total) * 100 : 0,
-                    color: colors[methodId] || "bg-zinc-500"
+                    color: colors[methodId] || "#6b7280",
                 };
             })
             .sort((a, b) => b.amount - a.amount);
     }, [summary, paymentMethodsConfig]);
 
-    // Order status counts
     const orderStats = useMemo(() => {
-        if (!summary || !summary.ordersByStatus) {
+        if (!summary?.ordersByStatus) {
             return { completed: 0, cancelled: 0, pending: 0, total: 0 };
         }
+
         const statuses = summary.ordersByStatus;
-        const completed = statuses["FINALIZADO"] || 0;
-        const cancelled = statuses["CANCELADO"] || 0;
-        const pending = (statuses["PENDIENTE"] || 0) + (statuses["EN_PREPARACION"] || 0) + (statuses["RECIBIDO"] || 0);
+        const completed = statuses.FINALIZADO || 0;
+        const cancelled = statuses.CANCELADO || 0;
+        const pending = (statuses.PENDIENTE || 0) + (statuses.EN_PREPARACION || 0) + (statuses.RECIBIDO || 0);
         return { completed, cancelled, pending, total: summary.totalOrders || 0 };
     }, [summary]);
 
+    const activeView = REPORT_TABS.find((tab) => tab.value === activeTab) || REPORT_TABS[0];
+    const currentCash = summary?.ordersByPaymentMethod?.EFECTIVO || 0;
+    const currentDigital = Math.max(0, (summary?.totalRevenue || 0) - currentCash);
+
     const getPresetLabel = (preset: DatePreset) => {
-        const labels = {
-            "hoy": "Hoy",
-            "7d": "Últimos 7 días",
-            "30d": "Últimos 30 días",
-            "90d": "Últimos 90 días",
-            "year": "Último año",
+        const labels: Record<DatePreset, string> = {
+            hoy: "Hoy",
+            "7d": "Ultimos 7 dias",
+            "30d": "Ultimos 30 dias",
+            "90d": "Ultimos 90 dias",
+            year: "Ultimo ano",
         };
         return labels[preset];
     };
 
     if (isLoading && activeTab === "resumen") {
         return (
-            <div className="flex items-center justify-center h-96">
+            <div className="flex h-72 items-center justify-center">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="h-8 w-8 border-2 border-zinc-200 border-t-zinc-900 rounded-full animate-spin" />
-                    <span className="text-sm text-zinc-500 font-medium">Cargando reportes...</span>
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900" />
+                    <span className="text-sm font-medium text-zinc-500">Cargando reportes...</span>
                 </div>
             </div>
         );
     }
 
-
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                <div>
-                    <div className="flex items-center gap-3 mb-1">
-                        <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-500 flex items-center justify-center text-white shadow-lg">
-                            <BarChart3 size={24} />
+        <div className="app-page-safe-bottom animate-in space-y-5 fade-in duration-500 md:space-y-6">
+            <section className="space-y-4">
+                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                    <div>
+                        <div className="mb-1 flex items-center gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-500 text-white shadow-lg md:h-12 md:w-12">
+                                <BarChart3 className="h-5 w-5 md:h-6 md:w-6" />
+                            </div>
+                            <h2 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-3xl">Reportes y analytics</h2>
                         </div>
-                        <h2 className="text-3xl font-bold tracking-tight text-zinc-900">Reportes y Analytics</h2>
+                        <p className="text-sm font-medium text-zinc-500 md:text-base">Analisis completo del negocio en una vista adaptable.</p>
                     </div>
-                    <p className="text-zinc-500 font-medium">Análisis completo de tu negocio</p>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:flex md:items-center">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setViewsOpen(true)}
+                            className="h-11 justify-between rounded-2xl border-zinc-200 bg-white px-4 text-left font-semibold text-zinc-700 shadow-sm md:hidden"
+                        >
+                            <span className="flex items-center gap-2">
+                                <activeView.icon className="h-4 w-4" />
+                                {activeView.label}
+                            </span>
+                            <ChevronDown className="h-4 w-4 text-zinc-400" />
+                        </Button>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    className="h-11 w-full justify-between rounded-2xl border-zinc-200 bg-white px-4 font-medium text-zinc-600 shadow-sm md:w-auto md:rounded-full md:px-6"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Calendar className="h-4 w-4 text-zinc-400" />
+                                        {getPresetLabel(datePreset)}
+                                    </span>
+                                    <ChevronDown className="h-3 w-3 opacity-50" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56 rounded-2xl border-zinc-100 p-2 shadow-xl">
+                                <DropdownMenuItem className="my-0.5 cursor-pointer rounded-xl" onClick={() => updateDateRange("hoy")}>
+                                    Hoy
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="my-0.5 cursor-pointer rounded-xl" onClick={() => updateDateRange("7d")}>
+                                    Ultimos 7 dias
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="my-0.5 cursor-pointer rounded-xl" onClick={() => updateDateRange("30d")}>
+                                    Ultimos 30 dias
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="my-0.5 cursor-pointer rounded-xl" onClick={() => updateDateRange("90d")}>
+                                    Ultimos 90 dias
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="my-0.5 cursor-pointer rounded-xl" onClick={() => updateDateRange("year")}>
+                                    Ultimo ano
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                </div>
+            </section>
+
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ReportTab)} className="w-full">
+                <div className="hidden md:block">
+                    <TabsList className="h-auto flex-wrap rounded-2xl border border-zinc-200 bg-white p-1 shadow-sm">
+                        {REPORT_TABS.map((tab) => {
+                            const Icon = tab.icon;
+                            return (
+                                <TabsTrigger key={tab.value} value={tab.value} className={`rounded-xl px-5 py-2.5 data-[state=active]:text-white ${tab.activeClass}`}>
+                                    <Icon className="mr-2 h-4 w-4" />
+                                    {tab.label}
+                                </TabsTrigger>
+                            );
+                        })}
+                    </TabsList>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="h-11 rounded-full px-6 border-zinc-200 hover:bg-zinc-50 text-zinc-600 font-medium bg-white shadow-sm">
-                                <Calendar className="mr-2 h-4 w-4 text-zinc-400" />
-                                {getPresetLabel(datePreset)}
-                                <ChevronDown className="ml-2 h-3 w-3 opacity-50" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100">
-                            <DropdownMenuItem className="rounded-xl my-0.5 cursor-pointer" onClick={() => updateDateRange("hoy")}>
-                                Hoy
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-xl my-0.5 cursor-pointer" onClick={() => updateDateRange("7d")}>
-                                Últimos 7 días
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-xl my-0.5 cursor-pointer" onClick={() => updateDateRange("30d")}>
-                                Últimos 30 días
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-xl my-0.5 cursor-pointer" onClick={() => updateDateRange("90d")}>
-                                Últimos 90 días
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="rounded-xl my-0.5 cursor-pointer" onClick={() => updateDateRange("year")}>
-                                Último año
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            </div>
-
-            {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="bg-white border border-zinc-200 p-1 rounded-2xl shadow-sm h-auto flex-wrap">
-                    <TabsTrigger value="resumen" className="rounded-xl data-[state=active]:bg-emerald-500 data-[state=active]:text-white px-6 py-2.5">
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Resumen
-                    </TabsTrigger>
-                    <TabsTrigger value="financiero" className="rounded-xl data-[state=active]:bg-emerald-500 data-[state=active]:text-white px-6 py-2.5">
-                        <DollarSign className="h-4 w-4 mr-2" />
-                        Financiero
-                    </TabsTrigger>
-                    <TabsTrigger value="productos" className="rounded-xl data-[state=active]:bg-blue-500 data-[state=active]:text-white px-6 py-2.5">
-                        <Package className="h-4 w-4 mr-2" />
-                        Productos
-                    </TabsTrigger>
-                    <TabsTrigger value="pedidos" className="rounded-xl data-[state=active]:bg-violet-500 data-[state=active]:text-white px-6 py-2.5">
-                        <ShoppingCart className="h-4 w-4 mr-2" />
-                        Pedidos
-                    </TabsTrigger>
-                    <TabsTrigger value="inventario" className="rounded-xl data-[state=active]:bg-amber-500 data-[state=active]:text-white px-6 py-2.5">
-                        <Warehouse className="h-4 w-4 mr-2" />
-                        Inventario
-                    </TabsTrigger>
-                    <TabsTrigger value="rentabilidad" className="rounded-xl data-[state=active]:bg-pink-500 data-[state=active]:text-white px-6 py-2.5">
-                        <TrendingUp className="h-4 w-4 mr-2" />
-                        Rentabilidad
-                    </TabsTrigger>
-                </TabsList>
-
-                {/* Resumen Tab */}
-                <TabsContent value="resumen" className="space-y-6 mt-6">
-                    {/* KPI Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <DashboardCard
-                            title="Ingresos Totales"
+                <TabsContent value="resumen" className="mt-5 space-y-5 md:mt-6 md:space-y-6">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 md:gap-6">
+                        <SummaryMetricCard
+                            title="Ingresos totales"
                             value={formatCurrency(summary?.totalRevenue || 0)}
-                            subValue={`${summary?.totalOrders || 0} órdenes procesadas`}
+                            subValue={`${summary?.totalOrders || 0} ordenes procesadas`}
                             icon={DollarSign}
-                            iconBgColor="bg-emerald-100"
-                            iconColor="text-emerald-600"
+                            iconBgClass="bg-emerald-100"
+                            iconColorClass="text-emerald-600"
                         />
-                        <DashboardCard
-                            title="Ticket Promedio"
+                        <SummaryMetricCard
+                            title="Ticket promedio"
                             value={formatCurrency(summary?.averageTicket || 0)}
-                            subValue="por orden completada"
+                            subValue="por orden finalizada"
                             icon={TrendingUp}
-                            iconBgColor="bg-blue-100"
-                            iconColor="text-blue-600"
+                            iconBgClass="bg-blue-100"
+                            iconColorClass="text-blue-600"
                         />
-                        <DashboardCard
-                            title="Órdenes Completadas"
+                        <SummaryMetricCard
+                            title="Ordenes completadas"
                             value={orderStats.completed.toString()}
                             subValue={`${orderStats.cancelled} canceladas`}
                             icon={ShoppingCart}
-                            iconBgColor="bg-violet-100"
-                            iconColor="text-violet-600"
+                            iconBgClass="bg-violet-100"
+                            iconColorClass="text-violet-600"
                         />
-                        <DashboardCard
-                            title="Tasa de Cancelación"
+                        <SummaryMetricCard
+                            title="Tasa de cancelacion"
                             value={`${orderStats.total > 0 ? ((orderStats.cancelled / orderStats.total) * 100).toFixed(1) : 0}%`}
                             subValue={`${orderStats.pending} pendientes`}
                             icon={XCircle}
-                            iconBgColor="bg-red-100"
-                            iconColor="text-red-600"
+                            iconBgClass="bg-red-100"
+                            iconColorClass="text-red-600"
                         />
                     </div>
 
-                    {/* Charts Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <RevenueChart data={chartData} />
+                    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 md:gap-6">
+                        <RevenueChart data={chartData} isMobile={isMobile} />
                         <PaymentMethodsChart data={paymentData} />
                     </div>
 
-                    {/* Bottom Section */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Order Status */}
-                        <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm p-6 hover:shadow-md transition-all duration-300">
-                            <div className="flex items-center justify-between mb-6">
-                                <div>
-                                    <h3 className="text-lg font-bold text-zinc-900">Estado de Órdenes</h3>
-                                    <p className="text-sm text-zinc-500">Resumen del período</p>
-                                </div>
-                                <div className="h-10 w-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                                    <ShoppingCart className="h-5 w-5 text-blue-600" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 md:gap-6">
+                        <ReportSurface title="Estado de ordenes" description="Resumen operativo del periodo.">
+                            <div className="grid grid-cols-3 gap-3">
                                 <div className="text-center">
-                                    <div className="h-16 w-16 mx-auto bg-emerald-100 rounded-2xl flex items-center justify-center mb-2">
-                                        <span className="text-xl font-bold text-emerald-600">{orderStats.completed}</span>
+                                    <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100">
+                                        <span className="text-lg font-black text-emerald-600">{orderStats.completed}</span>
                                     </div>
-                                    <p className="text-xs text-zinc-500 font-medium">Completadas</p>
+                                    <p className="text-xs font-medium text-zinc-500">Completadas</p>
                                     <p className="text-[10px] text-emerald-600">
                                         {orderStats.total > 0 ? ((orderStats.completed / orderStats.total) * 100).toFixed(0) : 0}%
                                     </p>
                                 </div>
-
                                 <div className="text-center">
-                                    <div className="h-16 w-16 mx-auto bg-amber-100 rounded-2xl flex items-center justify-center mb-2">
-                                        <span className="text-xl font-bold text-amber-600">{orderStats.pending}</span>
+                                    <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100">
+                                        <span className="text-lg font-black text-amber-600">{orderStats.pending}</span>
                                     </div>
-                                    <p className="text-xs text-zinc-500 font-medium">Pendientes</p>
+                                    <p className="text-xs font-medium text-zinc-500">Pendientes</p>
                                     <p className="text-[10px] text-amber-600">
                                         {orderStats.total > 0 ? ((orderStats.pending / orderStats.total) * 100).toFixed(0) : 0}%
                                     </p>
                                 </div>
-
                                 <div className="text-center">
-                                    <div className="h-16 w-16 mx-auto bg-red-100 rounded-2xl flex items-center justify-center mb-2">
-                                        <span className="text-xl font-bold text-red-600">{orderStats.cancelled}</span>
+                                    <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-100">
+                                        <span className="text-lg font-black text-red-600">{orderStats.cancelled}</span>
                                     </div>
-                                    <p className="text-xs text-zinc-500 font-medium">Canceladas</p>
+                                    <p className="text-xs font-medium text-zinc-500">Canceladas</p>
                                     <p className="text-[10px] text-red-600">
                                         {orderStats.total > 0 ? ((orderStats.cancelled / orderStats.total) * 100).toFixed(0) : 0}%
                                     </p>
                                 </div>
                             </div>
-                        </div>
+                        </ReportSurface>
 
-                        {/* Quick Stats */}
-                        <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-3xl p-6 text-white shadow-xl">
-                            <div className="flex items-center justify-between mb-6">
-                                <div>
-                                    <h3 className="text-lg font-bold">Resumen Rápido</h3>
-                                    <p className="text-sm text-zinc-400">Métricas del período</p>
+                        <ReportSurface
+                            title="Resumen rapido"
+                            description="Corte financiero del periodo."
+                            className="border-zinc-900 bg-gradient-to-br from-zinc-900 to-zinc-800"
+                            titleClassName="text-white"
+                            descriptionClassName="text-zinc-300"
+                        >
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between border-b border-white/10 py-2.5">
+                                    <span className="text-sm text-zinc-300">Efectivo</span>
+                                    <span className="text-sm font-bold text-white">{formatCurrency(currentCash)}</span>
                                 </div>
-                                <Clock className="h-5 w-5 text-zinc-400" />
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between py-3 border-b border-zinc-700">
-                                    <span className="text-zinc-400">Efectivo</span>
-                                    <span className="font-bold">{formatCurrency(summary?.ordersByPaymentMethod.EFECTIVO || 0)}</span>
+                                <div className="flex items-center justify-between border-b border-white/10 py-2.5">
+                                    <span className="text-sm text-zinc-300">Digital</span>
+                                    <span className="text-sm font-bold text-white">{formatCurrency(currentDigital)}</span>
                                 </div>
-                                <div className="flex items-center justify-between py-3 border-b border-zinc-700">
-                                    <span className="text-zinc-400">Digital</span>
-                                    <span className="font-bold">{formatCurrency((summary?.totalRevenue || 0) - (summary?.ordersByPaymentMethod.EFECTIVO || 0))}</span>
-                                </div>
-                                <div className="flex items-center justify-between py-3">
-                                    <span className="text-zinc-400">Total Órdenes</span>
-                                    <span className="font-bold">{summary?.totalOrders || 0}</span>
+                                <div className="flex items-center justify-between py-2.5">
+                                    <span className="text-sm text-zinc-300">Total ordenes</span>
+                                    <span className="text-sm font-bold text-white">{summary?.totalOrders || 0}</span>
                                 </div>
                             </div>
-                        </div>
+                        </ReportSurface>
                     </div>
                 </TabsContent>
 
-                {/* Analytics Tabs */}
-                <TabsContent value="financiero" className="mt-6">
+                <TabsContent value="financiero" className="mt-5 md:mt-6">
                     <FinancialSection dateRange={dateRange} />
                 </TabsContent>
 
-                <TabsContent value="productos" className="mt-6">
+                <TabsContent value="productos" className="mt-5 md:mt-6">
                     <ProductsSection dateRange={dateRange} />
                 </TabsContent>
 
-                <TabsContent value="pedidos" className="mt-6">
+                <TabsContent value="pedidos" className="mt-5 md:mt-6">
                     <OrdersSection dateRange={dateRange} />
                 </TabsContent>
 
-                <TabsContent value="inventario" className="mt-6">
+                <TabsContent value="inventario" className="mt-5 md:mt-6">
                     <InventorySection dateRange={dateRange} />
                 </TabsContent>
 
-                <TabsContent value="rentabilidad" className="mt-6">
+                <TabsContent value="rentabilidad" className="mt-5 md:mt-6">
                     <ProfitabilitySection dateRange={dateRange} />
                 </TabsContent>
             </Tabs>
+
+            <ResponsivePanel
+                open={viewsOpen}
+                onOpenChange={setViewsOpen}
+                title="Vista"
+                description="Selecciona la seccion del dashboard de reportes."
+                mobileSide="bottom"
+                desktopMode="sheet"
+                contentClassName="sm:max-w-md"
+            >
+                <div className="space-y-2">
+                    {REPORT_TABS.map((tab) => {
+                        const Icon = tab.icon;
+                        const isActive = tab.value === activeTab;
+                        return (
+                            <button
+                                key={tab.value}
+                                type="button"
+                                onClick={() => {
+                                    setActiveTab(tab.value);
+                                    setViewsOpen(false);
+                                }}
+                                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors ${
+                                    isActive ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                }`}
+                            >
+                                <Icon className="h-4 w-4" />
+                                <span className="font-semibold">{tab.label}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </ResponsivePanel>
+
+            <div aria-hidden className="rounded-[1.75rem] bg-white/55 md:hidden" style={{ minHeight: "calc(var(--admin-mobile-nav-height) - 0.5rem)" }} />
         </div>
     );
 }

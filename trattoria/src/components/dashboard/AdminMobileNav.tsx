@@ -90,7 +90,7 @@ export function AdminMobileNav() {
         <div className="md:hidden">
             {/* Contextual sub-nav strip for Reportes sub-pages */}
             {isInsideReportes && reportesItem?.subItems && reportesItem.subItems.length > 0 && (
-                <div className="pointer-events-none fixed inset-x-0 bottom-[5.75rem] z-39 px-3">
+                <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--admin-mobile-nav-offset)+0.5rem)] z-30 px-3">
                     <div className="pointer-events-auto mx-auto max-w-lg">
                         <div className={cn(
                             "flex items-center gap-1.5 rounded-2xl border px-2 py-1.5",
@@ -122,8 +122,11 @@ export function AdminMobileNav() {
             )}
 
             {/* Main bottom navigation bar */}
-            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-3">
-                <div className="pointer-events-auto mx-auto max-w-lg rounded-[1.75rem] border border-zinc-200 bg-white/95 p-2 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+            <nav
+                aria-label="Navegación principal de administrador"
+                className="app-mobile-nav pointer-events-none fixed inset-x-0 bottom-0 z-40"
+            >
+                <div className="pointer-events-auto mx-auto max-w-lg rounded-[1.75rem] border border-zinc-200 bg-white/95 p-2 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl app-mobile-nav-panel">
                     <div className="grid grid-cols-5 gap-1.5">
                         {ADMIN_MOBILE_PRIMARY_ITEMS.map((item) => {
                             const isActive = isAdminItemActive(pathname, item);
@@ -171,7 +174,7 @@ export function AdminMobileNav() {
 
                             <SheetContent
                                 side="bottom"
-                                className="rounded-t-[1.75rem] border-zinc-200 bg-[#FCFCFB] px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4"
+                                className="app-mobile-sheet rounded-t-[1.75rem] border-zinc-200 bg-[#FCFCFB] px-4 pt-4"
                             >
                                 <div className="mx-auto mb-4 h-1.5 w-14 rounded-full bg-zinc-200" />
 
@@ -302,7 +305,7 @@ export function AdminMobileNav() {
                         </Sheet>
                     </div>
                 </div>
-            </div>
+            </nav>
         </div>
     );
 }

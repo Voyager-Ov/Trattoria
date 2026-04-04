@@ -179,7 +179,7 @@ const Sidebar = React.forwardRef<
                 className={cn(
                     "relative h-svh w-[--sidebar-width] bg-transparent transition-[width] duration-200 ease-linear",
                     collapsible === "offcanvas" && "group-data-[collapsible=offcanvas]:w-0",
-                    collapsible === "icon" && "group-data-[collapsible=icon]:w-[--sidebar-width-icon]",
+                    collapsible === "icon" && "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+1rem)]",
                     side === "right" && "rotate-180"
                 )}
             />
@@ -291,7 +291,7 @@ const SidebarSeparator = React.forwardRef<React.ElementRef<typeof Separator>, Re
 SidebarSeparator.displayName = "SidebarSeparator"
 
 const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentProps<"div">>(({ className, ...props }, ref) => (
-    <div ref={ref} data-sidebar="content" className={cn("flex min-h-0 flex-1 flex-col gap-2 overflow-auto", className)} {...props} />
+    <div ref={ref} data-sidebar="content" className={cn("flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden", className)} {...props} />
 ))
 SidebarContent.displayName = "SidebarContent"
 
@@ -342,7 +342,7 @@ const SidebarMenuItem = React.forwardRef<HTMLLIElement, React.ComponentProps<"li
 SidebarMenuItem.displayName = "SidebarMenuItem"
 
 const sidebarMenuButtonVariants = cva(
-    "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-lg border border-transparent px-2.5 py-2 text-left text-sm text-zinc-600 outline-none ring-sidebar-ring transition-[width,height,padding,color,background-color,box-shadow] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-data-[collapsible=icon]:!size-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:!p-0 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
+    "peer/menu-button flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-transparent px-2.5 py-2 text-left text-sm text-zinc-600 outline-none ring-sidebar-ring transition-[width,height,padding,color,background-color,box-shadow] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:!size-10 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:!p-0 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
     {
         variants: {
             variant: {
