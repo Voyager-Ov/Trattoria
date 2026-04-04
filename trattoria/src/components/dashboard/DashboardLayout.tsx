@@ -12,10 +12,10 @@ export default function DashboardLayout({
         <SidebarProvider defaultOpen>
             <AdminSidebar />
 
-            <SidebarInset className="bg-[#F6F5F2] text-zinc-900">
+            <SidebarInset className="app-shell-surface">
                 <Header />
 
-                <main className="flex-1 overflow-y-auto px-4 pb-28 pt-4 md:px-6 md:pb-6 md:pt-6">
+                <main className="app-shell-main">
                     {children}
                 </main>
             </SidebarInset>

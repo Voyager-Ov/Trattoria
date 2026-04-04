@@ -1,131 +1,155 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { useCallback, useEffect, useState } from "react";
+import { Loader2, Plus, Tag, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, Tag, Trash2 } from "lucide-react";
-import { getSupplyCategories, createSupplyCategory } from "../actions";
-import { toast } from "sonner";
+import { ResponsivePanel } from "@/components/ui/responsive-panel";
+
+import { createSupplyCategory, getSupplyCategories } from "../actions";
 
 interface CategoryDrawerProps {
-  open: boolean;
-  onClose: () => void;
-  onCategoryCreated?: (category: Record<string, any>) => void;
+    open: boolean;
+    onClose: () => void;
+    onCategoryCreated?: (category: Record<string, unknown>) => void;
 }
 
 export function CategoryDrawer({ open, onClose, onCategoryCreated }: CategoryDrawerProps) {
-  const [categories, setCategories] = useState<Record<string, any>[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [newCatName, setNewCatName] = useState("");
+    const [categories, setCategories] = useState<Record<string, unknown>[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [newCatName, setNewCatName] = useState("");
 
-  useEffect(() => {
-    if (open) {
-      loadCategories();
-    }
-  }, [open]);
+    const loadCategories = useCallback(async () => {
+        setLoading(true);
+        const response = await getSupplyCategories();
+        if (response.success) {
+            setCategories(response.data as Record<string, unknown>[]);
+        }
+        setLoading(false);
+    }, []);
 
-  const loadCategories = async () => {
-    setLoading(true);
-    const res = await getSupplyCategories();
-    if (res.success) {
-      setCategories(res.data as Record<string, any>[]);
-    }
-    setLoading(false);
-  };
+    useEffect(() => {
+        if (open) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            void loadCategories();
+        }
+    }, [loadCategories, open]);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCatName.trim()) return;
+    const handleCreate = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!newCatName.trim()) return;
 
-    // Check if category exists locally
-    if (categories.some(c => c.nombre.toLowerCase() === newCatName.toLowerCase().trim())) {
-      toast.error("La categoría ya existe");
-      return;
-    }
+        if (
+            categories.some((category) => {
+                const name = typeof category.nombre === "string" ? category.nombre : "";
+                return name.toLowerCase() === newCatName.toLowerCase().trim();
+            })
+        ) {
+            toast.error("La categoria ya existe");
+            return;
+        }
 
-    setSaving(true);
-    const result = await createSupplyCategory(newCatName.trim());
-    if (result.success && result.data) {
-      toast.success("Categoría creada");
-      setNewCatName("");
-      setCategories([...categories, result.data as Record<string, any>]);
-      if (onCategoryCreated) onCategoryCreated(result.data);
-    } else {
-      toast.error(result.error || "Error al crear categoría");
-    }
-    setSaving(false);
-  };
+        setSaving(true);
+        const result = await createSupplyCategory(newCatName.trim());
+        if (result.success && result.data) {
+            toast.success("Categoria creada");
+            setNewCatName("");
+            setCategories((current) => [...current, result.data as Record<string, unknown>]);
+            onCategoryCreated?.(result.data as Record<string, unknown>);
+        } else {
+            toast.error(result.error || "Error al crear categoria");
+        }
+        setSaving(false);
+    };
 
-  return (
-    <Sheet open={open} onOpenChange={(val) => !val && onClose()}>
-      <SheetContent side="right" className="sm:max-w-md w-full p-0 flex flex-col rounded-l-[3rem] border-zinc-100 bg-white shadow-2xl">
-        <div className="px-10 pt-10 pb-6 border-b border-zinc-50">
-          <SheetHeader>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-900 border border-zinc-200">
-                <Tag className="h-5 w-5" />
-              </div>
-              <div>
-                <SheetTitle className="text-xl font-bold tracking-tight">Categorías de Insumos</SheetTitle>
-                <SheetDescription className="text-sm font-medium">
-                  Organiza tus insumos por tipo
-                </SheetDescription>
-              </div>
-            </div>
-          </SheetHeader>
-        </div>
-
-        <div className="p-10 flex-1 overflow-hidden flex flex-col gap-8 bg-zinc-50/50">
-          <form onSubmit={handleCreate} className="space-y-4">
-            <Label className="text-sm font-bold text-zinc-600 uppercase tracking-widest">Añadir Nueva</Label>
-            <div className="flex gap-2">
-              <Input 
-                value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                placeholder="Ej: Lácteos, Carnes, Empaques..." 
-                className="h-12 bg-white rounded-xl border-zinc-200"
-              />
-              <Button 
-                type="submit" 
-                disabled={saving || !newCatName.trim()}
-                className="h-12 w-12 shrink-0 bg-zinc-900 text-white rounded-xl"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
-              </Button>
-            </div>
-          </form>
-
-          <div className="flex-1 overflow-hidden flex flex-col">
-            <Label className="text-sm font-bold text-zinc-600 uppercase tracking-widest mb-4">Categorías Existentes</Label>
-            
-            <div className="flex-1 bg-white rounded-2xl border border-zinc-200 overflow-y-auto">
-              {loading ? (
-                <div className="p-8 flex justify-center items-center">
-                  <Loader2 className="h-6 w-6 text-zinc-400 animate-spin" />
-                </div>
-              ) : categories.length === 0 ? (
-                <div className="p-8 text-center text-sm font-medium text-zinc-500">
-                  No hay categorías registradas
-                </div>
-              ) : (
-                <div className="divide-y divide-zinc-100">
-                  {categories.map((cat) => (
-                    <div key={cat.id} className="p-4 flex items-center justify-between group">
-                      <span className="font-medium text-zinc-800">{cat.nombre}</span>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-500 hover:bg-red-50" disabled>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+    return (
+        <ResponsivePanel
+            open={open}
+            onOpenChange={(isOpen) => {
+                if (!isOpen) onClose();
+            }}
+            title={<span className="sr-only">Categorias de insumos</span>}
+            description={<span className="sr-only">Gestiona categorias de inventario</span>}
+            contentClassName="flex h-full w-full flex-col overflow-hidden border-zinc-100 bg-white px-0 pt-0 shadow-2xl sm:max-w-md"
+            desktopContentClassName="p-0"
+        >
+            <div className="flex h-full min-h-0 flex-col">
+                <div className="border-b border-zinc-50 px-10 pb-6 pt-10">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-100 text-zinc-900">
+                            <Tag className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold tracking-tight text-zinc-950">Categorias de Insumos</h2>
+                            <p className="text-sm font-medium text-zinc-500">Organiza tus insumos por tipo</p>
+                        </div>
                     </div>
-                  ))}
                 </div>
-              )}
+
+                <div className="flex flex-1 flex-col gap-8 overflow-hidden bg-zinc-50/50 p-10">
+                    <form onSubmit={handleCreate} className="space-y-4">
+                        <Label className="text-sm font-bold uppercase tracking-widest text-zinc-600">Anadir Nueva</Label>
+                        <div className="flex gap-2">
+                            <Input
+                                value={newCatName}
+                                onChange={(event) => setNewCatName(event.target.value)}
+                                placeholder="Ej: Lacteos, Carnes, Empaques..."
+                                className="h-12 rounded-xl border-zinc-200 bg-white"
+                            />
+                            <Button
+                                type="submit"
+                                disabled={saving || !newCatName.trim()}
+                                className="h-12 w-12 shrink-0 rounded-xl bg-zinc-900 text-white"
+                            >
+                                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
+                            </Button>
+                        </div>
+                    </form>
+
+                    <div className="flex flex-1 flex-col overflow-hidden">
+                        <Label className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-600">
+                            Categorias Existentes
+                        </Label>
+
+                        <div className="flex-1 overflow-y-auto rounded-2xl border border-zinc-200 bg-white">
+                            {loading ? (
+                                <div className="flex items-center justify-center p-8">
+                                    <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+                                </div>
+                            ) : categories.length === 0 ? (
+                                <div className="p-8 text-center text-sm font-medium text-zinc-500">
+                                    No hay categorias registradas
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-zinc-100">
+                                    {categories.map((category) => {
+                                        const name = typeof category.nombre === "string" ? category.nombre : "Categoria";
+                                        const id = typeof category.id === "string" ? category.id : name;
+
+                                        return (
+                                            <div key={id} className="group flex items-center justify-between p-4">
+                                                <span className="font-medium text-zinc-800">{name}</span>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
+                                                    disabled
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
+        </ResponsivePanel>
+    );
 }

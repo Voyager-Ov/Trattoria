@@ -4,6 +4,15 @@
 
 @layer base {
   :root {
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --admin-header-height: 4rem;
+    --admin-mobile-nav-height: 5.5rem;
+    --admin-mobile-nav-offset: calc(var(--admin-mobile-nav-height) + var(--safe-bottom) + 0.75rem);
+    --admin-mobile-nav-buffer: 2.5rem;
+
     /* Base Colors - Light Mode Default */
     --background: 0 0% 100%;
     /* Off-white background */
@@ -101,13 +110,28 @@
   }
 }
 
+@media (min-width: 768px) {
+  :root {
+    --admin-header-height: 5rem;
+    --admin-mobile-nav-offset: 0px;
+    --admin-mobile-nav-buffer: 0px;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
   }
 
+  html {
+    min-height: 100%;
+    background-color: hsl(var(--background));
+  }
+
   body {
     @apply bg-background text-foreground;
+    min-height: 100dvh;
+    min-height: 100svh;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
@@ -129,6 +153,51 @@
 
   .bento-desc {
     @apply text-sm text-muted-foreground;
+  }
+
+  .app-shell-surface {
+    @apply bg-[#F6F5F2] text-zinc-900;
+    min-height: 100dvh;
+    min-height: 100svh;
+  }
+
+  .app-shell-main {
+    @apply flex-1 overflow-y-auto px-4 pt-4 md:px-6 md:pt-6;
+    padding-bottom: calc(var(--admin-mobile-nav-offset) + var(--admin-mobile-nav-buffer));
+  }
+
+  .app-header-safe {
+    padding-top: max(0.5rem, var(--safe-top));
+    padding-left: max(1rem, var(--safe-left));
+    padding-right: max(1rem, var(--safe-right));
+  }
+
+  .app-mobile-nav {
+    padding-bottom: calc(var(--safe-bottom) + 0.75rem);
+    padding-left: max(0.75rem, var(--safe-left));
+    padding-right: max(0.75rem, var(--safe-right));
+  }
+
+  .app-mobile-nav-panel {
+    min-height: var(--admin-mobile-nav-height);
+  }
+
+  .app-mobile-sheet {
+    padding-bottom: calc(var(--safe-bottom) + 1rem);
+  }
+}
+
+@media (min-width: 768px) {
+  @layer components {
+    .app-shell-main {
+      padding-bottom: 1.5rem;
+    }
+
+    .app-header-safe {
+      padding-top: 0;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
   }
 }
 
