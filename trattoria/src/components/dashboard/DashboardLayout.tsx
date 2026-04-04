@@ -13,11 +13,13 @@ export default function DashboardLayout({
             <AdminSidebar />
 
             <SidebarInset className="app-shell-surface">
-                <Header />
+                <div className="app-shell-panel">
+                    <Header />
 
-                <main className="app-shell-main">
-                    {children}
-                </main>
+                    <main className="app-shell-main">
+                        {children}
+                    </main>
+                </div>
             </SidebarInset>
 
             <AdminMobileNav />
