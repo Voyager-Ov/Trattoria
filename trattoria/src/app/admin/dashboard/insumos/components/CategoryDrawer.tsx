@@ -78,7 +78,7 @@ export function CategoryDrawer({ open, onClose, onCategoryCreated }: CategoryDra
             desktopContentClassName="p-0"
         >
             <div className="flex h-full min-h-0 flex-col">
-                <div className="border-b border-zinc-50 px-10 pb-6 pt-10">
+                <div className="border-b border-zinc-50 px-5 pb-5 pt-5 sm:px-10 sm:pb-6 sm:pt-10">
                     <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-100 text-zinc-900">
                             <Tag className="h-5 w-5" />
@@ -90,20 +90,20 @@ export function CategoryDrawer({ open, onClose, onCategoryCreated }: CategoryDra
                     </div>
                 </div>
 
-                <div className="flex flex-1 flex-col gap-8 overflow-hidden bg-zinc-50/50 p-10">
+                <div className="flex flex-1 flex-col gap-6 overflow-hidden bg-zinc-50/50 p-5 sm:gap-8 sm:p-10">
                     <form onSubmit={handleCreate} className="space-y-4">
-                        <Label className="text-sm font-bold uppercase tracking-widest text-zinc-600">Anadir Nueva</Label>
+                        <Label className="text-sm font-bold uppercase tracking-widest text-zinc-600">Anadir nueva</Label>
                         <div className="flex gap-2">
                             <Input
                                 value={newCatName}
                                 onChange={(event) => setNewCatName(event.target.value)}
                                 placeholder="Ej: Lacteos, Carnes, Empaques..."
-                                className="h-12 rounded-xl border-zinc-200 bg-white"
+                                className="h-12 rounded-2xl border-zinc-200 bg-white"
                             />
                             <Button
                                 type="submit"
                                 disabled={saving || !newCatName.trim()}
-                                className="h-12 w-12 shrink-0 rounded-xl bg-zinc-900 text-white"
+                                className="h-12 w-12 shrink-0 rounded-2xl bg-zinc-900 text-white"
                             >
                                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-5 w-5" />}
                             </Button>
@@ -112,10 +112,10 @@ export function CategoryDrawer({ open, onClose, onCategoryCreated }: CategoryDra
 
                     <div className="flex flex-1 flex-col overflow-hidden">
                         <Label className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-600">
-                            Categorias Existentes
+                            Categorias existentes
                         </Label>
 
-                        <div className="flex-1 overflow-y-auto rounded-2xl border border-zinc-200 bg-white">
+                        <div className="flex-1 overflow-y-auto rounded-[1.5rem] border border-zinc-200 bg-white">
                             {loading ? (
                                 <div className="flex items-center justify-center p-8">
                                     <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />

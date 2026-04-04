@@ -157,23 +157,23 @@ export function CreateEgresoDrawer({
         >
             <div className="flex h-full min-h-0 flex-col overflow-hidden">
                 <form onSubmit={handleSubmit} className="flex min-h-full flex-col">
-                    <div className="mb-8 px-6 pt-6 text-left md:px-10 md:pt-10">
+                    <div className="mb-6 px-5 pt-5 text-left md:mb-8 md:px-10 md:pt-10">
                         <div className="mb-4 flex items-center gap-4">
-                            <div className="flex h-14 w-14 items-center justify-center rounded-[1.25rem] bg-red-600 text-white shadow-xl shadow-red-100">
-                                {editingEgreso ? <FileText size={28} /> : <TrendingDown size={20} />}
+                            <div className="flex h-12 w-12 items-center justify-center rounded-[1.15rem] bg-red-600 text-white shadow-xl shadow-red-100 md:h-14 md:w-14 md:rounded-[1.25rem]">
+                                {editingEgreso ? <FileText size={24} /> : <TrendingDown size={18} />}
                             </div>
                         </div>
-                        <h2 className="text-4xl font-bold tracking-tight text-zinc-900">
+                        <h2 className="text-3xl font-bold tracking-tight text-zinc-900 md:text-4xl">
                             {editingEgreso ? "Editar Gasto" : "Registrar Gasto"}
                         </h2>
-                        <p className="text-lg text-zinc-500">
+                        <p className="text-sm text-zinc-500 md:text-lg">
                             {editingEgreso
                                 ? "Modifica los detalles del gasto registrado."
                                 : "Registra un nuevo egreso de dinero para tu negocio."}
                         </p>
                     </div>
 
-                    <div className="flex-1 space-y-8 overflow-y-auto px-6 pb-8 md:px-10">
+                    <div className="flex-1 space-y-6 overflow-y-auto px-5 pb-6 md:space-y-8 md:px-10 md:pb-8">
                         <div className="space-y-3">
                             <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">
                                 Seleccionar categoria
@@ -272,7 +272,7 @@ export function CreateEgresoDrawer({
                                 />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div className="space-y-2">
                                     <Label htmlFor="monto" className="flex items-center gap-2 font-bold text-zinc-700">
                                         <DollarSign size={14} className="text-zinc-400" />
@@ -320,10 +320,10 @@ export function CreateEgresoDrawer({
                         </div>
                     </div>
 
-                    <div className="mt-auto border-t border-zinc-100 px-6 pb-6 pt-8 md:px-10 md:pb-10">
+                    <div className="mt-auto border-t border-zinc-100 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-6 md:px-10 md:pb-10 md:pt-8">
                         <Button
                             type="submit"
-                            className="w-full gap-3 rounded-[1.5rem] bg-red-600 text-lg font-bold text-white shadow-xl shadow-red-100 transition-all hover:bg-red-700 disabled:grayscale"
+                            className="w-full gap-3 rounded-[1.35rem] bg-red-600 text-base font-bold text-white shadow-xl shadow-red-100 transition-all hover:bg-red-700 disabled:grayscale md:rounded-[1.5rem] md:text-lg"
                             disabled={isLoading}
                         >
                             {isLoading ? (
@@ -341,7 +341,7 @@ export function CreateEgresoDrawer({
                         <Button
                             type="button"
                             variant="ghost"
-                            className="mt-2 h-12 w-full rounded-xl font-medium text-zinc-500 hover:bg-zinc-50"
+                            className="mt-2 h-11 w-full rounded-xl font-medium text-zinc-500 hover:bg-zinc-50 md:h-12"
                             onClick={() => onOpenChange(false)}
                         >
                             Cancelar

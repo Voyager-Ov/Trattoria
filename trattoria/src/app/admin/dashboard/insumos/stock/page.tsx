@@ -1,32 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-    ChevronRight,
-    History as HistoryIcon,
-    Info,
-    Loader2,
-    Save,
-    ShoppingCart,
-    TrendingUp,
-    X
-} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ChevronLeft, History as HistoryIcon, Info, Loader2, Save, ShoppingCart, TrendingUp, X } from "lucide-react";
+import { TipoMovimientoStock } from "@prisma/client";
+import { toast } from "sonner";
+
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 import { getSupplies, registerStockEntry, registerStockMovement } from "../actions";
-import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
-import { TipoMovimientoStock } from "@prisma/client";
 
 interface Supply {
     id: string;
@@ -35,6 +22,12 @@ interface Supply {
     stockActual: number;
     stockMinimo?: number;
     costoUnitario?: number;
+}
+
+function typeLabel(value: TipoMovimientoStock) {
+    if (value === "IN") return "Entrada";
+    if (value === "OUT") return "Salida";
+    return "Ajuste";
 }
 
 function RegistrarStockContent() {
@@ -48,31 +41,48 @@ function RegistrarStockContent() {
         supplyId: preselectedId || "",
         cantidad: "",
         costoTotal: "",
-        motivo: "Compra de Insumos",
+        motivo: "Compra de insumos",
         proveedor: "",
         tipo: "IN" as TipoMovimientoStock,
     });
 
-    const loadSupplies = React.useCallback(async () => {
-        const result = await getSupplies();
-        if (result.success) {
-            setSupplies(result.data as Supply[]);
+    useEffect(() => {
+        async function loadSupplies() {
+            const result = await getSupplies();
+            if (result.success && result.data) {
+                setSupplies(result.data as Supply[]);
+            }
         }
+
+        void loadSupplies();
     }, []);
 
-    useEffect(() => {
-        loadSupplies();
-    }, [loadSupplies]);
+    const selectedSupply = useMemo(
+        () => supplies.find((supply) => supply.id === formData.supplyId),
+        [formData.supplyId, supplies]
+    );
 
-    const selectedSupply = supplies.find(s => s.id === formData.supplyId);
+    const quantity = Number.parseFloat(formData.cantidad) || 0;
+    const totalCost = Number.parseFloat(formData.costoTotal) || 0;
+    const estimatedStock =
+        selectedSupply == null
+            ? 0
+            : formData.tipo === "OUT"
+              ? Number(selectedSupply.stockActual) - quantity
+              : formData.tipo === "AJUSTE"
+                ? quantity
+                : Number(selectedSupply.stockActual) + quantity;
+    const estimatedUnitCost = quantity > 0 ? totalCost / quantity : 0;
 
-    async function handleSubmit(e: React.FormEvent) {
-        e.preventDefault();
+    async function handleSubmit(event: React.FormEvent) {
+        event.preventDefault();
+
         if (!formData.supplyId) {
             toast.error("Seleccione un insumo");
             return;
         }
-        if (!formData.cantidad || parseFloat(formData.cantidad) <= 0) {
+
+        if (!formData.cantidad || quantity <= 0) {
             toast.error("La cantidad debe ser mayor a 0");
             return;
         }
@@ -82,21 +92,17 @@ function RegistrarStockContent() {
         let result;
 
         if (formData.tipo === "IN") {
-            const qty = parseFloat(formData.cantidad);
-            const total = parseFloat(formData.costoTotal) || 0;
-            const unitCost = qty > 0 ? total / qty : 0;
-
             result = await registerStockEntry({
                 supplyId: formData.supplyId,
-                cantidad: qty,
-                costoUnitario: unitCost,
+                cantidad: quantity,
+                costoUnitario: quantity > 0 ? totalCost / quantity : 0,
                 motivo: formData.motivo,
                 proveedor: formData.proveedor || undefined,
             });
         } else {
             result = await registerStockMovement({
                 supplyId: formData.supplyId,
-                cantidad: parseFloat(formData.cantidad),
+                cantidad: quantity,
                 tipo: formData.tipo,
                 motivo: formData.motivo,
             });
@@ -109,123 +115,124 @@ function RegistrarStockContent() {
         } else {
             toast.error(result.error || "Error al registrar el movimiento");
         }
+
         setLoading(false);
     }
 
     return (
-        <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen">
-            {/* Breadcrumbs */}
-            <div className="flex items-center gap-2 text-sm font-medium text-zinc-400">
-                <Link href="/admin/dashboard" className="hover:text-zinc-600 transition-colors">Dashboard</Link>
-                <ChevronRight className="h-4 w-4" />
-                <Link href="/admin/dashboard/insumos" className="hover:text-zinc-600 transition-colors">Inventario</Link>
-                <ChevronRight className="h-4 w-4" />
-                <span className="text-zinc-900 capitalize">Registrar Stock</span>
-            </div>
-
-            <div className="flex justify-between items-center bg-white p-8 rounded-[2.5rem] border border-zinc-200 shadow-sm">
-                <div>
-                    <h1 className="text-4xl font-black text-zinc-900 tracking-tight flex items-center gap-3">
-                        <div className="h-12 w-12 bg-zinc-900 rounded-2xl flex items-center justify-center text-white">
-                            <HistoryIcon className="h-6 w-6" />
-                        </div>
-                        MOVIMIENTO DE STOCK
-                    </h1>
-                    <p className="text-zinc-500 mt-2 font-medium">Actualiza el inventario base de tus insumos.</p>
-                </div>
-                <div className="flex items-center gap-3">
+        <div className="app-page-safe-bottom flex min-h-screen flex-col gap-5 bg-white px-4 py-4 sm:px-6 md:gap-6 md:px-8 md:py-8">
+            <section className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                    <Link
+                        href="/admin/dashboard/insumos"
+                        className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-500 transition-colors hover:text-zinc-900"
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                        Volver
+                    </Link>
                     <Link href="/admin/dashboard/insumos">
-                        <Button variant="outline" className="h-14 w-14 rounded-full border-zinc-200 hover:bg-zinc-50 shadow-none p-0 transition-all active:scale-95">
-                            <X className="h-6 w-6 text-zinc-400" />
+                        <Button variant="outline" className="h-11 w-11 rounded-full border-zinc-200 p-0 sm:h-12 sm:w-12">
+                            <X className="h-4 w-4 text-zinc-400" />
                         </Button>
                     </Link>
                 </div>
-            </div>
 
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Main Form Column */}
-                <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white p-10 rounded-[3rem] border border-zinc-200 shadow-sm space-y-8">
-                        <div className="flex items-center gap-4 border-b border-zinc-100 pb-8">
-                            <div className="p-4 bg-zinc-50 rounded-2xl text-zinc-900">
-                                <ShoppingCart className="h-6 w-6 text-zinc-400" />
+                <div className="rounded-[1.75rem] border border-zinc-200 bg-white p-5 shadow-sm md:rounded-[2rem] md:p-7">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-900 text-white">
+                            <HistoryIcon className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-black tracking-tight text-zinc-900 sm:text-3xl">Registrar stock</h1>
+                            <p className="text-sm text-zinc-500">Actualiza entradas, salidas o ajustes del inventario.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.85fr)] xl:gap-6">
+                <div className="space-y-5">
+                    <section className="rounded-[1.75rem] border border-zinc-200 bg-white p-5 shadow-sm md:rounded-[2rem] md:p-7">
+                        <div className="mb-6 flex items-center gap-3 border-b border-zinc-100 pb-5">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-50 text-zinc-500">
+                                <ShoppingCart className="h-5 w-5" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-black text-zinc-900 tracking-tight leading-none uppercase italic">Detalle de Adquisición</h3>
-                                <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mt-2">Especifica insumo y costos</p>
+                                <h2 className="text-lg font-black tracking-tight text-zinc-900">Datos del movimiento</h2>
+                                <p className="text-sm text-zinc-500">Completa el insumo, cantidad y referencia.</p>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div className="space-y-3">
-                                <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Tipo de Movimiento</Label>
+                        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Tipo de movimiento</Label>
                                 <Select
                                     value={formData.tipo}
-                                    onValueChange={(val: TipoMovimientoStock) => {
-                                        setFormData({
-                                            ...formData,
-                                            tipo: val,
-                                            motivo: val === "IN" ? "Compra de Insumos" : val === "OUT" ? "Consumo / Merma" : "Ajuste de Inventario"
-                                        });
+                                    onValueChange={(value: TipoMovimientoStock) => {
+                                        setFormData((current) => ({
+                                            ...current,
+                                            tipo: value,
+                                            motivo:
+                                                value === "IN"
+                                                    ? "Compra de insumos"
+                                                    : value === "OUT"
+                                                      ? "Consumo / merma"
+                                                      : "Ajuste de inventario",
+                                        }));
                                     }}
                                 >
-                                    <SelectTrigger className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-bold px-6 shadow-none">
+                                    <SelectTrigger className="h-14 rounded-[1.5rem] border-zinc-200 bg-zinc-50 px-5 font-semibold">
                                         <SelectValue placeholder="Seleccionar tipo" />
                                     </SelectTrigger>
-                                    <SelectContent className="rounded-2xl shadow-xl border-zinc-100 p-2">
-                                        <SelectItem value="IN" className="rounded-xl py-3 font-bold text-emerald-600">ENTRADA (COMPRA)</SelectItem>
-                                        <SelectItem value="OUT" className="rounded-xl py-3 font-bold text-amber-600">SALIDA (MERMA/CONSUMO)</SelectItem>
-                                        <SelectItem value="AJUSTE" className="rounded-xl py-3 font-bold text-blue-600">AJUSTE MANUAL</SelectItem>
+                                    <SelectContent>
+                                        <SelectItem value="IN">Entrada (compra)</SelectItem>
+                                        <SelectItem value="OUT">Salida (merma/consumo)</SelectItem>
+                                        <SelectItem value="AJUSTE">Ajuste manual</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
 
-                            <div className="space-y-3">
-                                <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Insumo</Label>
+                            <div className="space-y-2">
+                                <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Insumo</Label>
                                 <Select
                                     value={formData.supplyId}
-                                    onValueChange={(val) => {
-                                        const supply = supplies.find(s => s.id === val);
-                                        setFormData({
-                                            ...formData,
-                                            supplyId: val,
-                                            costoTotal: "" // Reset total cost on supply change to avoid confusion
-                                        });
+                                    onValueChange={(value) => {
+                                        setFormData((current) => ({
+                                            ...current,
+                                            supplyId: value,
+                                            costoTotal: "",
+                                        }));
                                     }}
                                 >
-                                    <SelectTrigger className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-bold px-6 shadow-none">
+                                    <SelectTrigger className="h-14 rounded-[1.5rem] border-zinc-200 bg-zinc-50 px-5 font-semibold">
                                         <SelectValue placeholder="Seleccionar insumo" />
                                     </SelectTrigger>
-                                    <SelectContent className="rounded-2xl shadow-xl border-zinc-100 p-2 max-h-[400px]">
-                                        {supplies.map(s => (
-                                            <SelectItem key={s.id} value={s.id} className="rounded-xl py-3 font-bold">
-                                                <div className="flex items-center justify-between w-full gap-8">
-                                                    <span>{s.nombre}</span>
-                                                    <Badge variant="outline" className="text-[0.6rem] font-bold uppercase tracking-tighter bg-zinc-50 border-zinc-200 px-2 py-0">
-                                                        {Number(s.stockActual).toFixed(2)} {s.unidad}
-                                                    </Badge>
-                                                </div>
+                                    <SelectContent className="max-h-[20rem]">
+                                        {supplies.map((supply) => (
+                                            <SelectItem key={supply.id} value={supply.id}>
+                                                {supply.nombre}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
                             </div>
 
-                            <div className="space-y-3">
-                                <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">
-                                    {formData.tipo === "IN" ? "Cantidad Comprada" : "Cantidad a Movilizar"}
+                            <div className="space-y-2">
+                                <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                                    {formData.tipo === "IN" ? "Cantidad comprada" : formData.tipo === "OUT" ? "Cantidad a descontar" : "Stock resultante"}
                                 </Label>
                                 <div className="relative">
                                     <Input
                                         type="number"
                                         step="any"
-                                        placeholder="0.000"
-                                        className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-bold px-6 shadow-none pr-16"
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        className="h-14 rounded-[1.5rem] border-zinc-200 bg-zinc-50 px-5 pr-16 font-semibold"
                                         value={formData.cantidad}
-                                        onChange={(e) => setFormData({ ...formData, cantidad: e.target.value })}
+                                        onChange={(event) => setFormData((current) => ({ ...current, cantidad: event.target.value }))}
                                     />
                                     {selectedSupply && (
-                                        <span className="absolute right-6 top-1/2 -translate-y-1/2 text-zinc-400 font-black text-[0.65rem] uppercase tracking-widest">
+                                        <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[11px] font-black uppercase tracking-[0.14em] text-zinc-400">
                                             {selectedSupply.unidad}
                                         </span>
                                     )}
@@ -233,131 +240,157 @@ function RegistrarStockContent() {
                             </div>
 
                             {formData.tipo === "IN" && (
-                                <div className="space-y-3">
-                                    <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Costo Total de Compra ($)</Label>
+                                <div className="space-y-2">
+                                    <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Costo total</Label>
                                     <div className="relative">
-                                        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-400 font-bold">$</span>
+                                        <span className="absolute left-5 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-400">$</span>
                                         <Input
                                             type="number"
                                             step="any"
+                                            inputMode="decimal"
                                             placeholder="0.00"
-                                            className="pl-10 h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-bold px-6 shadow-none"
+                                            className="h-14 rounded-[1.5rem] border-zinc-200 bg-zinc-50 pl-10 pr-5 font-semibold"
                                             value={formData.costoTotal}
-                                            onChange={(e) => setFormData({ ...formData, costoTotal: e.target.value })}
+                                            onChange={(event) => setFormData((current) => ({ ...current, costoTotal: event.target.value }))}
                                         />
                                     </div>
                                 </div>
                             )}
 
-                            <div className="space-y-3 md:col-span-2">
-                                <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Motivo o Referencia</Label>
+                            <div className="space-y-2 md:col-span-2">
+                                <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Motivo o referencia</Label>
                                 <Input
-                                    placeholder="Ej: Compra mensual, Ajuste de inventario..."
-                                    className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-medium px-6 shadow-none"
+                                    placeholder="Ej: compra semanal, merma, ajuste de conteo..."
+                                    className="h-14 rounded-[1.5rem] border-zinc-200 bg-zinc-50 px-5 font-medium"
                                     value={formData.motivo}
-                                    onChange={(e) => setFormData({ ...formData, motivo: e.target.value })}
+                                    onChange={(event) => setFormData((current) => ({ ...current, motivo: event.target.value }))}
                                 />
                             </div>
 
                             {formData.tipo === "IN" && (
-                                <div className="space-y-3 md:col-span-2">
-                                    <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Proveedor (Opcional)</Label>
+                                <div className="space-y-2 md:col-span-2">
+                                    <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Proveedor</Label>
                                     <Input
-                                        placeholder="Ej: Distribuidora San Juan, Mayorista Central..."
-                                        className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-medium px-6 shadow-none"
+                                        placeholder="Ej: distribuidora central"
+                                        autoComplete="organization"
+                                        className="h-14 rounded-[1.5rem] border-zinc-200 bg-zinc-50 px-5 font-medium"
                                         value={formData.proveedor}
-                                        onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                                        onChange={(event) => setFormData((current) => ({ ...current, proveedor: event.target.value }))}
                                     />
                                 </div>
                             )}
                         </div>
-                    </div>
+                    </section>
                 </div>
 
-                {/* Sidebar Column */}
-                <div className="space-y-6">
-                    {selectedSupply && formData.cantidad ? (
-                        <div className="bg-zinc-900 text-white p-8 rounded-[2.5rem] shadow-xl overflow-hidden relative group transition-all">
-                            <div className="absolute top-0 right-0 p-8 text-white/[0.03] pointer-events-none">
-                                <TrendingUp className="h-40 w-40 -mr-16 -mt-16 rotate-12" />
-                            </div>
-
-                            <div className="relative z-10 space-y-8">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 bg-white/10 rounded-xl">
-                                        <TrendingUp className="h-6 w-6 text-emerald-400" />
-                                    </div>
-                                    <h3 className="text-lg font-black tracking-tight leading-none italic uppercase">Impacto</h3>
+                <div className="space-y-5">
+                    {selectedSupply ? (
+                        <section className="overflow-hidden rounded-[1.75rem] bg-zinc-900 p-5 text-white shadow-lg md:rounded-[2rem] md:p-6">
+                            <div className="relative">
+                                <div className="absolute right-0 top-0 text-white/5">
+                                    <TrendingUp className="h-24 w-24" />
                                 </div>
-
-                                <div className="space-y-8">
-                                    <div className="space-y-2">
-                                        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Nuevo Stock Estimado</p>
-                                        <div className="flex items-baseline gap-2">
-                                            <span className="text-4xl font-black tracking-tighter italic">
-                                                {(Number(selectedSupply.stockActual) + (parseFloat(formData.cantidad) || 0)).toFixed(2)}
-                                            </span>
-                                            <span className="text-zinc-500 font-bold text-xs uppercase tracking-widest">{selectedSupply.unidad}</span>
+                                <div className="relative space-y-5">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-emerald-400">
+                                            <TrendingUp className="h-5 w-5" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-black tracking-tight">Impacto estimado</h3>
+                                            <p className="text-sm text-zinc-400">{typeLabel(formData.tipo)} sobre {selectedSupply.nombre}</p>
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2 border-t border-white/5 pt-6">
-                                        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Inversión Total</p>
-                                        <div className="flex items-baseline gap-1">
-                                            <span className="text-lg font-black text-zinc-500">$</span>
-                                            <span className="text-3xl font-black tracking-tighter text-emerald-400 italic">
-                                                {(parseFloat(formData.costoTotal) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                                            </span>
-                                        </div>
-                                        {formData.cantidad && parseFloat(formData.cantidad) > 0 && (
-                                            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                                                Costo Unit: ${(parseFloat(formData.costoTotal) / parseFloat(formData.cantidad)).toFixed(2)}
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                                        <div className="rounded-[1.4rem] bg-white/5 p-4">
+                                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Stock actual</p>
+                                            <p className="mt-2 text-xl font-black tracking-tight">
+                                                {Number(selectedSupply.stockActual).toFixed(2)} {selectedSupply.unidad}
                                             </p>
+                                        </div>
+                                        <div className="rounded-[1.4rem] bg-white/5 p-4">
+                                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Stock estimado</p>
+                                            <p className="mt-2 text-xl font-black tracking-tight">
+                                                {estimatedStock.toFixed(2)} {selectedSupply.unidad}
+                                            </p>
+                                        </div>
+                                        {formData.tipo === "IN" && (
+                                            <div className="rounded-[1.4rem] bg-white/5 p-4">
+                                                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Inversion total</p>
+                                                <p className="mt-2 break-words text-2xl font-black tracking-tight text-emerald-400">
+                                                    ${totalCost.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </p>
+                                                {quantity > 0 && (
+                                                    <p className="mt-1 text-xs font-semibold text-zinc-400">
+                                                        Costo unit. estimado ${estimatedUnitCost.toFixed(2)}
+                                                    </p>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        </section>
                     ) : (
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-zinc-200 flex flex-col items-center justify-center text-center space-y-4">
-                            <div className="p-4 bg-zinc-50 rounded-2xl shadow-sm">
-                                <Info className="h-8 w-8 text-zinc-300" />
+                        <section className="rounded-[1.75rem] border border-zinc-200 bg-white p-6 text-center shadow-sm md:rounded-[2rem]">
+                            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-50 text-zinc-300">
+                                <Info className="h-7 w-7" />
                             </div>
-                            <div className="space-y-1">
-                                <h4 className="font-black text-zinc-900 uppercase tracking-tight italic">Resumen pendiente</h4>
-                                <p className="text-[0.7rem] text-zinc-400 font-medium">Completa el formulario para visualizar el impacto.</p>
-                            </div>
-                        </div>
+                            <h3 className="mt-4 text-lg font-black tracking-tight text-zinc-900">Resumen pendiente</h3>
+                            <p className="mt-2 text-sm text-zinc-500">Selecciona un insumo y carga una cantidad para ver el impacto del movimiento.</p>
+                        </section>
                     )}
 
-                    <div className="flex flex-col gap-3">
+                    {selectedSupply && (
+                        <section className="rounded-[1.75rem] border border-zinc-200 bg-white p-5 shadow-sm md:rounded-[2rem]">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Insumo seleccionado</p>
+                                    <h3 className="mt-1 text-lg font-black tracking-tight text-zinc-900">{selectedSupply.nombre}</h3>
+                                </div>
+                                <Badge variant="outline" className="border-zinc-200 bg-zinc-50 text-zinc-600">
+                                    {selectedSupply.unidad}
+                                </Badge>
+                            </div>
+                        </section>
+                    )}
+
+                    <div className="sticky bottom-[calc(var(--admin-mobile-nav-height)+1rem)] z-10 space-y-3 rounded-[1.75rem] border border-zinc-200 bg-white/95 p-4 shadow-lg backdrop-blur md:static md:rounded-[2rem] md:bg-white md:p-0 md:shadow-none md:backdrop-blur-none">
                         <Button
-                            onClick={handleSubmit}
+                            type="submit"
                             disabled={loading || !formData.supplyId}
-                            className="h-16 w-full rounded-2xl bg-zinc-900 text-white font-black text-lg shadow-lg active:scale-95 transition-all flex items-center justify-center gap-3"
+                            className="h-12 w-full rounded-2xl bg-zinc-900 text-sm font-black uppercase tracking-[0.14em] text-white"
                         >
-                            {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <Save className="h-6 w-6" />}
-                            CONFIRMAR ENTRADA
+                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                            Confirmar movimiento
                         </Button>
-                        <Link href="/admin/dashboard/insumos">
-                            <Button variant="outline" className="h-16 w-full rounded-2xl border-zinc-200 hover:bg-zinc-50 font-bold text-zinc-500 shadow-none transition-all">
-                                CANCELAR
+                        <Link href="/admin/dashboard/insumos" className="block">
+                            <Button variant="outline" className="h-12 w-full rounded-2xl border-zinc-200 text-zinc-600">
+                                Cancelar
                             </Button>
                         </Link>
                     </div>
                 </div>
             </form>
+
+            <div
+                aria-hidden
+                className="rounded-[1.75rem] bg-white/55 md:hidden"
+                style={{ minHeight: "calc(var(--admin-mobile-nav-height) - 0.5rem)" }}
+            />
         </div>
     );
 }
 
 export default function RegistrarStockPage() {
     return (
-        <Suspense fallback={
-            <div className="flex items-center justify-center min-h-screen">
-                <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
-            </div>
-        }>
+        <Suspense
+            fallback={
+                <div className="flex min-h-screen items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+                </div>
+            }
+        >
             <RegistrarStockContent />
         </Suspense>
     );
