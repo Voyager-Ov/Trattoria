@@ -1,28 +1,26 @@
-import { AdminSidebar } from "./Sidebar";
-import { Header } from "./Header";
-// import { ScrollArea } from "@/components/ui/scroll-area"; // Removed to fix build, using standard overflow
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { Header } from "./Header"
+import { AdminMobileNav } from "./AdminMobileNav"
+import { AdminSidebar } from "./Sidebar"
 
 export default function DashboardLayout({
     children,
 }: {
-    children: React.ReactNode;
+    children: React.ReactNode
 }) {
     return (
-        <div className="flex h-screen overflow-hidden bg-zinc-50/50">
-            {/* Desktop Sidebar - Hidden on mobile */}
-            <div className="hidden md:block">
-                <AdminSidebar mode="desktop" />
-            </div>
+        <SidebarProvider defaultOpen>
+            <AdminSidebar />
 
-            {/* Main Content Area */}
-            <div className="flex-1 flex flex-col h-full overflow-hidden transition-all duration-300">
+            <SidebarInset className="bg-[#F6F5F2] text-zinc-900">
                 <Header />
 
-                {/* Content Scroll Area */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-6">
+                <main className="flex-1 overflow-y-auto px-4 pb-28 pt-4 md:px-6 md:pb-6 md:pt-6">
                     {children}
-                </div>
-            </div>
-        </div>
-    );
+                </main>
+            </SidebarInset>
+
+            <AdminMobileNav />
+        </SidebarProvider>
+    )
 }

@@ -1,371 +1,292 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import Image from "next/image"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { ChevronRight, LogOut } from "lucide-react"
+import { useState } from "react"
+
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
-    LayoutDashboard,
-    ShoppingBag,
-    Users,
-    UtensilsCrossed,
-    Settings,
-    LogOut,
-    ChevronLeft,
-    ChevronRight,
-    ChevronDown,
-    Package,
-    FileText,
-    User
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/lib/hooks/useAuth";
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip";
-
-// Menu Items Configuration - With submenu support
-type MenuItem = {
-    name: string;
-    href: string;
-    icon: LucideIcon;
-    activeColor: string; // Color de fondo cuando está activo
-    activeTextColor: string; // Color del texto cuando está activo
-    hoverColor: string; // Color en hover
-    subItems?: { name: string; href: string }[];
-};
-
-const MENU_ITEMS: MenuItem[] = [
-    { 
-        name: "Dashboard", 
-        href: "/admin/dashboard", 
-        icon: LayoutDashboard,
-        activeColor: "bg-blue-500/10",
-        activeTextColor: "text-blue-600",
-        hoverColor: "hover:bg-blue-500/5"
-    },
-    { 
-        name: "Pedidos", 
-        href: "/admin/dashboard/pedidos", 
-        icon: ShoppingBag,
-        activeColor: "bg-orange-500/10",
-        activeTextColor: "text-orange-600",
-        hoverColor: "hover:bg-orange-500/5"
-    },
-    { 
-        name: "Menú y Productos", 
-        href: "/admin/dashboard/productos", 
-        icon: UtensilsCrossed,
-        activeColor: "bg-emerald-500/10",
-        activeTextColor: "text-emerald-600",
-        hoverColor: "hover:bg-emerald-500/5"
-    },
-    { 
-        name: "Insumos", 
-        href: "/admin/dashboard/insumos", 
-        icon: Package,
-        activeColor: "bg-indigo-500/10",
-        activeTextColor: "text-indigo-600",
-        hoverColor: "hover:bg-indigo-500/5"
-    },
-    { 
-        name: "Empleados", 
-        href: "/admin/dashboard/usuarios", 
-        icon: Users,
-        activeColor: "bg-violet-500/10",
-        activeTextColor: "text-violet-600",
-        hoverColor: "hover:bg-violet-500/5"
-    },
-    {
-        name: "Reportes",
-        href: "/admin/dashboard/reportes",
-        icon: FileText,
-        activeColor: "bg-rose-500/10",
-        activeTextColor: "text-rose-600",
-        hoverColor: "hover:bg-rose-500/5",
-        subItems: [
-            { name: "Dashboard", href: "/admin/dashboard/reportes" },
-            { name: "Ingresos", href: "/admin/dashboard/reportes/ingresos" },
-            { name: "Egresos", href: "/admin/dashboard/reportes/egresos" },
-        ]
-    },
-];
+    Sidebar,
+    SidebarContent,
+    SidebarFooter,
+    SidebarGroup,
+    SidebarGroupContent,
+    SidebarHeader,
+    SidebarMenu,
+    SidebarMenuAction,
+    SidebarMenuButton,
+    SidebarMenuItem,
+    SidebarMenuSub,
+    SidebarMenuSubButton,
+    SidebarMenuSubItem,
+    SidebarRail,
+    SidebarSeparator,
+    SidebarTrigger,
+    useSidebar,
+} from "@/components/ui/sidebar"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { useAuth } from "@/lib/hooks/useAuth"
+import { cn } from "@/lib/utils"
+import { ADMIN_ACCOUNT_ITEMS, ADMIN_NAV_ITEMS, type AdminNavItem, isAdminItemActive } from "./adminNavigation"
 
 interface SidebarProps {
-    className?: string;
-    mode?: 'desktop' | 'mobile'; // Support for mobile sheet usage
+    className?: string
 }
 
-export function AdminSidebar({ className, mode = 'desktop' }: SidebarProps) {
-    const pathname = usePathname();
-    const { logout } = useAuth();
-    // If mobile, always expanded. If desktop, default collapsed.
-    const [isCollapsed, setIsCollapsed] = useState(mode === 'desktop');
-    const [expandedItems, setExpandedItems] = useState<string[]>([]);
+function getMenuButtonClass(item: AdminNavItem, isActive: boolean) {
+    return cn(
+        "relative h-11 rounded-xl px-2.5 text-sm font-medium text-zinc-600 shadow-none transition-all duration-200",
+        !isActive && "hover:bg-zinc-50 hover:text-zinc-950",
+        isActive && cn("border shadow-sm", item.tone.softBg, item.tone.softBorder, item.tone.softText)
+    )
+}
 
-    const toggleSidebar = () => {
-        if (mode === 'mobile') return;
-        setIsCollapsed(!isCollapsed);
-    };
-
-    const toggleExpanded = (href: string) => {
-        setExpandedItems(prev =>
-            prev.includes(href) ? prev.filter(h => h !== href) : [...prev, href]
-        );
-    };
+function AdminSidebarItem({ item, pathname }: { item: AdminNavItem; pathname: string }) {
+    const isActive = isAdminItemActive(pathname, item)
 
     return (
-        <TooltipProvider delayDuration={0}>
-            <div
-                className={cn(
-                    "relative flex flex-col h-screen bg-white text-zinc-500 border-r border-zinc-200 transition-all duration-300 ease-in-out overflow-hidden",
-                    mode === 'desktop' ? (isCollapsed ? "w-[80px]" : "w-[260px]") : "w-full",
-                    className
-                )}
-            >
-                {/* Toggle Button - Desktop Only */}
-                {mode === 'desktop' && (
-                    <Button
-                        onClick={toggleSidebar}
-                        variant="ghost"
-                        size="icon"
-                        className="absolute -right-3 top-6 h-7 w-7 rounded-full bg-white border border-zinc-200 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-900 hover:text-white hover:border-zinc-900 z-50 hidden md:flex shadow-lg transition-all duration-300"
+        <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={isActive} tooltip={item.name} className={getMenuButtonClass(item, isActive)}>
+                <Link href={item.href}>
+                    {/* Active indicator dot — hides in icon mode */}
+                    <span
+                        className={cn(
+                            "absolute left-1 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full transition-opacity duration-200",
+                            "group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:pointer-events-none",
+                            isActive ? item.tone.dot : "opacity-0"
+                        )}
+                    />
+                    <span
+                        className={cn(
+                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors duration-200",
+                            isActive ? cn("border-transparent", item.tone.softBg, item.tone.softText) : "border-zinc-200 bg-zinc-50 text-zinc-500"
+                        )}
                     >
-                        {isCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
-                    </Button>
-                )}
+                        <item.icon className="h-4.5 w-4.5" />
+                    </span>
+                    <span className="truncate">{item.name}</span>
+                </Link>
+            </SidebarMenuButton>
+        </SidebarMenuItem>
+    )
+}
 
-                {/* Header / Logo */}
-                <div className={cn(
-                    "flex items-center h-20 px-4 mb-2 transition-all duration-300",
-                    isCollapsed && mode === 'desktop' ? "justify-center" : "justify-start gap-3"
-                )}>
-                    <div className="relative h-12 w-12 flex-shrink-0 bg-zinc-900 rounded-2xl overflow-hidden shadow-lg ring-2 ring-zinc-900/5">
-                        <Image 
-                            src="/tratologo.png" 
-                            alt="Logo" 
-                            fill 
-                            className="object-cover"
-                        />
-                    </div>
-                    {(!isCollapsed || mode === 'mobile') && (
-                        <div className="flex flex-col overflow-hidden">
-                            <span className="text-zinc-900 font-black tracking-tight leading-none text-lg uppercase">TRATTORIA</span>
-                            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider mt-0.5">Management</span>
+export function AdminSidebar({ className }: SidebarProps) {
+    const pathname = usePathname()
+    const { logout } = useAuth()
+    const isMobile = useIsMobile()
+    const { state } = useSidebar()
+    const [manualExpandedKey, setManualExpandedKey] = useState<string | null>(null)
+
+    if (isMobile) {
+        return null
+    }
+
+    const isCollapsed = state === "collapsed"
+
+    return (
+        <Sidebar collapsible="icon" variant="inset" className={cn("transition-all duration-300", className)}>
+            {/* ─── HEADER ─── */}
+            <SidebarHeader className="border-b border-sidebar-border/70 p-2">
+                <div className="flex items-center justify-between gap-2 overflow-hidden px-1">
+                    <Link
+                        href="/admin/dashboard"
+                        className={cn(
+                            "flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-sidebar-border bg-white transition-all duration-300 hover:bg-zinc-50",
+                            isCollapsed ? "h-10 justify-center border-0 bg-transparent p-0 shadow-none" : "h-14 px-2.5 shadow-sm"
+                        )}
+                    >
+                        {/* Logo icon — always visible */}
+                        <div className={cn(
+                            "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-950 transition-all duration-300",
+                            isCollapsed ? "h-8 w-8" : "h-9 w-9"
+                        )}>
+                            <Image src="/tratologo.png" alt="Trattoria" fill className="object-cover" />
                         </div>
+
+                        {/* Text — fades + collapses out, never jumps */}
+                        {!isCollapsed && (
+                            <div className="min-w-0 flex-1 overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-left-2">
+                                <p className="truncate text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-400">Admin</p>
+                                <p className="truncate text-sm font-bold tracking-tight text-zinc-950">Trattoria</p>
+                            </div>
+                        )}
+                    </Link>
+
+                    {!isCollapsed && (
+                        <SidebarTrigger className="h-8 w-8 shrink-0 rounded-lg border-zinc-200 bg-white shadow-sm hover:bg-zinc-50 hover:text-zinc-950" />
                     )}
                 </div>
 
-                {/* Navigation Links */}
-                <div className="flex-1 px-3 space-y-1 overflow-y-auto no-scrollbar py-2">
-                    {MENU_ITEMS.map((item) => {
-                        const isActive = item.href === "/admin/dashboard" 
-                            ? pathname === "/admin/dashboard" 
-                            : pathname === item.href || pathname?.startsWith(item.href + "/");
-                        
-                        const hasSubItems = item.subItems && item.subItems.length > 0;
-                        const isExpanded = expandedItems.includes(item.href)
-                            || !!(hasSubItems && (pathname === item.href || pathname?.startsWith(item.href + "/")));
-                        const showLabel = !isCollapsed || mode === 'mobile';
+                {isCollapsed && (
+                    <div className="flex justify-center pt-2">
+                        <SidebarTrigger className="h-8 w-8 rounded-lg border-zinc-200 bg-white shadow-sm hover:bg-zinc-50 hover:text-zinc-950" />
+                    </div>
+                )}
+            </SidebarHeader>
 
-                        const content = (
-                            <>
-                                <item.icon
-                                    className={cn(
-                                        "h-5 w-5 flex-shrink-0 transition-all duration-300",
-                                        isActive ? item.activeTextColor : "text-zinc-400 group-hover:text-zinc-900"
-                                    )}
-                                />
+            {/* ─── CONTENT ─── */}
+            <SidebarContent className="gap-0 px-2 py-3">
+                <SidebarGroup className="p-0">
+                    {/*
+                        Group label: always occupies height so icons never jump.
+                        In icon mode it's invisible but still occupies space.
+                    */}
+                    <div
+                        className={cn(
+                            "px-2 pb-1 text-[11px] font-black uppercase tracking-[0.18em] transition-all duration-300",
+                            isCollapsed ? "opacity-0 select-none" : "text-zinc-400"
+                        )}
+                        style={{ height: "1.75rem" }}
+                        aria-hidden={isCollapsed}
+                    >
+                        Principal
+                    </div>
 
-                                {showLabel && (
-                                    <span className={cn(
-                                        "font-semibold text-sm whitespace-nowrap overflow-hidden text-ellipsis flex-1 tracking-tight transition-all duration-300",
-                                        isActive && [item.activeTextColor, "font-bold"],
-                                        !isActive && "text-zinc-600 group-hover:text-zinc-900"
-                                    )}>
-                                        {item.name}
-                                    </span>
-                                )}
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            {ADMIN_NAV_ITEMS.map((item) => {
+                                if (!item.subItems?.length) {
+                                    return <AdminSidebarItem key={item.key} item={item} pathname={pathname} />
+                                }
 
-                                {hasSubItems && showLabel && (
-                                    <ChevronDown
-                                        className={cn(
-                                            "h-4 w-4 transition-all duration-300",
-                                            isActive ? item.activeTextColor : "text-zinc-400 group-hover:text-zinc-600",
-                                            isExpanded && "rotate-180"
-                                        )}
-                                    />
-                                )}
-                            </>
-                        );
+                                const isActive = isAdminItemActive(pathname, item)
+                                const isOpen = isActive || manualExpandedKey === item.key
 
-                        const commonClasses = cn(
-                            "flex items-center gap-3 py-3 rounded-2xl transition-all duration-300 group cursor-pointer relative overflow-hidden",
-                            showLabel ? "px-4" : "justify-center px-0 w-14 mx-auto",
-                            isActive && [
-                                item.activeColor,
-                                "shadow-sm ring-1 ring-black/5"
-                            ],
-                            !isActive && [
-                                "text-zinc-500 hover:bg-zinc-50 hover:shadow-sm active:scale-[0.98]",
-                                item.hoverColor
-                            ]
-                        );
-
-                        return (
-                            <div key={item.href} className="space-y-1 relative">
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        {hasSubItems ? (
-                                            <div
-                                                className={commonClasses}
-                                                onClick={() => {
-                                                    if (showLabel) {
-                                                        toggleExpanded(item.href);
-                                                    }
-                                                }}
+                                return (
+                                    <Collapsible
+                                        key={item.key}
+                                        open={isOpen && !isCollapsed}
+                                        onOpenChange={(open) => {
+                                            setManualExpandedKey(open ? item.key : null)
+                                        }}
+                                        className="group/collapsible"
+                                    >
+                                        <SidebarMenuItem>
+                                            <SidebarMenuButton
+                                                asChild
+                                                isActive={isActive}
+                                                tooltip={item.name}
+                                                className={getMenuButtonClass(item, isActive)}
                                             >
-                                                {content}
-                                            </div>
-                                        ) : (
-                                            <Link
-                                                href={item.href}
-                                                className={commonClasses}
-                                            >
-                                                {content}
-                                            </Link>
-                                        )}
-                                    </TooltipTrigger>
-                                    {!showLabel && (
-                                        <TooltipContent side="right" sideOffset={20} className="bg-zinc-900 text-white border-none shadow-xl rounded-2xl font-semibold px-4 py-2.5 z-[100]">
-                                            {item.name}
-                                        </TooltipContent>
-                                    )}
-                                </Tooltip>
-
-                                {/* Sub Items */}
-                                {hasSubItems && showLabel && isExpanded && (
-                                    <div className="ml-8 mt-1.5 space-y-1 pl-4 border-l-2 border-zinc-200">
-                                        {item.subItems!.map((subItem) => {
-                                            const isSubActive = pathname === subItem.href;
-                                            return (
-                                                <Link
-                                                    key={subItem.href}
-                                                    href={subItem.href}
-                                                    className={cn(
-                                                        "flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-300 group/sub",
-                                                        isSubActive && [
-                                                            item.activeColor,
-                                                            item.activeTextColor,
-                                                            "font-semibold shadow-sm"
-                                                        ],
-                                                        !isSubActive && [
-                                                            "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50 font-medium active:scale-[0.98]",
-                                                            item.hoverColor
-                                                        ]
-                                                    )}
-                                                >
-                                                    <div className={cn(
-                                                        "w-1.5 h-1.5 rounded-full transition-all duration-300",
-                                                        isSubActive ? [
-                                                            item.activeTextColor.replace('text-', 'bg-'),
-                                                            "scale-125"
-                                                        ] : "bg-zinc-300 group-hover/sub:bg-zinc-400"
-                                                    )} />
-                                                    {subItem.name}
+                                                <Link href={item.href}>
+                                                    <span
+                                                        className={cn(
+                                                            "absolute left-1 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full transition-opacity duration-200",
+                                                            "group-data-[collapsible=icon]:opacity-0 group-data-[collapsible=icon]:pointer-events-none",
+                                                            isActive ? item.tone.dot : "opacity-0"
+                                                        )}
+                                                    />
+                                                    <span
+                                                        className={cn(
+                                                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors duration-200",
+                                                            isActive
+                                                                ? cn("border-transparent", item.tone.softBg, item.tone.softText)
+                                                                : "border-zinc-200 bg-zinc-50 text-zinc-500"
+                                                        )}
+                                                    >
+                                                        <item.icon className="h-4.5 w-4.5" />
+                                                    </span>
+                                                    <span className="truncate">{item.name}</span>
                                                 </Link>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
+                                            </SidebarMenuButton>
 
-                {/* Bottom Section */}
-                {(() => {
-                    const showLabel = !isCollapsed || mode === 'mobile';
-                    return (
-                        <div className="p-3 mt-auto space-y-1 border-t border-zinc-200">
-                            {/* User Profile */}
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Link
-                                        href="/admin/dashboard/perfil"
-                                        className={cn(
-                                            "flex items-center gap-3 py-3 rounded-2xl transition-all duration-300 group",
-                                            showLabel ? "px-4" : "justify-center px-0 w-14 mx-auto",
-                                            pathname === '/admin/dashboard/perfil' 
-                                                ? "bg-zinc-900/10 text-zinc-900 shadow-sm ring-1 ring-black/5"
-                                                : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 hover:shadow-sm active:scale-[0.98]"
-                                        )}
-                                    >
-                                        <User className="h-5 w-5 flex-shrink-0" />
-                                        {showLabel && <span className="font-semibold text-sm tracking-tight">Mi Perfil</span>}
-                                    </Link>
-                                </TooltipTrigger>
-                                {!showLabel && (
-                                    <TooltipContent side="right" sideOffset={20} className="bg-zinc-900 text-white border-none shadow-xl rounded-2xl font-semibold px-4 py-2.5 z-[100]">
-                                        Mi Perfil
-                                    </TooltipContent>
-                                )}
-                            </Tooltip>
+                                            {/* Collapse toggle — auto-hidden by shadcn in icon mode */}
+                                            <CollapsibleTrigger asChild>
+                                                <SidebarMenuAction
+                                                    className={cn("top-2 transition-colors duration-200", isActive && item.tone.softText)}
+                                                >
+                                                    <ChevronRight
+                                                        className={cn(
+                                                            "h-4 w-4 transition-transform duration-300",
+                                                            isOpen && !isCollapsed && "rotate-90"
+                                                        )}
+                                                    />
+                                                    <span className="sr-only">Expandir {item.name}</span>
+                                                </SidebarMenuAction>
+                                            </CollapsibleTrigger>
 
-                            {/* Settings */}
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Link
-                                        href="/admin/dashboard/configuracion"
-                                        className={cn(
-                                            "flex items-center gap-3 py-3 rounded-2xl transition-all duration-300 group",
-                                            showLabel ? "px-4" : "justify-center px-0 w-14 mx-auto",
-                                            pathname === '/admin/dashboard/configuracion'
-                                                ? "bg-zinc-900/10 text-zinc-900 shadow-sm ring-1 ring-black/5"
-                                                : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 hover:shadow-sm active:scale-[0.98]"
-                                        )}
-                                    >
-                                        <Settings className="h-5 w-5 flex-shrink-0" />
-                                        {showLabel && <span className="font-semibold text-sm tracking-tight">Configuración</span>}
-                                    </Link>
-                                </TooltipTrigger>
-                                {!showLabel && (
-                                    <TooltipContent side="right" sideOffset={20} className="bg-zinc-900 text-white border-none shadow-xl rounded-2xl font-semibold px-4 py-2.5 z-[100]">
-                                        Configuración
-                                    </TooltipContent>
-                                )}
-                            </Tooltip>
+                                            <CollapsibleContent className="overflow-hidden transition-all duration-300">
+                                                <SidebarMenuSub>
+                                                    {item.subItems.map((subItem) => {
+                                                        const isSubActive =
+                                                            pathname === subItem.href || pathname.startsWith(`${subItem.href}/`)
+                                                        const SubIcon = subItem.icon
 
-                            {/* Logout */}
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        onClick={() => logout()}
-                                        className={cn(
-                                            "w-full flex items-center gap-3 py-3 rounded-2xl text-zinc-500 hover:bg-red-50/90 hover:text-red-600 transition-all duration-300 active:scale-[0.98]",
-                                            showLabel ? "px-4" : "justify-center px-0 w-14 mx-auto"
-                                        )}
-                                    >
-                                        <LogOut className="h-5 w-5 flex-shrink-0" />
-                                        {showLabel && <span className="font-semibold text-sm tracking-tight text-left">Cerrar Sesión</span>}
-                                    </button>
-                                </TooltipTrigger>
-                                {!showLabel && (
-                                    <TooltipContent side="right" sideOffset={20} className="bg-red-500 text-white border-none shadow-xl rounded-2xl font-semibold px-4 py-2.5 z-[100]">
-                                        Cerrar Sesión
-                                    </TooltipContent>
-                                )}
-                            </Tooltip>
-                        </div>
-                    );
-                })()}
-            </div>
-        </TooltipProvider>
-    );
+                                                        return (
+                                                            <SidebarMenuSubItem key={subItem.href}>
+                                                                <SidebarMenuSubButton
+                                                                    asChild
+                                                                    isActive={isSubActive}
+                                                                    className={cn(
+                                                                        "rounded-lg px-2 text-zinc-500 transition-colors duration-200",
+                                                                        isSubActive && cn("font-medium", item.tone.softBg, item.tone.softText)
+                                                                    )}
+                                                                >
+                                                                    <Link href={subItem.href} className="flex items-center gap-2">
+                                                                        <div className="hidden items-center gap-3 md:flex">
+                                                                        </div>
+                                                                        {SubIcon && <SubIcon className="h-3.5 w-3.5 shrink-0" />}
+                                                                        {subItem.name}
+                                                                    </Link>
+                                                                </SidebarMenuSubButton>
+                                                            </SidebarMenuSubItem>
+                                                        )
+                                                    })}
+                                                </SidebarMenuSub>
+                                            </CollapsibleContent>
+                                        </SidebarMenuItem>
+                                    </Collapsible>
+                                )
+                            })}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+            </SidebarContent>
+
+            {/* ─── FOOTER ─── */}
+            <SidebarFooter className="gap-0 border-t border-sidebar-border/70 px-2 py-3">
+                <SidebarGroup className="p-0">
+                    {/* Same fixed-height label trick */}
+                    <div
+                        className={cn(
+                            "px-2 pb-1 text-[11px] font-black uppercase tracking-[0.18em] transition-all duration-300",
+                            isCollapsed ? "opacity-0 select-none" : "text-zinc-400"
+                        )}
+                        style={{ height: "1.75rem" }}
+                        aria-hidden={isCollapsed}
+                    >
+                        Cuenta
+                    </div>
+
+                    <SidebarGroupContent>
+                        <SidebarMenu>
+                            {ADMIN_ACCOUNT_ITEMS.map((item) => (
+                                <AdminSidebarItem key={item.key} item={item} pathname={pathname} />
+                            ))}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
+
+                <SidebarSeparator className="my-2" />
+
+                <SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton
+                            onClick={() => logout()}
+                            tooltip="Cerrar sesión"
+                            className="h-11 rounded-xl border border-red-100 bg-red-50 px-2.5 text-sm font-medium text-red-600 transition-colors duration-200 hover:bg-red-100 hover:text-red-700"
+                        >
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600">
+                                <LogOut className="h-4.5 w-4.5" />
+                            </span>
+                            <span className="truncate">Cerrar sesión</span>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                </SidebarMenu>
+            </SidebarFooter>
+        </Sidebar>
+    )
 }

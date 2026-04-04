@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
 import { normalizeDeliverySettings, type DeliverySettings } from "@/lib/deliverySettings";
-import { getStoreStatus, type StoreStatus } from "@/lib/openingHours";
+import { getStoreStatus, type BusinessHours, type StoreStatus } from "@/lib/openingHours";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/providers/CartProvider";
 
@@ -34,7 +34,7 @@ type CartConfigs = {
     "whatsapp.settings"?: WhatsAppSettings;
     "payments.methods"?: PaymentMethod[];
     "delivery.settings"?: DeliverySettings;
-    "business.hours"?: Record<string, unknown>;
+    "business.hours"?: BusinessHours;
     "business.closedDays"?: string[];
 };
 
@@ -159,7 +159,7 @@ export function CartDrawer() {
             });
             toast.success("¡Pedido creado! Redirigiendo a WhatsApp...");
             setTimeout(() => {
-                window.location.href = `https://wa.me/${whatsappSettings.phoneNumber.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
+                window.location.href = `https://wa.me/${(whatsappSettings.phoneNumber ?? "").replace(/\D/g, "")}?text=${encodeURIComponent(message)}`;
             }, 100);
         } catch (error) {
             console.error("Error inesperado al crear el pedido:", error);
