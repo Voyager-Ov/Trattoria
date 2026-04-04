@@ -1,261 +1,309 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, User, linkWithCredential } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Check, Eye, EyeOff } from 'lucide-react';
+import {
+    EmailAuthProvider,
+    linkWithCredential,
+    reauthenticateWithCredential,
+    updatePassword,
+    type User,
+} from 'firebase/auth';
+import { Check, Eye, EyeOff, Loader2, ShieldAlert } from 'lucide-react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+
+function getErrorMessage(error: unknown) {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    return 'Error desconocido';
+}
+
+function getFirebaseErrorCode(error: unknown) {
+    if (typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string') {
+        return error.code;
+    }
+
+    return '';
+}
+
+type PasswordFieldProps = {
+    id: string;
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+    visible: boolean;
+    onToggleVisibility: () => void;
+};
+
+function PasswordField({
+    id,
+    label,
+    value,
+    onChange,
+    placeholder,
+    visible,
+    onToggleVisibility,
+}: PasswordFieldProps) {
+    return (
+        <div className="space-y-2">
+            <Label htmlFor={id} className="text-sm font-semibold text-zinc-700">
+                {label}
+            </Label>
+            <div className="relative">
+                <Input
+                    id={id}
+                    type={visible ? 'text' : 'password'}
+                    value={value}
+                    onChange={(event) => onChange(event.target.value)}
+                    required
+                    minLength={6}
+                    placeholder={placeholder}
+                    className="h-12 rounded-2xl border-zinc-200 pr-12 text-sm focus-visible:ring-zinc-900"
+                />
+                <button
+                    type="button"
+                    onClick={onToggleVisibility}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 transition hover:text-zinc-600"
+                    aria-label={visible ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                >
+                    {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+            </div>
+        </div>
+    );
+}
 
 export function SecurityCard() {
     const [isLoading, setIsLoading] = useState(false);
-
-    // Form States
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-
-    // Visibility Toggles
     const [showCurrent, setShowCurrent] = useState(false);
     const [showNew, setShowNew] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
-
     const [user, setUser] = useState<User | null>(null);
 
     useEffect(() => {
         const unsubscribe = auth.onAuthStateChanged((currentUser) => {
             setUser(currentUser);
         });
+
         return () => unsubscribe();
     }, []);
 
-    // Check if user has "password" provider linked
-    const hasPasswordProvider = user?.providerData.some(p => p.providerId === 'password');
+    const hasPasswordProvider = user?.providerData.some((provider) => provider.providerId === 'password');
 
-    const handleSetPassword = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!user) return;
+    const resetForm = () => {
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+    };
 
+    const validatePasswords = () => {
         if (newPassword !== confirmPassword) {
-            toast.error('Las nuevas contraseñas no coinciden');
-            return;
+            toast.error('Las contrasenas nuevas no coinciden');
+            return false;
         }
+
         if (newPassword.length < 6) {
-            toast.error('La contraseña debe tener al menos 6 caracteres');
+            toast.error('La contrasena debe tener al menos 6 caracteres');
+            return false;
+        }
+
+        return true;
+    };
+
+    const handleSetPassword = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        if (!user || !validatePasswords()) {
             return;
         }
 
         setIsLoading(true);
         try {
-            // LINK credential to existing user (Google -> Google + Password)
             const credential = EmailAuthProvider.credential(user.email!, newPassword);
             await linkWithCredential(user, credential);
-            toast.success('Contraseña configurada exitosamente. Ahora puedes ingresar con email y contraseña.');
-
-            // Cleanup
-            setNewPassword('');
-            setConfirmPassword('');
-        } catch (error: any) {
+            toast.success('Contrasena configurada. Ya puedes entrar con email y contrasena.');
+            resetForm();
+        } catch (error: unknown) {
             console.error('Error setting password:', error);
-            if (error.code === 'auth/credential-already-in-use') {
-                toast.error('Este email ya está asociado a otra cuenta con contraseña.');
-            } else if (error.code === 'auth/requires-recent-login') {
-                toast.error('Por seguridad, cierra sesión y vuelve a ingresar para configurar tu contraseña.');
-            } else if (error.code === 'auth/weak-password') {
-                toast.error('La contraseña es muy débil. Intenta combinar letras, números y símbolos.');
+            const errorCode = getFirebaseErrorCode(error);
+            if (errorCode === 'auth/credential-already-in-use') {
+                toast.error('Este email ya esta asociado a otra cuenta con contrasena.');
+            } else if (errorCode === 'auth/requires-recent-login') {
+                toast.error('Cierra sesion y vuelve a entrar para configurar tu contrasena.');
+            } else if (errorCode === 'auth/weak-password') {
+                toast.error('La contrasena es muy debil. Combina letras, numeros y simbolos.');
             } else {
-                toast.error('Ocurrió un error: ' + error.message);
+                toast.error(`Ocurrio un error: ${getErrorMessage(error)}`);
             }
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleChangePassword = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleChangePassword = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
         if (!user) {
-            toast.error('No hay sesión activa');
+            toast.error('No hay una sesion activa');
             return;
         }
 
-        if (newPassword !== confirmPassword) {
-            toast.error('Las nuevas contraseñas no coinciden');
-            return;
-        }
-
-        if (newPassword.length < 6) {
-            toast.error('La contraseña debe tener al menos 6 caracteres');
+        if (!validatePasswords()) {
             return;
         }
 
         setIsLoading(true);
         try {
-            // Re-auth required before sensitive operation
             const credential = EmailAuthProvider.credential(user.email!, currentPassword);
             await reauthenticateWithCredential(user, credential);
-
             await updatePassword(user, newPassword);
-            toast.success('Tu contraseña ha sido actualizada.');
-
-            setCurrentPassword('');
-            setNewPassword('');
-            setConfirmPassword('');
-        } catch (error: any) {
+            toast.success('Tu contrasena fue actualizada.');
+            resetForm();
+        } catch (error: unknown) {
             console.error('Error changing password:', error);
-            if (error.code === 'auth/wrong-password') {
-                toast.error('La contraseña actual es incorrecta.');
-            } else if (error.code === 'auth/requires-recent-login') {
-                toast.error('Sesión expirada. Por favor, vuelve a iniciar sesión.');
+            const errorCode = getFirebaseErrorCode(error);
+            if (errorCode === 'auth/wrong-password') {
+                toast.error('La contrasena actual es incorrecta.');
+            } else if (errorCode === 'auth/requires-recent-login') {
+                toast.error('La sesion expiro. Vuelve a iniciar sesion.');
             } else {
-                toast.error('Error al actualizar: ' + error.message);
+                toast.error(`Error al actualizar: ${getErrorMessage(error)}`);
             }
         } finally {
             setIsLoading(false);
         }
     };
 
-    if (!user) return null;
+    if (!user) {
+        return null;
+    }
 
     return (
-        <div className="space-y-6">
-            {/* Header / Status Badge */}
-            <div className="flex items-center justify-between bg-zinc-50 p-4 rounded-xl border border-zinc-100">
-                <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-zinc-700">Método de acceso</span>
-                    <span className="text-xs text-zinc-500">
-                        {hasPasswordProvider
-                            ? "Tienes contraseña configurada"
-                            : "Solo acceso con Google (sin contraseña)"}
-                    </span>
-                </div>
-                <div className={cn("px-3 py-1 rounded-full flex items-center gap-1.5 text-xs font-bold border",
-                    hasPasswordProvider
-                        ? "bg-green-50 text-green-700 border-green-200"
-                        : "bg-orange-50 text-orange-700 border-orange-200"
-                )}>
-                    {hasPasswordProvider ? <Check className="w-3 h-3" /> : null}
-                    {hasPasswordProvider ? "Contraseña Activa" : "Requiere Configuración"}
+        <div className="flex flex-col gap-4">
+            <div className="rounded-[1.5rem] border border-zinc-200 bg-zinc-50 px-4 py-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                        <div className="text-sm font-semibold text-zinc-700">Metodo de acceso</div>
+                        <p className="mt-1 text-sm leading-6 text-zinc-500">
+                            {hasPasswordProvider
+                                ? 'Tu cuenta ya tiene contrasena activa ademas del acceso con Google.'
+                                : 'Hoy entras solo con Google. Configura una contrasena para sumar acceso por email.'}
+                        </p>
+                    </div>
+                    <div
+                        className={cn(
+                            'inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em]',
+                            hasPasswordProvider
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-orange-200 bg-orange-50 text-orange-700'
+                        )}
+                    >
+                        {hasPasswordProvider ? <Check className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
+                        {hasPasswordProvider ? 'Activa' : 'Pendiente'}
+                    </div>
                 </div>
             </div>
 
             {!hasPasswordProvider ? (
-                /* === MODE: SET PASSWORD (LINKING) === */
-                <form onSubmit={handleSetPassword} className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                    <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl text-sm text-blue-800 mb-4">
-                        <p><strong>Configurar Contraseña:</strong> Todavía no tenés contraseña porque ingresaste con Google. Configurala para poder iniciar sesión también con email y contraseña.</p>
+                <form onSubmit={handleSetPassword} className="flex flex-col gap-4">
+                    <div className="rounded-[1.5rem] border border-blue-100 bg-blue-50 px-4 py-4 text-sm leading-6 text-blue-900">
+                        Configura una contrasena para iniciar sesion tambien con email y contrasena cuando lo necesites.
                     </div>
 
-                    <div className="grid gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="newPasswordSet" className="font-semibold text-zinc-700">Nueva Contraseña</Label>
-                            <div className="relative">
-                                <Input
-                                    id="newPasswordSet"
-                                    type={showNew ? "text" : "password"}
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    required
-                                    placeholder="Mínimo 6 caracteres"
-                                    className="rounded-xl h-11 border-zinc-200 focus:ring-orange-500 focus:border-orange-500 pr-10"
-                                    minLength={6}
-                                />
-                                <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-600">
-                                    {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                </button>
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="confirmPasswordSet" className="font-semibold text-zinc-700">Confirmar Contraseña</Label>
-                            <div className="relative">
-                                <Input
-                                    id="confirmPasswordSet"
-                                    type={showConfirm ? "text" : "password"}
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    required
-                                    placeholder="Repite la contraseña"
-                                    className="rounded-xl h-11 border-zinc-200 focus:ring-orange-500 focus:border-orange-500 pr-10"
-                                    minLength={6}
-                                />
-                                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-600">
-                                    {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    <PasswordField
+                        id="newPasswordSet"
+                        label="Nueva contrasena"
+                        value={newPassword}
+                        onChange={setNewPassword}
+                        placeholder="Minimo 6 caracteres"
+                        visible={showNew}
+                        onToggleVisibility={() => setShowNew((value) => !value)}
+                    />
 
-                    <Button type="submit" disabled={isLoading} className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl h-11 font-bold shadow-md shadow-orange-100 transition-all mt-2">
-                        {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Guardando...</> : "Configurar Contraseña"}
+                    <PasswordField
+                        id="confirmPasswordSet"
+                        label="Confirmar contrasena"
+                        value={confirmPassword}
+                        onChange={setConfirmPassword}
+                        placeholder="Repite la contrasena"
+                        visible={showConfirm}
+                        onToggleVisibility={() => setShowConfirm((value) => !value)}
+                    />
+
+                    <Button
+                        type="submit"
+                        disabled={isLoading}
+                        className="mt-1 h-12 w-full rounded-2xl bg-orange-500 font-bold text-white shadow-md shadow-orange-100 transition-all hover:bg-orange-600"
+                    >
+                        {isLoading ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Guardando...
+                            </>
+                        ) : (
+                            'Configurar contrasena'
+                        )}
                     </Button>
                 </form>
             ) : (
-                /* === MODE: CHANGE PASSWORD (UPDATE) === */
-                <form onSubmit={handleChangePassword} className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                    <p className="text-sm text-zinc-500 mb-2">
-                        Actualizá tu contraseña periódicamente para mantener tu cuenta segura.
-                    </p>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="currentPassword" className="font-semibold text-zinc-700">Contraseña Actual</Label>
-                        <div className="relative">
-                            <Input
-                                id="currentPassword"
-                                type={showCurrent ? "text" : "password"}
-                                value={currentPassword}
-                                onChange={(e) => setCurrentPassword(e.target.value)}
-                                required
-                                className="rounded-xl h-11 border-zinc-200 focus:ring-zinc-900 focus:border-zinc-900 pr-10"
-                            />
-                            <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-600">
-                                {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                        </div>
+                <form onSubmit={handleChangePassword} className="flex flex-col gap-4">
+                    <div className="rounded-[1.5rem] border border-zinc-200 bg-zinc-50 px-4 py-4 text-sm leading-6 text-zinc-600">
+                        Actualiza tu contrasena con frecuencia para mantener la cuenta protegida.
                     </div>
 
-                    <div className="grid gap-4 pt-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="newPassword" className="font-semibold text-zinc-700">Nueva Contraseña</Label>
-                            <div className="relative">
-                                <Input
-                                    id="newPassword"
-                                    type={showNew ? "text" : "password"}
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    required
-                                    placeholder="Mínimo 6 caracteres"
-                                    className="rounded-xl h-11 border-zinc-200 focus:ring-zinc-900 focus:border-zinc-900 pr-10"
-                                    minLength={6}
-                                />
-                                <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-600">
-                                    {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                </button>
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="confirmPassword" className="font-semibold text-zinc-700">Confirmar Nueva</Label>
-                            <div className="relative">
-                                <Input
-                                    id="confirmPassword"
-                                    type={showConfirm ? "text" : "password"}
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    required
-                                    placeholder="Repite la nueva contraseña"
-                                    className="rounded-xl h-11 border-zinc-200 focus:ring-zinc-900 focus:border-zinc-900 pr-10"
-                                    minLength={6}
-                                />
-                                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-3 text-zinc-400 hover:text-zinc-600">
-                                    {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    <PasswordField
+                        id="currentPassword"
+                        label="Contrasena actual"
+                        value={currentPassword}
+                        onChange={setCurrentPassword}
+                        placeholder="Ingresa tu contrasena actual"
+                        visible={showCurrent}
+                        onToggleVisibility={() => setShowCurrent((value) => !value)}
+                    />
 
-                    <Button type="submit" disabled={isLoading} className="w-full bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl h-11 font-bold shadow-md shadow-zinc-200 transition-all mt-4">
-                        {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Actualizando...</> : "Actualizar Contraseña"}
+                    <PasswordField
+                        id="newPassword"
+                        label="Nueva contrasena"
+                        value={newPassword}
+                        onChange={setNewPassword}
+                        placeholder="Minimo 6 caracteres"
+                        visible={showNew}
+                        onToggleVisibility={() => setShowNew((value) => !value)}
+                    />
+
+                    <PasswordField
+                        id="confirmPassword"
+                        label="Confirmar nueva contrasena"
+                        value={confirmPassword}
+                        onChange={setConfirmPassword}
+                        placeholder="Repite la nueva contrasena"
+                        visible={showConfirm}
+                        onToggleVisibility={() => setShowConfirm((value) => !value)}
+                    />
+
+                    <Button
+                        type="submit"
+                        disabled={isLoading}
+                        className="mt-1 h-12 w-full rounded-2xl bg-zinc-900 font-bold text-white shadow-md shadow-zinc-200 transition-all hover:bg-zinc-800"
+                    >
+                        {isLoading ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Actualizando...
+                            </>
+                        ) : (
+                            'Actualizar contrasena'
+                        )}
                     </Button>
                 </form>
             )}
