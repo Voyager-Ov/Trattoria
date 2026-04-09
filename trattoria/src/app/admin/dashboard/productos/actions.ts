@@ -126,13 +126,15 @@ export async function toggleProductAvailability(id: string, currentStatus: boole
     try {
         await prisma.product.update({
             where: { id },
-            data: { disponible: !currentStatus },
+            data: { activo: !currentStatus },
         });
         revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/categoria/[slug]", "page");
+        revalidatePath("/");
         return { success: true };
     } catch (error) {
         console.error("Error toggling product availability:", error);
-        return { success: false, error: "Error al cambiar la disponibilidad" };
+        return { success: false, error: "Error al cambiar el estado" };
     }
 }
 

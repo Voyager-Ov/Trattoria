@@ -62,7 +62,6 @@ export async function createPublicOrder(data: {
             where: {
                 id: { in: productIds },
                 activo: true,
-                disponible: true,
                 deletedAt: null,
             },
             select: { id: true, precio: true, nombre: true },

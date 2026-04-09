@@ -41,7 +41,7 @@ import { ResponsivePanel } from "@/components/ui/responsive-panel";
 type Category = Prisma.CategoryGetPayload<{ select: { id: true; nombre: true } }>;
 type SortField = "codigo" | "nombre" | "categoria" | "precio" | "costo" | "margen" | "unidad" | "fecha" | "estado";
 type SortDirection = "asc" | "desc";
-type StatusFilter = "todos" | "activos" | "disponibles" | "agotados";
+type StatusFilter = "todos" | "activos" | "desactivados";
 
 interface MenuItem {
     id: string;
@@ -53,7 +53,6 @@ interface MenuItem {
     categoria: string;
     categoryId: string;
     activo: boolean;
-    disponible: boolean;
     unidad: UnidadMedida;
     createdAt: string | Date;
     updatedAt?: string | Date;
@@ -105,10 +104,8 @@ function getStatusLabel(status: StatusFilter) {
     switch (status) {
         case "activos":
             return "Activos";
-        case "disponibles":
-            return "Disponibles";
-        case "agotados":
-            return "Agotados";
+        case "desactivados":
+            return "Desactivados";
         default:
             return "Todos";
     }
@@ -284,9 +281,9 @@ export default function ProductosPage() {
 
         setIsSubmitting(true);
         try {
-            const res = await toggleProductAvailability(item.id, item.disponible);
+            const res = await toggleProductAvailability(item.id, item.activo);
             if (res.success) {
-                toast.success(item.disponible ? "Producto marcado como agotado" : "Producto marcado como disponible");
+                toast.success(item.activo ? "Producto desactivado" : "Producto activado");
                 await refreshData();
             } else {
                 toast.error(res.error || "Error al actualizar");
@@ -312,8 +309,7 @@ export default function ProductosPage() {
             const matchesStatus =
                 statusFilter === "todos" ||
                 (statusFilter === "activos" && item.activo) ||
-                (statusFilter === "disponibles" && item.type === "PRODUCTO" && item.disponible) ||
-                (statusFilter === "agotados" && item.type === "PRODUCTO" && !item.disponible);
+                (statusFilter === "desactivados" && item.type === "PRODUCTO" && !item.activo);
 
             return matchesSearch && matchesCategory && matchesStatus;
         });
@@ -360,7 +356,7 @@ export default function ProductosPage() {
     const totalMenuItems = menuItems.length;
     const activeProducts = menuItems.filter((item) => item.type === "PRODUCTO" && item.activo).length;
     const promotionsCount = menuItems.filter((item) => item.type === "PROMOCION").length;
-    const outOfStockCount = menuItems.filter((item) => item.type === "PRODUCTO" && !item.disponible).length;
+    const disabledProducts = menuItems.filter((item) => item.type === "PRODUCTO" && !item.activo).length;
     const activeFilterCount = (searchQuery ? 1 : 0) + (selectedCategories.length > 0 ? selectedCategories.length : 0) + (statusFilter !== "todos" ? 1 : 0);
     const hasActiveFilters = searchQuery !== "" || selectedCategories.length > 0 || statusFilter !== "todos";
 
@@ -428,7 +424,7 @@ export default function ProductosPage() {
                 <MetricCard title="Items en menu" value={totalMenuItems} subtitle="productos y promociones" headerColor="bg-blue-600" />
                 <MetricCard title="Productos activos" value={activeProducts} subtitle="visibles en operacion" headerColor="bg-orange-500" />
                 <MetricCard title="Promociones" value={promotionsCount} subtitle="paquetes configurados" headerColor="bg-violet-500" />
-                <MetricCard title="Productos agotados" value={outOfStockCount} subtitle="requieren revision" headerColor="bg-emerald-500" />
+                <MetricCard title="Productos desactivados" value={disabledProducts} subtitle="ocultos del catalogo web" headerColor="bg-emerald-500" />
             </div>
 
             <section className="rounded-[1.75rem] border border-zinc-200 bg-white p-4 shadow-sm md:rounded-[2rem] md:p-5">
@@ -497,8 +493,7 @@ export default function ProductosPage() {
                                 <DropdownMenuContent align="end" className="w-56 rounded-2xl border-zinc-100 p-2 shadow-xl">
                                     <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("todos")}>Todos</DropdownMenuItem>
                                     <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("activos")}>Activos</DropdownMenuItem>
-                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("disponibles")}>Disponibles</DropdownMenuItem>
-                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("agotados")}>Agotados</DropdownMenuItem>
+                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("desactivados")}>Desactivados</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
@@ -612,11 +607,6 @@ export default function ProductosPage() {
                                         <Badge variant="secondary" className={item.activo ? "bg-emerald-50 text-emerald-600 border-none" : "bg-red-50 text-red-600 border-none"}>
                                             {item.activo ? "Activo" : "Inactivo"}
                                         </Badge>
-                                        {item.type === "PRODUCTO" && !item.disponible ? (
-                                            <Badge variant="secondary" className="border-none bg-orange-50 text-orange-600">
-                                                Agotado
-                                            </Badge>
-                                        ) : null}
                                         <Badge variant="outline" className="border-zinc-200 text-zinc-500">
                                             {item.unidad}
                                         </Badge>
@@ -762,11 +752,6 @@ export default function ProductosPage() {
                                                 <Badge variant="secondary" className={item.activo ? "bg-emerald-50 text-emerald-600 border-none" : "bg-red-50 text-red-600 border-none"}>
                                                     {item.activo ? "Activo" : "Inactivo"}
                                                 </Badge>
-                                                {item.type === "PRODUCTO" && !item.disponible ? (
-                                                    <Badge variant="secondary" className="border-none bg-orange-50 text-orange-600">
-                                                        Agotado
-                                                    </Badge>
-                                                ) : null}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
@@ -796,7 +781,7 @@ export default function ProductosPage() {
                                                     {item.type === "PRODUCTO" ? <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => void handleDuplicate(item)}>Duplicar</DropdownMenuItem> : null}
                                                     {item.type === "PRODUCTO" ? (
                                                         <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => void handleToggleAvailability(item)}>
-                                                            {item.disponible ? "Marcar agotado" : "Marcar disponible"}
+                                                            {item.activo ? "Desactivar producto" : "Activar producto"}
                                                         </DropdownMenuItem>
                                                     ) : null}
                                                     <DropdownMenuSeparator className="bg-zinc-100" />
@@ -830,7 +815,7 @@ export default function ProductosPage() {
                     <section className="space-y-3">
                         <h3 className="text-sm font-black uppercase tracking-[0.18em] text-zinc-400">Estado</h3>
                         <div className="grid grid-cols-2 gap-2">
-                            {(["todos", "activos", "disponibles", "agotados"] as StatusFilter[]).map((status) => (
+                            {(["todos", "activos", "desactivados"] as StatusFilter[]).map((status) => (
                                 <button
                                     key={status}
                                     type="button"
@@ -995,11 +980,6 @@ export default function ProductosPage() {
                             <Badge variant="secondary" className={selectedItem.activo ? "bg-emerald-50 text-emerald-600 border-none" : "bg-red-50 text-red-600 border-none"}>
                                 {selectedItem.activo ? "Activo" : "Inactivo"}
                             </Badge>
-                            {selectedItem.type === "PRODUCTO" ? (
-                                <Badge variant="secondary" className={selectedItem.disponible ? "bg-blue-50 text-blue-600 border-none" : "bg-orange-50 text-orange-600 border-none"}>
-                                    {selectedItem.disponible ? "Disponible" : "Agotado"}
-                                </Badge>
-                            ) : null}
                         </div>
 
                         <div className="grid grid-cols-1 gap-3">
@@ -1034,7 +1014,7 @@ export default function ProductosPage() {
                             ) : null}
                             {selectedItem.type === "PRODUCTO" ? (
                                 <Button type="button" variant="outline" className="h-11 rounded-2xl border-zinc-200" disabled={isSubmitting} onClick={() => void handleToggleAvailability(selectedItem)}>
-                                    {selectedItem.disponible ? "Marcar agotado" : "Marcar disponible"}
+                                    {selectedItem.activo ? "Desactivar producto" : "Activar producto"}
                                 </Button>
                             ) : null}
                             <Button

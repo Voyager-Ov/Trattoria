@@ -222,9 +222,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                                     <span className="text-sm font-semibold text-zinc-700 bg-zinc-100 px-3 py-1 rounded-full">{product.category.nombre}</span>
                                 </div>
                                 <div className="flex justify-between items-center py-3 border-b border-zinc-50">
-                                    <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Disponibilidad</span>
-                                    <Badge variant="outline" className={`${product.disponible ? 'border-emerald-200 text-emerald-600' : 'border-orange-200 text-orange-600'} rounded-full font-bold px-3`}>
-                                        {product.disponible ? 'DISPONIBLE' : 'AGOTADO'}
+                                    <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Estado</span>
+                                    <Badge variant="outline" className={`${product.activo ? 'border-emerald-200 text-emerald-600' : 'border-orange-200 text-orange-600'} rounded-full font-bold px-3`}>
+                                        {product.activo ? 'ACTIVO' : 'DESACTIVADO'}
                                     </Badge>
                                 </div>
                                 <div className="flex justify-between items-center py-3 border-b border-zinc-50">

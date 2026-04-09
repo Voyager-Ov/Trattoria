@@ -42,7 +42,6 @@ interface MenuItem {
     categoria: string;
     categoryId: string;
     activo: boolean;
-    disponible: boolean;
     unidad: UnidadMedida;
     createdAt: Date;
     updatedAt?: Date;
@@ -114,7 +113,7 @@ export default function EmpleadoProductosPage() {
 
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-    const [statusFilter, setStatusFilter] = useState<"todos" | "activos" | "disponibles" | "agotados">("todos");
+    const [statusFilter, setStatusFilter] = useState<"todos" | "activos" | "desactivados">("todos");
     const [sortField, setSortField] = useState<SortField>("nombre");
     const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
@@ -141,8 +140,7 @@ export default function EmpleadoProductosPage() {
             const matchesStatus =
                 statusFilter === "todos" ||
                 (statusFilter === "activos" && item.activo) ||
-                (statusFilter === "disponibles" && item.disponible) ||
-                (statusFilter === "agotados" && !item.disponible);
+                (statusFilter === "desactivados" && !item.activo);
 
             return matchesSearch && matchesCategory && matchesStatus;
         });
@@ -166,7 +164,7 @@ export default function EmpleadoProductosPage() {
     const handleToggleAvailability = async (id: string, currentStatus: boolean) => {
         const res = await toggleProductAvailability(id, currentStatus);
         if (res.success) {
-            toast.success("Disponibilidad actualizada");
+            toast.success(currentStatus ? "Producto desactivado" : "Producto activado");
             refreshData();
         } else {
             toast.error(res.error || "Error al actualizar");
@@ -413,8 +411,7 @@ export default function EmpleadoProductosPage() {
                             <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100">
                                 <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setStatusFilter("todos")}>Todos los estados</DropdownMenuItem>
                                 <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setStatusFilter("activos")}>Solo activos</DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setStatusFilter("disponibles")}>Solo disponibles</DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setStatusFilter("agotados")}>Agotados</DropdownMenuItem>
+                                <DropdownMenuItem className="rounded-xl my-0.5" onClick={() => setStatusFilter("desactivados")}>Desactivados</DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
@@ -539,12 +536,6 @@ export default function EmpleadoProductosPage() {
                                                 >
                                                     {item.activo ? 'ACTIVO' : 'INACTIVO'}
                                                 </Badge>
-                                                <Badge
-                                                    variant="secondary"
-                                                    className={item.disponible ? "bg-emerald-50 text-emerald-600 text-[0.6rem] px-2 py-0.5 rounded-full" : "bg-red-50 text-red-600 text-[0.6rem] px-2 py-0.5 rounded-full"}
-                                                >
-                                                    {item.disponible ? 'STOCK OK' : 'AGOTADO'}
-                                                </Badge>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
@@ -555,9 +546,9 @@ export default function EmpleadoProductosPage() {
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end" className="w-48 rounded-2xl p-2 shadow-xl border-zinc-100">
-                                                    <DropdownMenuItem onClick={() => handleToggleAvailability(item.id, item.disponible)} className="rounded-xl py-2 cursor-pointer">
+                                                    <DropdownMenuItem onClick={() => handleToggleAvailability(item.id, item.activo)} className="rounded-xl py-2 cursor-pointer">
                                                         <AlertCircle className="h-3.5 w-3.5 mr-2 text-zinc-500" />
-                                                        {item.disponible ? 'Marcar Agotado' : 'Marcar Disponible'}
+                                                        {item.activo ? 'Desactivar producto' : 'Activar producto'}
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator className="bg-zinc-50" />
                                                     {item.type === 'PRODUCTO' && (
