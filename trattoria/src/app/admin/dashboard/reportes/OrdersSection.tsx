@@ -29,6 +29,7 @@ import {
     getTicketPromedioData,
     OrderStatusData,
     PrepTimeData,
+    type ReportBasis,
 } from "./analyticsActions";
 import { ReportLegendList, ReportSurface } from "./reportes-ui";
 
@@ -37,6 +38,7 @@ interface OrdersSectionProps {
         from: Date;
         to: Date;
     };
+    basis: ReportBasis;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -55,7 +57,7 @@ const formatCurrency = (value: number) =>
         maximumFractionDigits: 0,
     }).format(value);
 
-export default function OrdersSection({ dateRange }: OrdersSectionProps) {
+export default function OrdersSection({ dateRange, basis }: OrdersSectionProps) {
     const isMobile = useIsMobile();
     const [loading, setLoading] = useState(true);
     const [ordersByStatus, setOrdersByStatus] = useState<OrderStatusData[]>([]);
@@ -76,8 +78,8 @@ export default function OrdersSection({ dateRange }: OrdersSectionProps) {
                 const [statusResult, prepResult, originResult, ticketResult] = await Promise.all([
                     getOrdersByStatusData(dateRange.from, dateRange.to),
                     getPrepTimeData(dateRange.from, dateRange.to),
-                    getOrdersByOriginData(dateRange.from, dateRange.to),
-                    getTicketPromedioData(dateRange.from, dateRange.to),
+                    getOrdersByOriginData(dateRange.from, dateRange.to, basis),
+                    getTicketPromedioData(dateRange.from, dateRange.to, basis),
                 ]);
 
                 if (!active) {
@@ -111,7 +113,7 @@ export default function OrdersSection({ dateRange }: OrdersSectionProps) {
         return () => {
             active = false;
         };
-    }, [dateRange]);
+    }, [basis, dateRange]);
 
     if (loading) {
         return (

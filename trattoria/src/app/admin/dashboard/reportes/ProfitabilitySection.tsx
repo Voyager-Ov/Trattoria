@@ -17,7 +17,7 @@ import { DollarSign, Loader2, Percent, TrendingUp } from "lucide-react";
 
 import { useIsMobile } from "@/hooks/use-mobile";
 
-import { getMonthlyROI, getProfitabilityByCategoryData, type ProfitabilityByCategoryData } from "./analyticsActions";
+import { getMonthlyROI, getProfitabilityByCategoryData, type ProfitabilityByCategoryData, type ReportBasis } from "./analyticsActions";
 import { ReportSurface, truncateLabel } from "./reportes-ui";
 
 interface ProfitabilitySectionProps {
@@ -25,6 +25,7 @@ interface ProfitabilitySectionProps {
         from: Date;
         to: Date;
     };
+    basis: ReportBasis;
 }
 
 const formatCurrency = (value: number) =>
@@ -56,7 +57,7 @@ function StatCard({
     );
 }
 
-export default function ProfitabilitySection({ dateRange }: ProfitabilitySectionProps) {
+export default function ProfitabilitySection({ dateRange, basis }: ProfitabilitySectionProps) {
     const isMobile = useIsMobile();
     const [loading, setLoading] = useState(true);
     const [profitabilityByCategory, setProfitabilityByCategory] = useState<ProfitabilityByCategoryData[]>([]);
@@ -71,7 +72,7 @@ export default function ProfitabilitySection({ dateRange }: ProfitabilitySection
             try {
                 const year = new Date().getFullYear();
                 const [categoryResult, roiResult] = await Promise.all([
-                    getProfitabilityByCategoryData(dateRange.from, dateRange.to),
+                    getProfitabilityByCategoryData(dateRange.from, dateRange.to, basis),
                     getMonthlyROI(year),
                 ]);
 
@@ -98,7 +99,7 @@ export default function ProfitabilitySection({ dateRange }: ProfitabilitySection
         return () => {
             active = false;
         };
-    }, [dateRange]);
+    }, [basis, dateRange]);
 
     if (loading) {
         return (

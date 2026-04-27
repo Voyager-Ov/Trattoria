@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArchiveX, Eye } from "lucide-react";
+import { AlertTriangle, ArchiveRestore, ArchiveX, Eye, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -11,6 +11,8 @@ interface SuppliesMobileListProps {
     totalSupplies: number;
     filterStatusLabel: string;
     onArchive: (id: string) => void;
+    onUnarchive: (id: string) => void;
+    onDelete: (id: string) => void;
 }
 
 export function SuppliesMobileList({
@@ -19,6 +21,8 @@ export function SuppliesMobileList({
     totalSupplies,
     filterStatusLabel,
     onArchive,
+    onUnarchive,
+    onDelete,
 }: SuppliesMobileListProps) {
     return (
         <section className="space-y-4 md:hidden">
@@ -87,21 +91,39 @@ export function SuppliesMobileList({
                                 </div>
                             </div>
 
-                            <div className="mt-4 grid grid-cols-2 gap-3">
+                            <div className="mt-4 grid grid-cols-3 gap-2">
                                 <Link href={`/admin/dashboard/insumos/${supply.id}`}>
                                     <Button variant="outline" className="h-11 w-full rounded-2xl border-zinc-200">
-                                        <Eye className="mr-2 h-4 w-4" />
+                                        <Eye className="mr-1.5 h-4 w-4" />
                                         Ver
                                     </Button>
                                 </Link>
+                                {supply.activo ? (
+                                    <Button
+                                        variant="ghost"
+                                        onClick={() => onArchive(supply.id)}
+                                        className="h-11 rounded-2xl text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                                    >
+                                        <ArchiveX className="mr-1.5 h-4 w-4" />
+                                        Archivar
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="ghost"
+                                        onClick={() => onUnarchive(supply.id)}
+                                        className="h-11 rounded-2xl text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                                    >
+                                        <ArchiveRestore className="mr-1.5 h-4 w-4" />
+                                        Restaurar
+                                    </Button>
+                                )}
                                 <Button
                                     variant="ghost"
-                                    disabled={!supply.activo}
-                                    onClick={() => onArchive(supply.id)}
-                                    className="h-11 rounded-2xl text-rose-600 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40"
+                                    onClick={() => onDelete(supply.id)}
+                                    className="h-11 rounded-2xl text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                                 >
-                                    <ArchiveX className="mr-2 h-4 w-4" />
-                                    Archivar
+                                    <Trash2 className="mr-1.5 h-4 w-4" />
+                                    Eliminar
                                 </Button>
                             </div>
                         </article>

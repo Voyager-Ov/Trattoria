@@ -1,0 +1,132 @@
+{
+  "featureId": "admin-cashbox-frontend-phase-1",
+  "batches": [
+    {
+      "id": "batch-1",
+      "mode": "sequential",
+      "tasks": [
+        {
+          "id": "nav-admin-caja",
+          "title": "Agregar Caja a navegación admin",
+          "owner_role": "frontend",
+          "status": "pending",
+          "parallelizable": false,
+          "depends_on": [],
+          "outputs": [
+            "Item Caja en sidebar",
+            "Acceso Caja en mobile nav"
+          ],
+          "exit_criteria": [
+            "Caja aparece como módulo admin navegable"
+          ]
+        },
+        {
+          "id": "cashbox-page",
+          "title": "Implementar vista /admin/dashboard/caja",
+          "owner_role": "frontend",
+          "status": "pending",
+          "parallelizable": false,
+          "depends_on": [
+            "nav-admin-caja"
+          ],
+          "outputs": [
+            "Vista de apertura",
+            "Vista de caja abierta",
+            "Panel de cierre",
+            "Panel de egreso",
+            "Historial con detalle"
+          ],
+          "exit_criteria": [
+            "Todas las acciones existentes de caja son consumibles desde admin"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "batch-2",
+      "mode": "parallel",
+      "tasks": [
+        {
+          "id": "orders-admin-adapt",
+          "title": "Adaptar pedidos admin al contrato payment",
+          "owner_role": "frontend",
+          "status": "pending",
+          "parallelizable": true,
+          "depends_on": [
+            "cashbox-page"
+          ],
+          "outputs": [
+            "Lista de pedidos actualizada",
+            "Panel lateral actualizado",
+            "Detalle del pedido actualizado",
+            "Modal de bloqueo por caja cerrada"
+          ],
+          "exit_criteria": [
+            "No existe UX de descobro manual",
+            "Los badges usan payment.isPaid",
+            "Sin caja abierta el cobro se bloquea con CTA a Caja"
+          ]
+        },
+        {
+          "id": "reports-expenses-context",
+          "title": "Adaptar reportes de egresos al contexto de caja",
+          "owner_role": "frontend",
+          "status": "pending",
+          "parallelizable": true,
+          "depends_on": [
+            "cashbox-page"
+          ],
+          "outputs": [
+            "Etiquetas y detalle con contexto de egreso desde caja"
+          ],
+          "exit_criteria": [
+            "El usuario puede distinguir egresos operativos de caja"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "batch-3",
+      "mode": "sequential",
+      "tasks": [
+        {
+          "id": "motion-polish",
+          "title": "Agregar motion sutil con GSAP",
+          "owner_role": "frontend",
+          "status": "pending",
+          "parallelizable": false,
+          "depends_on": [
+            "orders-admin-adapt",
+            "reports-expenses-context"
+          ],
+          "outputs": [
+            "Reveal inicial en Caja",
+            "Entrada escalonada de paneles",
+            "Feedback visual en overlays"
+          ],
+          "exit_criteria": [
+            "No hay jank ni ejecución en SSR"
+          ]
+        },
+        {
+          "id": "qa-static",
+          "title": "Validación estática y repaso de flujos",
+          "owner_role": "frontend",
+          "status": "pending",
+          "parallelizable": false,
+          "depends_on": [
+            "motion-polish"
+          ],
+          "outputs": [
+            "tsc limpio",
+            "eslint limpio",
+            "Checklist manual de flujos admin"
+          ],
+          "exit_criteria": [
+            "La fase queda lista para revisión visual y paso posterior a empleado"
+          ]
+        }
+      ]
+    }
+  ]
+}

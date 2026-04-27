@@ -37,8 +37,8 @@ export function RecentOrdersCard({ loading, activity }: RecentOrdersCardProps) {
         <section className="flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-zinc-200 bg-white shadow-sm md:rounded-[2.5rem]">
             <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-6 md:px-8 md:py-6">
                 <div>
-                    <h3 className="text-lg font-bold tracking-tight text-zinc-900 md:text-xl">Ultimos Pedidos</h3>
-                    <p className="mt-1 text-sm text-zinc-400">Actividad en tiempo real</p>
+                    <h3 className="text-lg font-bold tracking-tight text-zinc-900 md:text-xl">Actividad reciente</h3>
+                    <p className="mt-1 text-sm text-zinc-400">Ultimos pedidos registrados en el sistema</p>
                 </div>
 
                 <Link href="/admin/dashboard/pedidos" className="hidden md:inline-flex">

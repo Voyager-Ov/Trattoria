@@ -10,6 +10,7 @@ import {
     User,
     Users,
     UtensilsCrossed,
+    Wallet,
     type LucideIcon,
 } from "lucide-react";
 
@@ -54,6 +55,13 @@ const tones = {
         softBorder: "border-amber-500/20",
         softText: "text-amber-700",
         hoverBg: "hover:bg-amber-500/5",
+    },
+    caja: {
+        dot: "bg-emerald-600",
+        softBg: "bg-emerald-500/10",
+        softBorder: "border-emerald-500/20",
+        softText: "text-emerald-700",
+        hoverBg: "hover:bg-emerald-500/5",
     },
     productos: {
         dot: "bg-emerald-500",
@@ -110,6 +118,15 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
         icon: ShoppingBag,
         tone: tones.pedidos,
         mobilePrimary: true,
+    },
+    {
+        key: "caja",
+        name: "Caja",
+        shortName: "Caja",
+        href: "/admin/dashboard/caja",
+        icon: Wallet,
+        tone: tones.caja,
+        mobileSecondary: true,
     },
     {
         key: "productos",

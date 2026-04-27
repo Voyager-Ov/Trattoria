@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { updateOrderStatus, toggleOrderPayment } from "@/app/admin/dashboard/pedidos/actions";
+import { getCurrentCashbox } from "@/app/actions/cashboxActions";
 import { toast } from "sonner";
 import {
     Sheet,
@@ -47,15 +48,6 @@ import {
     SheetFooter,
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
-import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectLabel,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -63,32 +55,17 @@ import { EstadoPedido } from "@prisma/client";
 import { getConfigs } from "@/app/actions/configActions";
 import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
 import { getOrderDeliveryLabel, getOrderDisplayAddress } from "@/lib/orderDelivery";
+import { CashboxBlockedDialog } from "@/components/dashboard/cashbox/CashboxBlockedDialog";
+import type { OrderListItem } from "@/app/admin/dashboard/pedidos/components/pedido-shared";
 
-interface OrderItem {
-    id: string;
-    nombreProduct: string;
-    cantidad: number;
-    precioUnitario: number | string;
-    subtotal: number | string;
-}
+type Order = OrderListItem;
 
-interface Order {
+type PaymentMethodOption = {
     id: string;
-    numero: string;
-    origen: string;
-    clienteNombre: string | null;
-    clienteTelefono: string | null;
-    clienteDireccion: string | null;
-    tipoEntrega?: "DELIVERY" | "RETIRO" | null;
-    recibidoEn: string;
-    estado: EstadoPedido;
-    cobrado: boolean;
-    total: number | string;
-    items: OrderItem[];
-    customer?: {
-        nombre: string;
-    } | null;
-}
+    label: string;
+    enabled: boolean;
+    sortOrder: number;
+};
 
 // Native formatter for local dates
 const formatDate = (date: string | Date) => {
@@ -156,6 +133,7 @@ export default function EmpleadoPedidosPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("TODOS");
 
     // Pagination state
@@ -180,14 +158,16 @@ export default function EmpleadoPedidosPage() {
     const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null);
     const [paymentMethod, setPaymentMethod] = useState("EFECTIVO");
     const [isSavingPayment, setIsSavingPayment] = useState(false);
-    const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+    const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
+    const [hasOpenCashbox, setHasOpenCashbox] = useState(false);
+    const [isCashboxGateOpen, setIsCashboxGateOpen] = useState(false);
 
     const fetchOrders = useCallback(async (silent = false) => {
         if (!silent) setIsLoading(true);
         try {
             const queryParams = new URLSearchParams({
                 status: statusFilter,
-                search: searchQuery,
+                search: debouncedSearchQuery,
                 page: page.toString(),
                 limit: limit.toString(),
                 orderBy,
@@ -207,32 +187,87 @@ export default function EmpleadoPedidosPage() {
         } finally {
             if (!silent) setIsLoading(false);
         }
-    }, [statusFilter, searchQuery, page, limit, orderBy, orderDir]);
+    }, [statusFilter, debouncedSearchQuery, page, limit, orderBy, orderDir]);
+
+    const syncCashboxState = useCallback(async () => {
+        try {
+            const result = await getCurrentCashbox();
+            if (!result.success) {
+                setHasOpenCashbox(false);
+                return;
+            }
+
+            const currentCashbox = (result.data as { currentCashbox: { id: string } | null } | undefined)?.currentCashbox ?? null;
+            setHasOpenCashbox(Boolean(currentCashbox));
+        } catch {
+            setHasOpenCashbox(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery.trim());
+        }, 350);
+
+        return () => clearTimeout(timeout);
+    }, [searchQuery]);
+
+    const getPaymentLabel = useCallback((order: Order) => {
+        if (order.payment.isPaid) {
+            return order.payment.method || "No especificado";
+        }
+
+        if (order.payment.preferredMethod) {
+            return `Preferencia: ${order.payment.preferredMethod}`;
+        }
+
+        return "Sin preferencia";
+    }, []);
 
     useEffect(() => {
         const loadConfigs = async () => {
             const res = await getConfigs(["payments.methods"]);
-            let methods = DEFAULT_PAYMENT_METHODS;
+            let methods = DEFAULT_PAYMENT_METHODS as PaymentMethodOption[];
 
             if (res.success && res.data && res.data["payments.methods"]) {
-                const dbMethods = res.data["payments.methods"] as any[];
+                const dbMethods = res.data["payments.methods"] as PaymentMethodOption[];
                 if (dbMethods.length > 0) {
                     methods = dbMethods;
                 }
             }
 
-            const activeMethods = methods.filter(m => m.enabled);
+            const activeMethods = methods
+                .filter((m) => m.enabled)
+                .map((method, index) => ({
+                    ...method,
+                    sortOrder: method.sortOrder ?? index,
+                }));
             setPaymentMethods(activeMethods);
 
             if (activeMethods.length > 0 && !activeMethods.find(m => m.id === "EFECTIVO")) {
                 setPaymentMethod(activeMethods[0].id);
             }
         };
-        loadConfigs();
-        fetchOrders();
-        const interval = setInterval(() => fetchOrders(true), 15000);
-        return () => clearInterval(interval);
-    }, [fetchOrders]);
+        void loadConfigs();
+        void syncCashboxState();
+        void fetchOrders();
+        const interval = setInterval(() => void fetchOrders(true), 30000);
+        const handleWindowFocus = () => void fetchOrders(true);
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                void fetchOrders(true);
+            }
+        };
+
+        window.addEventListener("focus", handleWindowFocus);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener("focus", handleWindowFocus);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, [fetchOrders, syncCashboxState]);
 
     const handleStatusUpdate = async (id: string, newStatus: EstadoPedido) => {
         if (newStatus === 'CANCELADO') {
@@ -246,7 +281,7 @@ export default function EmpleadoPedidosPage() {
         const result = await updateOrderStatus(id, newStatus);
         if (result.success) {
             toast.success("Estado actualizado");
-            fetchOrders(true);
+            void fetchOrders(true);
         } else {
             toast.error(result.error || "Error al actualizar");
         }
@@ -263,28 +298,29 @@ export default function EmpleadoPedidosPage() {
         if (result.success) {
             toast.success("Pedido cancelado");
             setIsCancelSheetOpen(false);
-            fetchOrders();
+            void fetchOrders();
         } else {
             toast.error(result.error || "Error al cancelar");
         }
         setIsCancelling(false);
     };
 
-    const handleTogglePayment = async (id: string, currentCobrado: boolean) => {
-        if (!currentCobrado) {
-            setPaymentOrderId(id);
-            setPaymentMethod("EFECTIVO");
-            setIsPaymentSheetOpen(true);
+    const handleTogglePayment = async (order: Order) => {
+        if (order.payment.isPaid) {
+            toast.info("El cobro ya fue registrado. Para anularlo debes cancelar el pedido.");
             return;
         }
 
-        const result = await toggleOrderPayment(id, false);
-        if (result.success) {
-            toast.success("Marcado como pendiente");
-            fetchOrders();
-        } else {
-            toast.error(result.error || "Error al actualizar pago");
+        if (!hasOpenCashbox) {
+            setIsCashboxGateOpen(true);
+            return;
         }
+
+        setPaymentOrderId(order.id);
+        if (paymentMethods.some((method) => method.id === "EFECTIVO")) {
+            setPaymentMethod("EFECTIVO");
+        }
+        setIsPaymentSheetOpen(true);
     };
 
     const handleConfirmPayment = async () => {
@@ -295,8 +331,13 @@ export default function EmpleadoPedidosPage() {
         if (result.success) {
             toast.success("Pedido cobrado");
             setIsPaymentSheetOpen(false);
-            fetchOrders();
+            await syncCashboxState();
+            void fetchOrders();
         } else {
+            if ((result.error || "").toLowerCase().includes("abrir una caja")) {
+                setIsPaymentSheetOpen(false);
+                setIsCashboxGateOpen(true);
+            }
             toast.error(result.error || "Error al registrar pago");
         }
         setIsSavingPayment(false);
@@ -501,7 +542,7 @@ export default function EmpleadoPedidosPage() {
                                                 </td>
                                                 <td className="px-8 py-6">
                                                     <div className="flex flex-col gap-1">
-                                                        {order.items.map((item: OrderItem) => (
+                                        {order.items.map((item) => (
                                                             <div key={item.id} className="flex items-center gap-1.5 min-w-[150px]">
                                                                 <div className="h-5 w-5 rounded-md bg-zinc-100 flex items-center justify-center text-[10px] font-black text-zinc-500 shrink-0">
                                                                     {Number(item.cantidad)}
@@ -541,7 +582,7 @@ export default function EmpleadoPedidosPage() {
                                                             </DropdownMenuContent>
                                                         </DropdownMenu>
 
-                                                        {order.cobrado ? (
+                                                        {order.payment.isPaid ? (
                                                             <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 rounded-lg text-[9px] font-black uppercase tracking-widest px-2 py-0.5 shadow-none">
                                                                 <div className="flex items-center gap-1">
                                                                     <Banknote size={10} />
@@ -556,6 +597,9 @@ export default function EmpleadoPedidosPage() {
                                                                 </div>
                                                             </Badge>
                                                         )}
+                                                        <p className="text-[11px] font-semibold text-zinc-500">
+                                                            {getPaymentLabel(order)}
+                                                        </p>
                                                     </div>
                                                 </td>
                                                 <td className="px-8 py-6 text-right">
@@ -581,16 +625,15 @@ export default function EmpleadoPedidosPage() {
                                                         <Button
                                                             variant="outline"
                                                             size="sm"
-                                                            disabled={order.cobrado}
-                                                            onClick={() => handleTogglePayment(order.id, order.cobrado)}
+                                                            onClick={() => handleTogglePayment(order)}
                                                             className={cn(
                                                                 "h-9 px-4 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-sm",
-                                                                order.cobrado
-                                                                    ? "bg-zinc-50 text-zinc-300 border-zinc-100 cursor-not-allowed"
+                                                                order.payment.isPaid
+                                                                    ? "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
                                                                     : "bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-600 hover:text-white hover:border-emerald-600"
                                                             )}
                                                         >
-                                                            {order.cobrado ? "Cobrado" : "Cobrar"}
+                                                            {order.payment.isPaid ? "Cobrado" : "Cobrar"}
                                                         </Button>
                                                     </div>
                                                 </td>
@@ -808,6 +851,13 @@ export default function EmpleadoPedidosPage() {
                     </div>
                 </SheetContent>
             </Sheet>
+
+            <CashboxBlockedDialog
+                open={isCashboxGateOpen}
+                onOpenChange={setIsCashboxGateOpen}
+                targetHref="/empleado/caja"
+                description="Para cobrar pedidos primero debes abrir tu caja operativa. Cuando quede activa, podrás volver a registrar el cobro."
+            />
         </div>
     );
 }

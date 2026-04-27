@@ -95,9 +95,26 @@ enum TipoAuditAction {
   UPDATE_EXPENSE
   DELETE_EXPENSE
 
+  // Caja
+  OPEN_CASHBOX
+  CLOSE_CASHBOX
+  REGISTER_CASHBOX_PAYMENT
+  VOID_CASHBOX_PAYMENT
+  REGISTER_CASHBOX_EXPENSE
+
   // Sistema
   SYSTEM_ERROR
   UNAUTHORIZED_ACCESS
+}
+
+enum CajaEstado {
+  ABIERTA
+  CERRADA
+}
+
+enum EstadoCobroCaja {
+  VIGENTE
+  ANULADO
 }
 
 // =============================================================================
@@ -135,6 +152,8 @@ model User {
   stockMovements StockMovement[]
   auditLogs      AuditLog[]
   orderEvents    OrderEvent[]
+  cajas          Caja[]
+  cobrosCaja     CobroCaja[]
 
   @@index([rol, estado])
   @@index([deletedAt])
@@ -340,7 +359,13 @@ model Order {
   // Pago
   cobrado    Boolean   @default(false)
   cobradoEn  DateTime?
-  metodoPago String? // Método con el que se cobró
+  canalVenta String?
+  deliveryFee Decimal  @default(0) @db.Decimal(10, 2)
+  costoCanal  Decimal  @default(0) @db.Decimal(10, 2)
+  promisedAt  DateTime?
+  deliveredAt DateTime?
+  metodoPago          String? // Snapshot del metodo real con el que se cobro
+  metodoPagoPreferido String? // Preferencia previa al cobro
 
   // Notas y Cancelación
   notas             String? @db.Text
@@ -363,10 +388,13 @@ model Order {
   // Relaciones
   items  OrderItem[]
   events OrderEvent[]
+  cobrosCaja CobroCaja[]
 
   @@index([estado, updatedAt(sort: Desc)])
   @@index([createdBy, recibidoEn(sort: Desc)])
   @@index([recibidoEn(sort: Desc)])
+  @@index([cobradoEn(sort: Desc)])
+  @@index([finalizadoEn(sort: Desc)])
   @@index([deletedAt])
   @@map("orders")
 }
@@ -616,6 +644,13 @@ enum CategoriaEgreso {
   OTROS
 }
 
+enum EstadoPagoEgreso {
+  PENDIENTE
+  PAGADO
+  VENCIDO
+  ANULADO
+}
+
 /// Egreso - Registro de gastos o egresos de dinero
 model Egreso {
   id String @id @default(cuid())
@@ -637,9 +672,27 @@ model Egreso {
   // Relación con Compra (si aplica)
   purchase Purchase?
 
+  // Relación con Caja (si aplica)
+  cajaId String?
+  caja   Caja?   @relation(fields: [cajaId], references: [id], onDelete: SetNull)
+
   // Pago
   metodoPago  String  @default("EFECTIVO")
   comprobante String? // URL o path de comprobante
+  estadoPago  EstadoPagoEgreso @default(PAGADO)
+
+  // Contabilidad
+  tipoComprobante   String?
+  numeroComprobante String?
+  centroCosto       String?
+  fechaDevengado    DateTime?
+  fechaPago         DateTime?
+  fechaVencimiento  DateTime?
+  periodoDesde      DateTime?
+  periodoHasta      DateTime?
+  neto              Decimal? @db.Decimal(10, 2)
+  impuestos         Decimal? @db.Decimal(10, 2)
+  percepciones      Decimal? @db.Decimal(10, 2)
 
   // Auditoría
   createdAt DateTime  @default(now())
@@ -648,8 +701,76 @@ model Egreso {
 
   @@index([fecha(sort: Desc)])
   @@index([categoria])
+  @@index([cajaId, fecha(sort: Desc)])
+  @@index([providerId, fecha(sort: Desc)])
+  @@index([estadoPago, fecha(sort: Desc)])
   @@index([deletedAt])
   @@map("egresos")
+}
+
+// =============================================================================
+// CAJA - Gestión operativa por usuario
+// =============================================================================
+
+model Caja {
+  id String @id @default(cuid())
+
+  usuarioId String
+  usuario   User   @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  estado CajaEstado @default(ABIERTA)
+
+  fechaApertura DateTime  @default(now())
+  fechaCierre   DateTime?
+
+  montoInicialSugerido Decimal @default(0) @db.Decimal(10, 2)
+  montoInicialReal     Decimal @default(0) @db.Decimal(10, 2)
+  efectivoContado      Decimal? @db.Decimal(10, 2)
+  diferenciaEfectivo   Decimal? @db.Decimal(10, 2)
+
+  observacionesApertura String? @db.Text
+  observacionesCierre   String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cobros  CobroCaja[]
+  egresos Egreso[]
+
+  @@index([usuarioId, estado])
+  @@index([estado, fechaApertura(sort: Desc)])
+  @@index([fechaApertura(sort: Desc)])
+  @@map("cajas")
+}
+
+model CobroCaja {
+  id String @id @default(cuid())
+
+  pedidoId String
+  pedido   Order  @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+
+  cajaId String
+  caja   Caja   @relation(fields: [cajaId], references: [id], onDelete: Restrict)
+
+  usuarioId String
+  usuario   User   @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  monto      Decimal @db.Decimal(10, 2)
+  metodoPago String
+  estado     EstadoCobroCaja @default(VIGENTE)
+
+  fechaCobro     DateTime  @default(now())
+  fechaAnulacion DateTime?
+  motivoAnulacion String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cajaId, estado, fechaCobro(sort: Desc)])
+  @@index([pedidoId, estado])
+  @@index([usuarioId, fechaCobro(sort: Desc)])
+  @@index([fechaCobro(sort: Desc)])
+  @@map("cobros_caja")
 }
 
 // =============================================================================
@@ -680,18 +801,24 @@ model Provider {
 }
 
 model Purchase {
-  id         String         @id @default(cuid())
-  providerId String
-  provider   Provider       @relation(fields: [providerId], references: [id])
-  total      Decimal        @db.Decimal(10, 2)
-  fecha      DateTime       @default(now())
-  estado     EstadoCompra   @default(RECIBIDO)
-  items      PurchaseItem[]
-  egresoId   String?        @unique
-  egreso     Egreso?        @relation(fields: [egresoId], references: [id])
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  id            String         @id @default(cuid())
+  numero        String?        @unique
+  providerId    String
+  provider      Provider       @relation(fields: [providerId], references: [id])
+  subtotal      Decimal?       @db.Decimal(10, 2)
+  impuestos     Decimal?       @db.Decimal(10, 2)
+  total         Decimal        @db.Decimal(10, 2)
+  fecha         DateTime       @default(now())
+  estado        EstadoCompra   @default(RECIBIDO)
+  observaciones String?
+  items         PurchaseItem[]
+  egresoId      String?        @unique
+  egreso        Egreso?        @relation(fields: [egresoId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
+  @@index([providerId, fecha(sort: Desc)])
+  @@index([estado, fecha(sort: Desc)])
   @@map("purchases")
 }
 

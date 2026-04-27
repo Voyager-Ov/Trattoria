@@ -49,11 +49,26 @@ import { ReportSurface } from "../reportes-ui";
 interface Egreso {
     id: string;
     numero: string;
+    cajaId?: string | null;
     fecha: Date | string;
     descripcion: string;
     monto: number;
     categoria: string;
-    proveedor?: string;
+    proveedor?: string | null;
+    metodoPago?: string | null;
+    estadoPago?: string | null;
+    centroCosto?: string | null;
+    tipoComprobante?: string | null;
+    numeroComprobante?: string | null;
+    comprobante?: string | null;
+    fechaDevengado?: Date | string | null;
+    fechaPago?: Date | string | null;
+    fechaVencimiento?: Date | string | null;
+    periodoDesde?: Date | string | null;
+    periodoHasta?: Date | string | null;
+    neto?: number | null;
+    impuestos?: number | null;
+    percepciones?: number | null;
 }
 
 interface MetricCardProps {
@@ -346,9 +361,16 @@ export default function EgresosPage() {
                                 </div>
 
                                 <div className="mt-3">
-                                    <Badge variant="secondary" className={`border-none ${getCategoryBadgeColor(egreso.categoria)}`}>
-                                        {egreso.categoria}
-                                    </Badge>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Badge variant="secondary" className={`border-none ${getCategoryBadgeColor(egreso.categoria)}`}>
+                                            {egreso.categoria}
+                                        </Badge>
+                                        {egreso.cajaId ? (
+                                            <Badge variant="outline" className="border-zinc-200 bg-white text-zinc-600">
+                                                Caja del turno
+                                            </Badge>
+                                        ) : null}
+                                    </div>
                                 </div>
                             </button>
                         ))
@@ -401,9 +423,16 @@ export default function EgresosPage() {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <Badge variant="secondary" className={`border-none text-[0.65rem] font-bold ${getCategoryBadgeColor(egreso.categoria)}`}>
-                                                    {egreso.categoria}
-                                                </Badge>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Badge variant="secondary" className={`border-none text-[0.65rem] font-bold ${getCategoryBadgeColor(egreso.categoria)}`}>
+                                                        {egreso.categoria}
+                                                    </Badge>
+                                                    {egreso.cajaId ? (
+                                                        <Badge variant="outline" className="border-zinc-200 bg-white text-[0.65rem] font-bold text-zinc-600">
+                                                            Caja
+                                                        </Badge>
+                                                    ) : null}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4 text-sm text-zinc-500">{egreso.proveedor || "-"}</td>
                                             <td className="px-6 py-4 text-right text-sm font-bold text-red-600">-{formatCurrency(egreso.monto)}</td>
@@ -476,6 +505,22 @@ export default function EgresosPage() {
                             <div>
                                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Proveedor</p>
                                 <p className="mt-1 font-semibold text-zinc-800">{selectedEgreso.proveedor || "Sin proveedor"}</p>
+                            </div>
+                            <div>
+                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Origen operativo</p>
+                                <p className="mt-1 font-semibold text-zinc-800">
+                                    {selectedEgreso.cajaId ? "Caja del turno" : "Registro administrativo"}
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Estado</p>
+                                    <p className="mt-1 font-semibold text-zinc-800">{selectedEgreso.estadoPago || "PAGADO"}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Metodo</p>
+                                    <p className="mt-1 font-semibold text-zinc-800">{selectedEgreso.metodoPago || "EFECTIVO"}</p>
+                                </div>
                             </div>
                         </div>
 

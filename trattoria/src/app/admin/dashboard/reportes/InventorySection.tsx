@@ -180,7 +180,7 @@ export default function InventorySection({ dateRange }: InventorySectionProps) {
             {stockMovements.length > 0 ? (
                 <ReportSurface
                     title="Movimientos de stock"
-                    description="Entradas, salidas y ajustes del periodo."
+                    description="Entradas, salidas y ajustes valorizados de forma estimada."
                 >
                     <div className="h-[250px] w-full md:h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -193,7 +193,12 @@ export default function InventorySection({ dateRange }: InventorySectionProps) {
                                     stroke="#71717a"
                                     style={{ fontSize: "12px" }}
                                 />
-                                <YAxis hide={isMobile} stroke="#71717a" style={{ fontSize: "12px" }} />
+                                <YAxis
+                                    hide={isMobile}
+                                    tickFormatter={(value) => formatCurrency(Number(value || 0))}
+                                    stroke="#71717a"
+                                    style={{ fontSize: "12px" }}
+                                />
                                 <Tooltip
                                     contentStyle={{
                                         backgroundColor: "#ffffff",
@@ -201,6 +206,7 @@ export default function InventorySection({ dateRange }: InventorySectionProps) {
                                         borderRadius: "12px",
                                         padding: "12px",
                                     }}
+                                    formatter={(value) => [formatCurrency(Number(value || 0)), "Valor estimado"]}
                                     labelFormatter={(date) => format(new Date(date), "dd 'de' MMMM, yyyy", { locale: es })}
                                 />
                                 <Legend wrapperStyle={{ fontSize: 12 }} />

@@ -1,5 +1,10 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Manual operativo
+
+El manual operativo por flujos para usar y probar la aplicacion esta en [manual-operativo/README.md](manual-operativo/README.md).
+La guia anterior de analisis funcional ahora redirige a ese indice para evitar instrucciones duplicadas.
+
 ## Getting Started
 
 First, run the development server:

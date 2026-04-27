@@ -32,7 +32,7 @@ import { ResponsivePanel } from "@/components/ui/responsive-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-import { getReportsData, type FinancialSummary } from "./actions";
+import { getReportsData, type FinancialSummary, type ReportBasis } from "./actions";
 import FinancialSection from "./FinancialSection";
 import InventorySection from "./InventorySection";
 import OrdersSection from "./OrdersSection";
@@ -62,13 +62,13 @@ const REPORT_TABS: Array<{
     icon: React.ComponentType<{ className?: string }>;
     activeClass: string;
 }> = [
-    { value: "resumen", label: "Resumen", icon: BarChart3, activeClass: "data-[state=active]:bg-emerald-500" },
-    { value: "financiero", label: "Financiero", icon: DollarSign, activeClass: "data-[state=active]:bg-emerald-500" },
-    { value: "productos", label: "Productos", icon: Package, activeClass: "data-[state=active]:bg-blue-500" },
-    { value: "pedidos", label: "Pedidos", icon: ShoppingCart, activeClass: "data-[state=active]:bg-violet-500" },
-    { value: "inventario", label: "Inventario", icon: Warehouse, activeClass: "data-[state=active]:bg-amber-500" },
-    { value: "rentabilidad", label: "Rentabilidad", icon: TrendingUp, activeClass: "data-[state=active]:bg-pink-500" },
-];
+        { value: "resumen", label: "Resumen", icon: BarChart3, activeClass: "data-[state=active]:bg-emerald-500" },
+        { value: "financiero", label: "Financiero", icon: DollarSign, activeClass: "data-[state=active]:bg-emerald-500" },
+        { value: "productos", label: "Productos", icon: Package, activeClass: "data-[state=active]:bg-blue-500" },
+        { value: "pedidos", label: "Pedidos", icon: ShoppingCart, activeClass: "data-[state=active]:bg-violet-500" },
+        { value: "inventario", label: "Inventario", icon: Warehouse, activeClass: "data-[state=active]:bg-amber-500" },
+        { value: "rentabilidad", label: "Rentabilidad", icon: TrendingUp, activeClass: "data-[state=active]:bg-pink-500" },
+    ];
 
 const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("es-AR", {
@@ -193,6 +193,7 @@ export default function ReportesDashboardPage() {
     const [paymentMethodsConfig, setPaymentMethodsConfig] = useState<unknown[]>([]);
     const [activeTab, setActiveTab] = useState<ReportTab>("resumen");
     const [viewsOpen, setViewsOpen] = useState(false);
+    const [basis, setBasis] = useState<ReportBasis>("caja");
 
     const updateDateRange = (preset: DatePreset) => {
         const now = new Date();
@@ -256,7 +257,11 @@ export default function ReportesDashboardPage() {
             setIsLoading(true);
 
             try {
-                const res = await getReportsData(dateRange.from, dateRange.to);
+                const res = await getReportsData({
+                    startDate: dateRange.from,
+                    endDate: dateRange.to,
+                    basis,
+                });
 
                 if (!active) {
                     return;
@@ -266,26 +271,12 @@ export default function ReportesDashboardPage() {
                     setSummary(res.data.summary);
                 } else {
                     toast.error(res.error || "Error al cargar datos del dashboard");
-                    setSummary({
-                        totalRevenue: 0,
-                        totalOrders: 0,
-                        averageTicket: 0,
-                        ordersByStatus: {},
-                        ordersByPaymentMethod: {},
-                        revenueByDay: {},
-                    });
+                    setSummary(null);
                 }
             } catch {
                 toast.error("Error de conexion con el servidor");
                 if (active) {
-                    setSummary({
-                        totalRevenue: 0,
-                        totalOrders: 0,
-                        averageTicket: 0,
-                        ordersByStatus: {},
-                        ordersByPaymentMethod: {},
-                        revenueByDay: {},
-                    });
+                    setSummary(null);
                 }
             } finally {
                 if (active) {
@@ -299,7 +290,7 @@ export default function ReportesDashboardPage() {
         return () => {
             active = false;
         };
-    }, [dateRange]);
+    }, [basis, dateRange]);
 
     const chartData = useMemo(() => {
         if (!summary?.revenueByDay) {
@@ -394,6 +385,16 @@ export default function ReportesDashboardPage() {
         return labels[preset];
     };
 
+    const getBasisLabel = (value: ReportBasis) => {
+        const labels: Record<ReportBasis, string> = {
+            operativo: "Operativo",
+            caja: "Caja",
+            devengado: "Devengado",
+        };
+
+        return labels[value];
+    };
+
     if (isLoading && activeTab === "resumen") {
         return (
             <div className="flex h-72 items-center justify-center">
@@ -432,6 +433,32 @@ export default function ReportesDashboardPage() {
                             </span>
                             <ChevronDown className="h-4 w-4 text-zinc-400" />
                         </Button>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    className="h-11 w-full justify-between rounded-2xl border-zinc-200 bg-white px-4 font-medium text-zinc-600 shadow-sm md:w-auto md:rounded-full md:px-6"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <DollarSign className="h-4 w-4 text-zinc-400" />
+                                        {getBasisLabel(basis)}
+                                    </span>
+                                    <ChevronDown className="h-3 w-3 opacity-50" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48 rounded-2xl border-zinc-100 p-2 shadow-xl">
+                                <DropdownMenuItem className="my-0.5 cursor-pointer rounded-xl" onClick={() => setBasis("operativo")}>
+                                    Operativo
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="my-0.5 cursor-pointer rounded-xl" onClick={() => setBasis("caja")}>
+                                    Caja
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="my-0.5 cursor-pointer rounded-xl" onClick={() => setBasis("devengado")}>
+                                    Devengado
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -486,36 +513,71 @@ export default function ReportesDashboardPage() {
                 <TabsContent value="resumen" className="mt-5 space-y-5 md:mt-6 md:space-y-6">
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 md:gap-6">
                         <SummaryMetricCard
-                            title="Ingresos totales"
-                            value={formatCurrency(summary?.totalRevenue || 0)}
-                            subValue={`${summary?.totalOrders || 0} ordenes procesadas`}
+                            title="Ventas netas"
+                            value={formatCurrency(summary?.netSales || 0)}
+                            subValue={`${summary?.totalOrders || 0} ordenes en base ${getBasisLabel(basis).toLowerCase()}`}
                             icon={DollarSign}
                             iconBgClass="bg-emerald-100"
                             iconColorClass="text-emerald-600"
                         />
                         <SummaryMetricCard
-                            title="Ticket promedio"
-                            value={formatCurrency(summary?.averageTicket || 0)}
-                            subValue="por orden finalizada"
+                            title="Egresos"
+                            value={formatCurrency(summary?.totalExpenses || 0)}
+                            subValue={`${formatCurrency(summary?.laborCost || 0)} en nomina`}
+                            icon={DollarSign}
+                            iconBgClass="bg-red-100"
+                            iconColorClass="text-red-600"
+                        />
+                        <SummaryMetricCard
+                            title="Resultado operativo"
+                            value={formatCurrency(summary?.operatingResult || 0)}
+                            subValue={`${formatCurrency(summary?.grossProfit || 0)} beneficio bruto`}
                             icon={TrendingUp}
                             iconBgClass="bg-blue-100"
                             iconColorClass="text-blue-600"
                         />
                         <SummaryMetricCard
-                            title="Ordenes completadas"
-                            value={orderStats.completed.toString()}
-                            subValue={`${orderStats.cancelled} canceladas`}
+                            title="Costo Primario"
+                            value={`${(summary?.primeCostPct || 0).toFixed(1)}%`}
+                            subValue={`${formatCurrency(summary?.primeCost || 0)} entre costo de la materia prima + nomina`}
+                            icon={XCircle}
+                            iconBgClass="bg-amber-100"
+                            iconColorClass="text-amber-600"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 md:gap-6">
+                        <SummaryMetricCard
+                            title="Ventas brutas"
+                            value={formatCurrency(summary?.grossSales || 0)}
+                            subValue={`${(summary?.discountRate || 0).toFixed(1)}% en descuentos`}
+                            icon={DollarSign}
+                            iconBgClass="bg-zinc-100"
+                            iconColorClass="text-zinc-700"
+                        />
+                        <SummaryMetricCard
+                            title="Ticket promedio"
+                            value={formatCurrency(summary?.averageTicket || 0)}
+                            subValue={`${(summary?.avgItemsPerOrder || 0).toFixed(1)} items por pedido`}
                             icon={ShoppingCart}
                             iconBgClass="bg-violet-100"
                             iconColorClass="text-violet-600"
                         />
                         <SummaryMetricCard
-                            title="Tasa de cancelacion"
-                            value={`${orderStats.total > 0 ? ((orderStats.cancelled / orderStats.total) * 100).toFixed(1) : 0}%`}
-                            subValue={`${orderStats.pending} pendientes`}
-                            icon={XCircle}
-                            iconBgClass="bg-red-100"
-                            iconColorClass="text-red-600"
+                            title="Comparativo"
+                            value={`${(summary?.comparisonPrevRevenuePct || 0).toFixed(1)}%`}
+                            subValue={`${(summary?.comparisonPrevOrdersPct || 0).toFixed(1)}% en ordenes vs periodo previo`}
+                            icon={TrendingUp}
+                            iconBgClass="bg-sky-100"
+                            iconColorClass="text-sky-600"
+                        />
+                        <SummaryMetricCard
+                            title="Punto equilibrio"
+                            value={`${(summary?.breakEvenProgressPct || 0).toFixed(0)}%`}
+                            subValue={`${formatCurrency(summary?.breakEvenTarget || 0)} objetivo del periodo`}
+                            icon={BarChart3}
+                            iconBgClass="bg-lime-100"
+                            iconColorClass="text-lime-600"
                         />
                     </div>
 
@@ -559,7 +621,7 @@ export default function ReportesDashboardPage() {
 
                         <ReportSurface
                             title="Resumen rapido"
-                            description="Corte financiero del periodo."
+                            description={`Corte financiero en base ${getBasisLabel(basis).toLowerCase()}.`}
                             className="border-zinc-900 bg-gradient-to-br from-zinc-900 to-zinc-800"
                             titleClassName="text-white"
                             descriptionClassName="text-zinc-300"
@@ -574,8 +636,8 @@ export default function ReportesDashboardPage() {
                                     <span className="text-sm font-bold text-white">{formatCurrency(currentDigital)}</span>
                                 </div>
                                 <div className="flex items-center justify-between py-2.5">
-                                    <span className="text-sm text-zinc-300">Total ordenes</span>
-                                    <span className="text-sm font-bold text-white">{summary?.totalOrders || 0}</span>
+                                    <span className="text-sm text-zinc-300">Margen neto</span>
+                                    <span className="text-sm font-bold text-white">{(summary?.netMarginPct || 0).toFixed(1)}%</span>
                                 </div>
                             </div>
                         </ReportSurface>
@@ -583,15 +645,15 @@ export default function ReportesDashboardPage() {
                 </TabsContent>
 
                 <TabsContent value="financiero" className="mt-5 md:mt-6">
-                    <FinancialSection dateRange={dateRange} />
+                    <FinancialSection dateRange={dateRange} basis={basis} />
                 </TabsContent>
 
                 <TabsContent value="productos" className="mt-5 md:mt-6">
-                    <ProductsSection dateRange={dateRange} />
+                    <ProductsSection dateRange={dateRange} basis={basis} />
                 </TabsContent>
 
                 <TabsContent value="pedidos" className="mt-5 md:mt-6">
-                    <OrdersSection dateRange={dateRange} />
+                    <OrdersSection dateRange={dateRange} basis={basis} />
                 </TabsContent>
 
                 <TabsContent value="inventario" className="mt-5 md:mt-6">
@@ -599,7 +661,7 @@ export default function ReportesDashboardPage() {
                 </TabsContent>
 
                 <TabsContent value="rentabilidad" className="mt-5 md:mt-6">
-                    <ProfitabilitySection dateRange={dateRange} />
+                    <ProfitabilitySection dateRange={dateRange} basis={basis} />
                 </TabsContent>
             </Tabs>
 
@@ -624,9 +686,8 @@ export default function ReportesDashboardPage() {
                                     setActiveTab(tab.value);
                                     setViewsOpen(false);
                                 }}
-                                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors ${
-                                    isActive ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
-                                }`}
+                                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors ${isActive ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                    }`}
                             >
                                 <Icon className="h-4 w-4" />
                                 <span className="font-semibold">{tab.label}</span>

@@ -1,32 +1,124 @@
+"use client";
+
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArchiveX, Eye, Loader2, Search } from "lucide-react";
+import { AlertTriangle, ArchiveRestore, ArchiveX, ArrowDown, ArrowUp, ArrowUpDown, Eye, Loader2, Search, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
 import { formatArCurrencyDetailed, getCategoryColor, isCriticalSupply, type Supply } from "./supplies-shared";
+
+type SortKey = "nombre" | "category" | "stockActual" | "unidad" | "costoUnitario" | "valorInv" | "activo";
+type SortDir = "asc" | "desc";
+
+interface ColumnDef {
+    key: SortKey | null;
+    label: string;
+    align?: "right";
+}
+
+const COLUMNS: ColumnDef[] = [
+    { key: "nombre", label: "Insumo" },
+    { key: "category", label: "Categoría" },
+    { key: "stockActual", label: "Stock Actual" },
+    { key: "unidad", label: "Unidad" },
+    { key: "costoUnitario", label: "Costo Unit." },
+    { key: "valorInv", label: "Valor Inv." },
+    { key: "activo", label: "Estado" },
+    { key: null, label: "Acciones", align: "right" },
+];
+
+function getSortValue(supply: Supply, key: SortKey): string | number {
+    switch (key) {
+        case "nombre":
+            return supply.nombre.toLowerCase();
+        case "category":
+            return (supply.category?.nombre || "zzz").toLowerCase();
+        case "stockActual":
+            return Number(supply.stockActual);
+        case "unidad":
+            return supply.unidad.toLowerCase();
+        case "costoUnitario":
+            return Number(supply.costoUnitario || 0);
+        case "valorInv":
+            return Number(supply.stockActual) * Number(supply.costoUnitario || 0);
+        case "activo":
+            return supply.activo ? 0 : 1;
+        default:
+            return 0;
+    }
+}
 
 interface SuppliesDesktopTableProps {
     supplies: Supply[];
     loading: boolean;
     totalSupplies: number;
     onArchive: (id: string) => void;
+    onUnarchive: (id: string) => void;
+    onDelete: (id: string) => void;
 }
 
-export function SuppliesDesktopTable({ supplies, loading, totalSupplies, onArchive }: SuppliesDesktopTableProps) {
+export function SuppliesDesktopTable({ supplies, loading, totalSupplies, onArchive, onUnarchive, onDelete }: SuppliesDesktopTableProps) {
+    const [sortKey, setSortKey] = useState<SortKey | null>(null);
+    const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+    const handleSort = useCallback((key: SortKey | null) => {
+        if (!key) return;
+        if (sortKey === key) {
+            // Cycle: asc → desc → none
+            if (sortDir === "asc") {
+                setSortDir("desc");
+            } else {
+                setSortKey(null);
+                setSortDir("asc");
+            }
+        } else {
+            setSortKey(key);
+            setSortDir("asc");
+        }
+    }, [sortKey, sortDir]);
+
+    const sortedSupplies = useMemo(() => {
+        if (!sortKey) return supplies;
+        return [...supplies].sort((a, b) => {
+            const aVal = getSortValue(a, sortKey);
+            const bVal = getSortValue(b, sortKey);
+            let cmp = 0;
+            if (typeof aVal === "number" && typeof bVal === "number") {
+                cmp = aVal - bVal;
+            } else {
+                cmp = String(aVal).localeCompare(String(bVal), "es");
+            }
+            return sortDir === "desc" ? -cmp : cmp;
+        });
+    }, [supplies, sortKey, sortDir]);
+
+    function renderSortIcon(key: SortKey | null) {
+        if (!key) return null;
+        if (sortKey !== key) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-0 transition-opacity group-hover/th:opacity-60" />;
+        return sortDir === "asc"
+            ? <ArrowUp className="ml-1 h-3 w-3 text-zinc-700" />
+            : <ArrowDown className="ml-1 h-3 w-3 text-zinc-700" />;
+    }
+
     return (
         <div className="hidden overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm md:block">
             <div className="overflow-x-auto">
                 <table className="w-full">
                     <thead className="border-b border-zinc-100">
                         <tr>
-                            {["Insumo", "Categoria", "Stock Actual", "Unidad", "Costo Unit.", "Valor Inv.", "Estado", "Acciones"].map((column, index) => (
+                            {COLUMNS.map((col) => (
                                 <th
-                                    key={column}
-                                    className={`px-6 py-3 text-xs font-semibold uppercase tracking-widest text-zinc-400 ${
-                                        index === 7 ? "text-right" : "text-left"
-                                    }`}
+                                    key={col.label}
+                                    className={`group/th px-6 py-3 text-xs font-semibold uppercase tracking-widest text-zinc-400 ${
+                                        col.align === "right" ? "text-right" : "text-left"
+                                    } ${col.key ? "cursor-pointer select-none transition-colors hover:text-zinc-600" : ""}`}
+                                    onClick={() => handleSort(col.key)}
                                 >
-                                    {column}
+                                    <span className="inline-flex items-center">
+                                        {col.label}
+                                        {renderSortIcon(col.key)}
+                                    </span>
                                 </th>
                             ))}
                         </tr>
@@ -42,7 +134,7 @@ export function SuppliesDesktopTable({ supplies, loading, totalSupplies, onArchi
                                     </div>
                                 </td>
                             </tr>
-                        ) : supplies.length === 0 ? (
+                        ) : sortedSupplies.length === 0 ? (
                             <tr>
                                 <td colSpan={8} className="p-16 text-center">
                                     <div className="flex flex-col items-center gap-2">
@@ -52,7 +144,7 @@ export function SuppliesDesktopTable({ supplies, loading, totalSupplies, onArchi
                                 </td>
                             </tr>
                         ) : (
-                            supplies.map((supply) => {
+                            sortedSupplies.map((supply) => {
                                 const critical = isCriticalSupply(supply);
                                 const inventoryValue = Number(supply.stockActual) * Number(supply.costoUnitario || 0);
                                 const categoryColor = getCategoryColor(supply.category?.nombre || "Sin categoria");
@@ -97,24 +189,43 @@ export function SuppliesDesktopTable({ supplies, loading, totalSupplies, onArchi
                                             )}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex justify-end gap-2">
+                                            <div className="flex justify-end gap-1.5">
                                                 <Link href={`/admin/dashboard/insumos/${supply.id}`}>
                                                     <Button variant="outline" size="sm" className="h-8 gap-1 border-zinc-200">
                                                         <Eye className="h-3.5 w-3.5" />
                                                         Ver
                                                     </Button>
                                                 </Link>
-                                                {supply.activo && (
+                                                {supply.activo ? (
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="h-8 gap-1 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                        className="h-8 gap-1 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
                                                         onClick={() => onArchive(supply.id)}
                                                     >
                                                         <ArchiveX className="h-3.5 w-3.5" />
                                                         Archivar
                                                     </Button>
+                                                ) : (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 gap-1 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                                                        onClick={() => onUnarchive(supply.id)}
+                                                    >
+                                                        <ArchiveRestore className="h-3.5 w-3.5" />
+                                                        Restaurar
+                                                    </Button>
                                                 )}
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 gap-1 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                    onClick={() => onDelete(supply.id)}
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                    Eliminar
+                                                </Button>
                                             </div>
                                         </td>
                                     </tr>
@@ -125,10 +236,10 @@ export function SuppliesDesktopTable({ supplies, loading, totalSupplies, onArchi
                 </table>
             </div>
 
-            {!loading && supplies.length > 0 && (
+            {!loading && sortedSupplies.length > 0 && (
                 <div className="border-t border-zinc-100 bg-zinc-50/50 px-6 py-3">
                     <p className="text-xs text-zinc-400">
-                        Mostrando {supplies.length} de {totalSupplies} insumos
+                        Mostrando {sortedSupplies.length} de {totalSupplies} insumos
                     </p>
                 </div>
             )}

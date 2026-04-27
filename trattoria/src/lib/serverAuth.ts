@@ -40,7 +40,15 @@ export async function requireAdmin() {
 export async function requireEmployee() {
     const user = await getAuthenticatedUserServer();
     if (!user) {
-        throw new Error('UNAUTHORIZED: session required');
+        console.warn('[serverAuth] requireEmployee failed: User is null');
+        throw new Error('UNAUTHORIZED: session invalid or database error');
+    }
+    
+    console.log(`[serverAuth] Found user: ${user.email}, Role: ${user.rol}`);
+    
+    if (user.rol !== 'ADMIN' && user.rol !== 'EMPLEADO') {
+        console.warn(`[serverAuth] requireEmployee failed: Invalid role '${user.rol}'`);
+        throw new Error('UNAUTHORIZED: employee role required');
     }
     return user;
 }
@@ -85,6 +93,46 @@ export async function requireAdminApiAuth(request: NextRequest): Promise<ApiAuth
         if (user.rol !== 'ADMIN') {
             return {
                 error: NextResponse.json({ error: 'Forbidden: se requiere rol ADMIN' }, { status: 403 }),
+            };
+        }
+
+        return { user };
+    } catch {
+        return {
+            error: NextResponse.json({ error: 'Sesión inválida o expirada' }, { status: 401 }),
+        };
+    }
+}
+
+/**
+ * Requires a valid ADMIN or EMPLEADO session cookie for API route handlers.
+ * Returns { user } on success, { error: NextResponse } on failure.
+ */
+export async function requireEmployeeApiAuth(request: NextRequest): Promise<ApiAuthResult> {
+    const sessionCookie = request.cookies.get('session')?.value;
+
+    if (!sessionCookie) {
+        return {
+            error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+        };
+    }
+
+    try {
+        const decoded = await verifySessionCookie(sessionCookie);
+        const user = await prisma.user.findUnique({
+            where: { firebaseUid: decoded.uid },
+            select: { id: true, rol: true, estado: true },
+        });
+
+        if (!user || user.estado !== 'ACTIVO') {
+            return {
+                error: NextResponse.json({ error: 'Cuenta inactiva o no encontrada' }, { status: 403 }),
+            };
+        }
+
+        if (user.rol !== 'ADMIN' && user.rol !== 'EMPLEADO') {
+            return {
+                error: NextResponse.json({ error: 'Forbidden: se requiere rol operativo' }, { status: 403 }),
             };
         }
 

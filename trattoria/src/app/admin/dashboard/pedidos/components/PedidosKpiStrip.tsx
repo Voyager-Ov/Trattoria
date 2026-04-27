@@ -18,7 +18,6 @@ export function PedidosKpiStrip({ metrics }: PedidosKpiStripProps) {
                 title="Recibidos"
                 value={metrics.received}
                 icon={<Clock size={16} />}
-                isPrimary
                 headerColor="bg-zinc-900"
                 description="Ingresados hoy"
             />

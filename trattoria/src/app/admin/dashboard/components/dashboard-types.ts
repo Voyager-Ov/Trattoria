@@ -1,15 +1,50 @@
 export interface DashboardMetrics {
-    totalSales: number;
-    salesToday: number;
-    salesGrowth: string;
-    totalOrdersToday: number;
-    pendingOrders: number;
-    activeCustomers: number;
-    monthlyGoal: {
+    todayRevenue: number;
+    todayOrders: number;
+    todayAverageTicket: number;
+    ordersInKitchen: number;
+    unavailableProductsCount: number;
+    criticalSuppliesCount: number;
+    suppliesBelowMinimumCount: number;
+    todayPaymentMethods: {
+        methodId: string;
+        label: string;
         amount: number;
-        currentAmount: number;
-        progress: number;
-        type: string;
+        count: number;
+    }[];
+    todayRevenueByHour: {
+        hour: string;
+        revenue: number;
+        orders: number;
+    }[];
+    todayOrdersByStatus: {
+        status: string;
+        count: number;
+    }[];
+    topProduct: {
+        id: string;
+        nombre: string;
+        count: number;
+        revenue: number;
+        periodLabel: string;
+    } | null;
+    criticalSuppliesPreview: {
+        id: string;
+        nombre: string;
+        stockActual: number;
+        stockMinimo: number;
+        unidad: string;
+    }[];
+    unavailableProductsPreview: {
+        id: string;
+        nombre: string;
+        categoryName: string | null;
+    }[];
+    alertCounts: {
+        criticalSupplies: number;
+        unavailableProducts: number;
+        finalizedUnpaid: number;
+        paidUnfinalized: number;
     };
     weeklyRevenue: {
         day: string;

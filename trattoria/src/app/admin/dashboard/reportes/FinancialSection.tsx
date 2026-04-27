@@ -36,6 +36,7 @@ import {
     getFinancialData,
     getPaymentMethodsData,
     PaymentMethodData,
+    type ReportBasis,
 } from "./analyticsActions";
 import { ReportLegendList, ReportSurface, truncateLabel } from "./reportes-ui";
 
@@ -44,6 +45,7 @@ interface FinancialSectionProps {
         from: Date;
         to: Date;
     };
+    basis: ReportBasis;
 }
 
 const PAYMENT_COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#8b5cf6", "#ec4899", "#6366f1"];
@@ -106,7 +108,7 @@ function KPICard({
     );
 }
 
-export default function FinancialSection({ dateRange }: FinancialSectionProps) {
+export default function FinancialSection({ dateRange, basis }: FinancialSectionProps) {
     const isMobile = useIsMobile();
     const [loading, setLoading] = useState(true);
     const [dailyData, setDailyData] = useState<DailyFinancialData[]>([]);
@@ -122,9 +124,9 @@ export default function FinancialSection({ dateRange }: FinancialSectionProps) {
 
             try {
                 const [financialResult, paymentResult, egresosResult] = await Promise.all([
-                    getFinancialData(dateRange.from, dateRange.to),
-                    getPaymentMethodsData(dateRange.from, dateRange.to),
-                    getEgresosByCategoryData(dateRange.from, dateRange.to),
+                    getFinancialData(dateRange.from, dateRange.to, basis),
+                    getPaymentMethodsData(dateRange.from, dateRange.to, basis),
+                    getEgresosByCategoryData(dateRange.from, dateRange.to, basis),
                 ]);
 
                 if (!active) {
@@ -155,7 +157,7 @@ export default function FinancialSection({ dateRange }: FinancialSectionProps) {
         return () => {
             active = false;
         };
-    }, [dateRange]);
+    }, [basis, dateRange]);
 
     if (loading) {
         return (

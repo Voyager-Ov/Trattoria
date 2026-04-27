@@ -11,6 +11,7 @@ import {
     getTopProductsData,
     ProductMarginData,
     TopProductData,
+    type ReportBasis,
 } from "./analyticsActions";
 import { ReportLegendList, ReportSurface, truncateLabel } from "./reportes-ui";
 
@@ -19,6 +20,7 @@ interface ProductsSectionProps {
         from: Date;
         to: Date;
     };
+    basis: ReportBasis;
 }
 
 const formatCurrency = (value: number) =>
@@ -28,7 +30,7 @@ const formatCurrency = (value: number) =>
         maximumFractionDigits: 0,
     }).format(value);
 
-export default function ProductsSection({ dateRange }: ProductsSectionProps) {
+export default function ProductsSection({ dateRange, basis }: ProductsSectionProps) {
     const isMobile = useIsMobile();
     const [loading, setLoading] = useState(true);
     const [topProducts, setTopProducts] = useState<TopProductData[]>([]);
@@ -42,8 +44,8 @@ export default function ProductsSection({ dateRange }: ProductsSectionProps) {
 
             try {
                 const [topResult, marginsResult] = await Promise.all([
-                    getTopProductsData(dateRange.from, dateRange.to, 10),
-                    getProductMarginsData(dateRange.from, dateRange.to),
+                    getTopProductsData(dateRange.from, dateRange.to, 10, basis),
+                    getProductMarginsData(dateRange.from, dateRange.to, basis),
                 ]);
 
                 if (!active) {
@@ -69,7 +71,7 @@ export default function ProductsSection({ dateRange }: ProductsSectionProps) {
         return () => {
             active = false;
         };
-    }, [dateRange]);
+    }, [basis, dateRange]);
 
     if (loading) {
         return (
@@ -82,7 +84,7 @@ export default function ProductsSection({ dateRange }: ProductsSectionProps) {
     const topChartData = isMobile ? topProducts.slice(0, 5) : topProducts;
     const topLegendItems = topProducts.slice(0, isMobile ? 5 : 10).map((product, index) => ({
         label: `${index + 1}. ${product.nombre}`,
-        value: `${product.count} pedidos`,
+        value: `${product.count}`,
         meta: formatCurrency(product.revenue),
         color: `hsl(${220 - index * 10}, 70%, ${50 + index * 3}%)`,
     }));
@@ -133,7 +135,7 @@ export default function ProductsSection({ dateRange }: ProductsSectionProps) {
                                             padding: "12px",
                                         }}
                                         formatter={(value, name) => {
-                                            if (name === "count") return [Number(value || 0), "Pedidos"];
+                                            if (name === "count") return [Number(value || 0), "Unidades"];
                                             if (name === "revenue") return [formatCurrency(Number(value || 0)), "Ingresos"];
                                             return [Number(value || 0), name];
                                         }}
@@ -172,13 +174,12 @@ export default function ProductsSection({ dateRange }: ProductsSectionProps) {
                                             <p className="text-xs text-zinc-500">{product.vecesVendido} ventas</p>
                                         </div>
                                         <span
-                                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                                                product.margenPorcentaje >= 50
+                                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${product.margenPorcentaje >= 50
                                                     ? "bg-emerald-100 text-emerald-700"
                                                     : product.margenPorcentaje >= 30
-                                                      ? "bg-blue-100 text-blue-700"
-                                                      : "bg-amber-100 text-amber-700"
-                                            }`}
+                                                        ? "bg-blue-100 text-blue-700"
+                                                        : "bg-amber-100 text-amber-700"
+                                                }`}
                                         >
                                             <TrendingUp className="h-3 w-3" />
                                             {product.margenPorcentaje.toFixed(1)}%
@@ -229,13 +230,12 @@ export default function ProductsSection({ dateRange }: ProductsSectionProps) {
                                             <td className="px-4 py-3 text-right text-sm text-zinc-700">{formatCurrency(product.margen)}</td>
                                             <td className="px-4 py-3 text-right text-sm">
                                                 <span
-                                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
-                                                        product.margenPorcentaje >= 50
+                                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${product.margenPorcentaje >= 50
                                                             ? "bg-emerald-100 text-emerald-700"
                                                             : product.margenPorcentaje >= 30
-                                                              ? "bg-blue-100 text-blue-700"
-                                                              : "bg-amber-100 text-amber-700"
-                                                    }`}
+                                                                ? "bg-blue-100 text-blue-700"
+                                                                : "bg-amber-100 text-amber-700"
+                                                        }`}
                                                 >
                                                     {product.margenPorcentaje.toFixed(1)}%
                                                 </span>

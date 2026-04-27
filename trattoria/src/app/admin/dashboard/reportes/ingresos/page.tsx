@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { getReportsData, type FinancialSummary } from "../actions";
+import { getReportsData, type FinancialSummary, type ReportBasis } from "../actions";
 import { ReportSurface } from "../reportes-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ interface Transaction {
     id: string;
     numero: string;
     recibidoEn: string;
+    fechaReferencia: string;
     clienteNombre: string;
     total: number;
     metodoPago: string;
@@ -85,6 +86,7 @@ export default function IngresosPage() {
     const [summary, setSummary] = useState<FinancialSummary | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [dateRange, setDateRange] = useState<RangePreset>("month");
+    const [basis, setBasis] = useState<ReportBasis>("caja");
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
@@ -111,7 +113,11 @@ export default function IngresosPage() {
                 endDate = undefined;
             }
 
-            const res = await getReportsData(startDate, endDate);
+            const res = await getReportsData({
+                startDate,
+                endDate,
+                basis,
+            });
             if (res.success && res.data) {
                 setSummary(res.data.summary);
                 setTransactions(res.data.recentTransactions as Transaction[]);
@@ -127,7 +133,7 @@ export default function IngresosPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [dateRange]);
+    }, [basis, dateRange]);
 
     useEffect(() => {
         void fetchData();
@@ -149,6 +155,7 @@ export default function IngresosPage() {
 
     const currentRangeLabel =
         dateRange === "today" ? "Hoy" : dateRange === "week" ? "Ultimos 7 dias" : dateRange === "month" ? "Ultimos 30 dias" : "Historico completo";
+    const currentBasisLabel = basis === "operativo" ? "Operativo" : basis === "devengado" ? "Devengado" : "Caja";
 
     return (
         <div className="app-page-safe-bottom space-y-5 pb-6 md:space-y-8 md:pb-10">
@@ -163,6 +170,26 @@ export default function IngresosPage() {
                         </div>
                         <p className="text-sm font-medium text-zinc-500 md:text-base">Seguimiento de ventas cobradas y transacciones recientes.</p>
                     </div>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="outline"
+                                className="h-11 w-full justify-between rounded-2xl border-zinc-200 bg-white px-4 font-medium text-zinc-600 shadow-sm md:w-auto md:rounded-full md:px-5"
+                            >
+                                <span className="flex items-center gap-2">
+                                    <DollarSign className="h-4 w-4 text-zinc-400" />
+                                    {currentBasisLabel}
+                                </span>
+                                <ChevronDown className="h-3 w-3 opacity-50" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56 rounded-2xl border-zinc-100 p-2 shadow-xl">
+                            <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setBasis("operativo")}>Operativo</DropdownMenuItem>
+                            <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setBasis("caja")}>Caja</DropdownMenuItem>
+                            <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setBasis("devengado")}>Devengado</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -189,30 +216,31 @@ export default function IngresosPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 md:gap-6">
                 <MetricCard
-                    title="Ingresos totales"
-                    value={isLoading ? "..." : formatCurrency(summary?.totalRevenue || 0)}
-                    subValue={isLoading ? undefined : `${summary?.totalOrders || 0} ordenes`}
+                    title="Ventas netas"
+                    value={isLoading ? "..." : formatCurrency(summary?.netSales || 0)}
+                    subValue={isLoading ? undefined : `${summary?.totalOrders || 0} ordenes en base ${currentBasisLabel.toLowerCase()}`}
                     accent="bg-zinc-900"
                     icon={DollarSign}
                 />
                 <MetricCard
-                    title="Ticket promedio"
-                    value={isLoading ? "..." : formatCurrency(summary?.averageTicket || 0)}
+                    title="Ventas brutas"
+                    value={isLoading ? "..." : formatCurrency(summary?.grossSales || 0)}
+                    subValue={isLoading ? undefined : `${formatCurrency(summary?.discounts || 0)} en descuentos`}
                     accent="bg-blue-600"
                     icon={TrendingUp}
                 />
                 <MetricCard
-                    title="Ventas efectivo"
-                    value={isLoading ? "..." : formatCurrency(summary?.ordersByPaymentMethod?.EFECTIVO || 0)}
+                    title="Ticket promedio"
+                    value={isLoading ? "..." : formatCurrency(summary?.averageTicket || 0)}
                     accent="bg-emerald-500"
-                    icon={DollarSign}
+                    icon={TrendingUp}
                 />
                 <MetricCard
                     title="Ventas digitales"
                     value={
                         isLoading
                             ? "..."
-                            : formatCurrency(Math.max(0, (summary?.totalRevenue || 0) - (summary?.ordersByPaymentMethod?.EFECTIVO || 0)))
+                            : formatCurrency(Math.max(0, (summary?.netSales || 0) - (summary?.ordersByPaymentMethod?.EFECTIVO || 0)))
                     }
                     accent="bg-violet-500"
                     icon={CreditCard}
@@ -266,7 +294,7 @@ export default function IngresosPage() {
                                     <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                                         <div>
                                             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Fecha</p>
-                                            <p className="mt-1 text-zinc-700">{formatDate(transaction.recibidoEn)}</p>
+                                            <p className="mt-1 text-zinc-700">{formatDate(transaction.fechaReferencia)}</p>
                                         </div>
                                         <div>
                                             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Metodo</p>
@@ -330,7 +358,7 @@ export default function IngresosPage() {
                                             onClick={() => setSelectedTransaction(transaction)}
                                         >
                                             <td className="px-6 py-4 text-sm font-bold text-zinc-900">{transaction.numero}</td>
-                                            <td className="whitespace-nowrap px-6 py-4 text-xs font-medium capitalize text-zinc-500">{formatDate(transaction.recibidoEn)}</td>
+                                            <td className="whitespace-nowrap px-6 py-4 text-xs font-medium capitalize text-zinc-500">{formatDate(transaction.fechaReferencia)}</td>
                                             <td className="px-6 py-4 text-sm font-semibold text-zinc-700">{transaction.clienteNombre || "Cliente final"}</td>
                                             <td className="px-6 py-4">
                                                 <Badge variant="secondary" className="border-none bg-zinc-100 text-zinc-600">
@@ -387,7 +415,7 @@ export default function IngresosPage() {
                                 </div>
                                 <div className="min-w-0">
                                     <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Fecha</p>
-                                    <p className="mt-1 font-semibold text-zinc-800">{formatDate(selectedTransaction.recibidoEn)}</p>
+                                    <p className="mt-1 font-semibold text-zinc-800">{formatDate(selectedTransaction.fechaReferencia)}</p>
                                 </div>
                             </div>
 

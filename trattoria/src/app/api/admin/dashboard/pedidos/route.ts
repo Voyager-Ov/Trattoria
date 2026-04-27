@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { serializePrisma } from "@/lib/utils";
 import { Prisma, EstadoPedido } from "@prisma/client";
-import { requireAdminApiAuth } from "@/lib/serverAuth";
+import { requireEmployeeApiAuth } from "@/lib/serverAuth";
+import { ACTIVE_CASHBOX_PAYMENT_SELECT, resolveOrderPaymentState } from "@/lib/cashbox";
 
-const ALLOWED_ORDER_FIELDS = ['recibidoEn', 'total', 'estado', 'numero', 'updatedAt'] as const;
+const ALLOWED_ORDER_FIELDS = ["recibidoEn", "total", "estado", "numero", "clienteNombre", "updatedAt"] as const;
 type AllowedOrderField = typeof ALLOWED_ORDER_FIELDS[number];
 
 export async function GET(request: NextRequest) {
-    // F-03 fix: verify ADMIN session before exposing order data
-    const auth = await requireAdminApiAuth(request);
+    const auth = await requireEmployeeApiAuth(request);
     if (auth.error) return auth.error;
 
     try {
@@ -48,13 +48,39 @@ export async function GET(request: NextRequest) {
         const [orders, total] = await Promise.all([
             prisma.order.findMany({
                 where,
-                include: {
-                    customer: true,
+                select: {
+                    id: true,
+                    numero: true,
+                    origen: true,
+                    clienteNombre: true,
+                    clienteTelefono: true,
+                    clienteDireccion: true,
+                    tipoEntrega: true,
+                    recibidoEn: true,
+                    estado: true,
+                    cobrado: true,
+                    cobradoEn: true,
+                    metodoPago: true,
+                    metodoPagoPreferido: true,
+                    total: true,
                     items: {
-                        include: {
-                            product: true
-                        }
-                    }
+                        select: {
+                            id: true,
+                            nombreProduct: true,
+                            cantidad: true,
+                        },
+                        orderBy: {
+                            orden: "asc",
+                        },
+                    },
+                    customer: {
+                        select: {
+                            nombre: true,
+                        },
+                    },
+                    cobrosCaja: {
+                        select: ACTIVE_CASHBOX_PAYMENT_SELECT,
+                    },
                 },
                 orderBy: {
                     [orderBy]: orderDir
@@ -66,7 +92,19 @@ export async function GET(request: NextRequest) {
         ]);
 
         return NextResponse.json({
-            orders: serializePrisma(orders),
+            orders: serializePrisma(orders.map((order) => {
+                const payment = resolveOrderPaymentState(order);
+                return {
+                    ...order,
+                    payment: {
+                        isPaid: payment.isPaid,
+                        method: payment.method,
+                        paidAt: payment.paidAt,
+                        source: payment.source,
+                        preferredMethod: payment.preferredMethod,
+                    },
+                };
+            })),
             total,
             page,
             totalPages: Math.ceil(total / limit)

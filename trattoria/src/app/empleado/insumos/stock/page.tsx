@@ -28,13 +28,20 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { TipoMovimientoStock } from "@prisma/client";
 
+type SupplyOption = {
+    id: string;
+    nombre: string;
+    stockActual: number | string;
+    unidad: string;
+};
+
 function RegistrarStockContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const preselectedId = searchParams.get("id");
 
     const [loading, setLoading] = useState(false);
-    const [supplies, setSupplies] = useState<any[]>([]);
+    const [supplies, setSupplies] = useState<SupplyOption[]>([]);
     const [formData, setFormData] = useState({
         supplyId: preselectedId || "",
         cantidad: "",
@@ -45,15 +52,18 @@ function RegistrarStockContent() {
     });
 
     useEffect(() => {
-        loadSupplies();
-    }, []);
+        let isActive = true;
 
-    async function loadSupplies() {
-        const result = await getSupplies();
-        if (result.success) {
-            setSupplies(result.data);
-        }
-    }
+        void getSupplies().then((result) => {
+            if (isActive && result.success) {
+                setSupplies((result.data ?? []) as SupplyOption[]);
+            }
+        });
+
+        return () => {
+            isActive = false;
+        };
+    }, []);
 
     const selectedSupply = supplies.find(s => s.id === formData.supplyId);
 
@@ -176,7 +186,6 @@ function RegistrarStockContent() {
                                 <Select
                                     value={formData.supplyId}
                                     onValueChange={(val) => {
-                                        const supply = supplies.find(s => s.id === val);
                                         setFormData({
                                             ...formData,
                                             supplyId: val,

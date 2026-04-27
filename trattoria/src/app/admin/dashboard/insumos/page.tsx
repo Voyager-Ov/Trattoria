@@ -16,7 +16,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-import { archiveSupply, getSupplies } from "./actions";
+import { archiveSupply, getSupplies, softDeleteSupply, unarchiveSupply } from "./actions";
 import { CategoryDrawer } from "./components/CategoryDrawer";
 import { SuppliesDesktopTable } from "./components/SuppliesDesktopTable";
 import { SuppliesHero } from "./components/SuppliesHero";
@@ -25,13 +25,15 @@ import { SuppliesToolbar } from "./components/SuppliesToolbar";
 import { SupplyStatCard } from "./components/SupplyStatCard";
 import { FILTER_LABEL, formatArCurrency, isCriticalSupply, type FilterStatus, type Supply } from "./components/supplies-shared";
 
+type ConfirmAction = { type: "archive"; id: string } | { type: "unarchive"; id: string } | { type: "delete"; id: string } | null;
+
 export default function InsumosPage() {
     const router = useRouter();
     const [supplies, setSupplies] = useState<Supply[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [filterStatus, setFilterStatus] = useState<FilterStatus>("todos");
-    const [archiveId, setArchiveId] = useState<string | null>(null);
+    const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
     const [showCategories, setShowCategories] = useState(false);
 
     const loadSupplies = useCallback(async () => {
@@ -97,23 +99,70 @@ export default function InsumosPage() {
     );
     const stockCritico = supplies.filter((supply) => isCriticalSupply(supply)).length;
 
-    async function handleArchive() {
-        if (!archiveId) {
-            return;
-        }
+    async function handleConfirm() {
+        if (!confirmAction) return;
 
         setLoading(true);
-        const result = await archiveSupply(archiveId);
-        if (!result.success) {
-            toast.error(result.error || "No se pudo archivar el insumo");
-            setLoading(false);
-            return;
+
+        if (confirmAction.type === "archive") {
+            const result = await archiveSupply(confirmAction.id);
+            if (!result.success) {
+                toast.error(result.error || "No se pudo archivar el insumo");
+                setLoading(false);
+                return;
+            }
+            toast.success("Insumo archivado");
+        } else if (confirmAction.type === "unarchive") {
+            const result = await unarchiveSupply(confirmAction.id);
+            if (!result.success) {
+                toast.error(result.error || "No se pudo desarchivar el insumo");
+                setLoading(false);
+                return;
+            }
+            toast.success("Insumo restaurado");
+        } else if (confirmAction.type === "delete") {
+            const result = await softDeleteSupply(confirmAction.id);
+            if (!result.success) {
+                toast.error(result.error || "No se pudo eliminar el insumo");
+                setLoading(false);
+                return;
+            }
+            toast.success("Insumo eliminado permanentemente");
         }
 
-        toast.success("Insumo archivado");
-        setArchiveId(null);
+        setConfirmAction(null);
         await loadSupplies();
     }
+
+    function getDialogConfig() {
+        if (!confirmAction) return { title: "", description: "", buttonLabel: "", buttonClass: "" };
+
+        switch (confirmAction.type) {
+            case "archive":
+                return {
+                    title: "Archivar insumo",
+                    description: "El insumo dejará de aparecer en las listas activas, pero mantendrá su historial. Podrás restaurarlo más tarde.",
+                    buttonLabel: "Archivar",
+                    buttonClass: "bg-amber-600 hover:bg-amber-700",
+                };
+            case "unarchive":
+                return {
+                    title: "Restaurar insumo",
+                    description: "El insumo volverá a estar activo y aparecerá en las listas principales.",
+                    buttonLabel: "Restaurar",
+                    buttonClass: "bg-blue-600 hover:bg-blue-700",
+                };
+            case "delete":
+                return {
+                    title: "Eliminar insumo permanentemente",
+                    description: "Esta acción no se puede deshacer. El insumo y todos sus datos serán eliminados del sistema de forma definitiva.",
+                    buttonLabel: "Eliminar definitivamente",
+                    buttonClass: "bg-rose-600 hover:bg-rose-700",
+                };
+        }
+    }
+
+    const dialogConfig = getDialogConfig();
 
     return (
         <div className="app-page-safe-bottom flex min-h-screen flex-col gap-5 bg-white px-4 py-4 sm:px-6 md:gap-6 md:px-8 md:py-8">
@@ -153,14 +202,18 @@ export default function InsumosPage() {
                 loading={loading}
                 totalSupplies={supplies.length}
                 filterStatusLabel={FILTER_LABEL[filterStatus]}
-                onArchive={setArchiveId}
+                onArchive={(id) => setConfirmAction({ type: "archive", id })}
+                onUnarchive={(id) => setConfirmAction({ type: "unarchive", id })}
+                onDelete={(id) => setConfirmAction({ type: "delete", id })}
             />
 
             <SuppliesDesktopTable
                 supplies={filteredSupplies}
                 loading={loading}
                 totalSupplies={supplies.length}
-                onArchive={setArchiveId}
+                onArchive={(id) => setConfirmAction({ type: "archive", id })}
+                onUnarchive={(id) => setConfirmAction({ type: "unarchive", id })}
+                onDelete={(id) => setConfirmAction({ type: "delete", id })}
             />
 
             <div
@@ -171,18 +224,16 @@ export default function InsumosPage() {
 
             <CategoryDrawer open={showCategories} onClose={() => setShowCategories(false)} />
 
-            <AlertDialog open={!!archiveId} onOpenChange={() => setArchiveId(null)}>
+            <AlertDialog open={!!confirmAction} onOpenChange={() => setConfirmAction(null)}>
                 <AlertDialogContent className="rounded-2xl border-zinc-200">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Archivar insumo</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            El insumo dejara de aparecer en las listas activas, pero mantendra su historial.
-                        </AlertDialogDescription>
+                        <AlertDialogTitle>{dialogConfig.title}</AlertDialogTitle>
+                        <AlertDialogDescription>{dialogConfig.description}</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleArchive} className="bg-rose-600 hover:bg-rose-700">
-                            Confirmar
+                        <AlertDialogAction onClick={handleConfirm} className={dialogConfig.buttonClass}>
+                            {dialogConfig.buttonLabel}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

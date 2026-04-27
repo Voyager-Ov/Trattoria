@@ -9,10 +9,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from "@/lib/utils";
 import { getOrderDeliveryLabel, getOrderDisplayAddress } from "@/lib/orderDelivery";
 
-import { STATUS_CONFIG, formatOrderDate, formatOrderTotal, type Order, type OrderItem, type SortDirection, type SortField } from "./pedido-shared";
+import { STATUS_CONFIG, formatOrderDate, formatOrderTotal, type OrderItem, type OrderListItem, type SortDirection, type SortField } from "./pedido-shared";
 
 interface PedidosDesktopTableProps {
-    orders: Order[];
+    orders: OrderListItem[];
     isLoading: boolean;
     limit: number;
     total: number;
@@ -23,7 +23,7 @@ interface PedidosDesktopTableProps {
     onSort: (field: SortField) => void;
     onPageChange: (page: number) => void;
     onViewOrder: (orderId: string) => void;
-    onTogglePayment: (orderId: string, currentCobrado: boolean) => void;
+    onTogglePayment: (orderId: string, currentIsPaid: boolean) => void;
     onStatusChange: (orderId: string, status: EstadoPedido) => void;
     onClearFilters: () => void;
 }
@@ -130,9 +130,10 @@ export function PedidosDesktopTable({
                                 </td>
                             </tr>
                         ) : (
-                            orders.map((order) => {
+                            orders.map((order: OrderListItem) => {
                                 const config = STATUS_CONFIG[order.estado];
                                 const StatusIcon = config.icon;
+                                const isPaid = order.payment.isPaid;
 
                                 return (
                                     <tr key={order.id} className="group transition-colors duration-200 hover:bg-zinc-50/50">
@@ -224,7 +225,7 @@ export function PedidosDesktopTable({
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
 
-                                                {order.cobrado ? (
+                                                {isPaid ? (
                                                     <Badge className="rounded-lg border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-emerald-600 shadow-none">
                                                         <div className="flex items-center gap-1">
                                                             <Banknote size={10} />
@@ -260,16 +261,16 @@ export function PedidosDesktopTable({
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    disabled={order.cobrado}
-                                                    onClick={() => onTogglePayment(order.id, order.cobrado)}
+                                                    disabled={isPaid}
+                                                    onClick={() => onTogglePayment(order.id, isPaid)}
                                                     className={cn(
                                                         "h-9 rounded-xl px-4 text-[10px] font-bold uppercase tracking-widest shadow-sm transition-all active:scale-95",
-                                                        order.cobrado
+                                                        isPaid
                                                             ? "cursor-not-allowed border-zinc-100 bg-zinc-50 text-zinc-300"
                                                             : "border-emerald-100 bg-emerald-50 text-emerald-600 hover:border-emerald-600 hover:bg-emerald-600 hover:text-white"
                                                     )}
                                                 >
-                                                    {order.cobrado ? "Cobrado" : "Cobrar"}
+                                                    {isPaid ? "Cobrado" : "Cobrar"}
                                                 </Button>
                                             </div>
                                         </td>

@@ -1,0 +1,142 @@
+{
+  "featureId": "admin-cashbox-frontend-phase-1",
+  "title": "Caja admin frontend fase 1",
+  "summary": "Implementar la experiencia operativa de caja para el panel admin, incluyendo apertura, seguimiento del turno, registro de egresos, cierre e integración con cobros de pedidos.",
+  "scope": {
+    "in": [
+      "Nueva vista /admin/dashboard/caja",
+      "Acceso desde sidebar y navegación móvil admin",
+      "Bloqueo de cobro en pedidos cuando no hay caja abierta",
+      "Consumo del nuevo contrato payment en lista y detalle de pedidos admin",
+      "Contexto visual de caja en reportes de egresos admin"
+    ],
+    "out": [
+      "Vista de empleado",
+      "Nuevos contratos backend",
+      "Bloqueo de creación de pedidos por caja cerrada",
+      "Rediseño global del dashboard admin"
+    ]
+  },
+  "audience": [
+    "Usuarios ADMIN que operan pedidos, egresos y control diario"
+  ],
+  "userJourneys": [
+    {
+      "id": "cashbox-open",
+      "title": "Abrir caja al iniciar turno",
+      "steps": [
+        "El admin entra al módulo Caja desde el panel",
+        "Ve el monto sugerido y el formulario de apertura",
+        "Carga monto inicial real y observaciones opcionales",
+        "Confirma apertura y pasa al estado de caja operativa"
+      ]
+    },
+    {
+      "id": "cashbox-operate",
+      "title": "Consultar estado de caja abierta",
+      "steps": [
+        "El admin ve resumen del turno, totales y métodos de pago",
+        "Consulta movimientos recientes",
+        "Accede al flujo de egresos o al cierre"
+      ]
+    },
+    {
+      "id": "cashbox-expense",
+      "title": "Registrar un egreso desde caja",
+      "steps": [
+        "El admin abre el panel de egreso desde Caja",
+        "Carga descripción, categoría, monto, método y proveedor opcional",
+        "Confirma el egreso y ve el movimiento reflejado en el turno"
+      ]
+    },
+    {
+      "id": "cashbox-close",
+      "title": "Cerrar caja con arqueo",
+      "steps": [
+        "El admin inicia cierre desde Caja",
+        "Ve efectivo esperado y completa efectivo contado",
+        "Si hay diferencia, agrega observación obligatoria",
+        "Confirma cierre y la caja queda archivada en historial"
+      ]
+    },
+    {
+      "id": "orders-payment-gate",
+      "title": "Cobrar pedido desde admin",
+      "steps": [
+        "El admin intenta cobrar desde lista o detalle del pedido",
+        "Si no hay caja abierta, el sistema bloquea con modal y CTA a Caja",
+        "Si hay caja abierta, selecciona método de pago y confirma cobro",
+        "El pedido actualiza su estado de pago sin ofrecer descobro manual"
+      ]
+    }
+  ],
+  "businessRules": [
+    "Crear pedidos no requiere caja abierta",
+    "Cobrar pedidos y registrar egresos sí requieren caja abierta",
+    "Si un pedido ya está cobrado, la UI no debe ofrecer quitar el cobro manualmente",
+    "Una preferencia de método de pago no debe mostrarse como cobro real",
+    "Reportes sigue siendo una capa analítica; Caja es el centro operativo"
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "ac-open-cashbox",
+      "given": "No existe caja abierta para el admin actual",
+      "when": "Entra a /admin/dashboard/caja",
+      "then": "Ve la vista de apertura con monto sugerido, input de monto real y CTA Abrir caja"
+    },
+    {
+      "id": "ac-invalid-open",
+      "given": "El backend rechaza la apertura por validación",
+      "when": "El admin intenta abrir caja",
+      "then": "La UI mantiene el formulario visible y muestra el error devuelto"
+    },
+    {
+      "id": "ac-open-state",
+      "given": "Existe una caja abierta",
+      "when": "El admin entra a Caja",
+      "then": "Ve resumen del turno, métodos, movimientos, egresos y acciones de cierre"
+    },
+    {
+      "id": "ac-expense-from-cashbox",
+      "given": "Existe una caja abierta",
+      "when": "El admin registra un egreso desde Caja",
+      "then": "El movimiento se refleja en el resumen actual y en historial"
+    },
+    {
+      "id": "ac-close-cashbox-difference",
+      "given": "La diferencia entre efectivo esperado y contado es distinta de cero",
+      "when": "El admin intenta cerrar",
+      "then": "La UI exige observación antes de confirmar"
+    },
+    {
+      "id": "ac-orders-blocked-without-cashbox",
+      "given": "No hay caja abierta",
+      "when": "El admin intenta cobrar un pedido",
+      "then": "Se abre un modal explicando el bloqueo con CTA a /admin/dashboard/caja"
+    },
+    {
+      "id": "ac-orders-paid-state",
+      "given": "El pedido tiene payment.isPaid verdadero",
+      "when": "Se muestra en lista o detalle",
+      "then": "La UI lo presenta como cobrado y no muestra acción de descobro"
+    },
+    {
+      "id": "ac-preferred-method",
+      "given": "El pedido no está cobrado pero tiene payment.preferredMethod",
+      "when": "Se consulta el detalle del pago",
+      "then": "La UI lo muestra como preferencia y no como método ya cobrado"
+    },
+    {
+      "id": "ac-expense-report-context",
+      "given": "Un egreso está asociado a una caja",
+      "when": "Se ve en Reportes > Egresos",
+      "then": "La UI lo identifica como registrado desde caja o turno"
+    }
+  ],
+  "uxGuidelines": {
+    "visualDirection": "Operativo, limpio y consistente con el admin actual",
+    "layout": "Cards grandes, fondos blancos, bordes suaves, botones redondeados, acentos planos",
+    "motion": "Sutil, orientada a feedback y jerarquía, no ornamental",
+    "copyTone": "Directo, operativo y explicativo ante errores de negocio"
+  }
+}

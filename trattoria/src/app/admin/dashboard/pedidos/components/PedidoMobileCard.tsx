@@ -9,18 +9,18 @@ import {
     formatOrderTotal,
     getOrderItemsPreview,
     getPaymentBadgeConfig,
-    type Order,
+    type OrderListItem,
 } from "./pedido-shared";
 
 interface PedidoMobileCardProps {
-    order: Order;
+    order: OrderListItem;
     onOpen: (orderId: string) => void;
 }
 
 export function PedidoMobileCard({ order, onOpen }: PedidoMobileCardProps) {
     const statusConfig = STATUS_CONFIG[order.estado];
     const StatusIcon = statusConfig.icon;
-    const paymentConfig = getPaymentBadgeConfig(order.cobrado);
+    const paymentConfig = getPaymentBadgeConfig(order.payment);
     const PaymentIcon = paymentConfig.icon;
     const deliveryLabel = getOrderDeliveryLabel(order);
     const address = getOrderDisplayAddress(order);

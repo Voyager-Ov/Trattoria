@@ -1,0 +1,98 @@
+{
+  "featureId": "admin-cashbox-frontend-phase-1",
+  "title": "Caja admin frontend fase 1 - especificación técnica",
+  "architecture": {
+    "surfaceAreas": [
+      "src/app/admin/dashboard/caja",
+      "src/components/dashboard/adminNavigation.ts",
+      "src/components/dashboard/AdminMobileNav.tsx",
+      "src/app/admin/dashboard/pedidos",
+      "src/app/admin/dashboard/reportes/egresos"
+    ],
+    "renderingModel": {
+      "cashboxPage": "Server page que monta un client component para interacciones y GSAP",
+      "ordersAndReports": "Client components existentes adaptados al contrato payment y al estado de caja"
+    }
+  },
+  "libraries": {
+    "designSkill": "frontend-design",
+    "animation": [
+      "gsap",
+      "@gsap/react"
+    ],
+    "gsapUsage": [
+      "useGSAP con scope por componente",
+      "stagger de tarjetas y paneles",
+      "cleanup automático sin ejecutar animaciones en SSR"
+    ]
+  },
+  "dataContracts": {
+    "cashboxActions": [
+      "getCurrentCashbox",
+      "getCashboxHistory",
+      "openCashbox",
+      "registerCashboxExpense",
+      "closeCashbox"
+    ],
+    "orderPaymentShape": {
+      "isPaid": "boolean",
+      "method": "string | null",
+      "paidAt": "string | null",
+      "source": "cashbox | legacy | none",
+      "preferredMethod": "string | null"
+    },
+    "reportExpenseContext": [
+      "Usar cajaId si viene en el payload actual",
+      "No exigir nuevos endpoints"
+    ]
+  },
+  "uiModules": [
+    {
+      "name": "CashboxPageClient",
+      "responsibility": "Orquestar carga, refresh, estado visual y acciones del módulo Caja"
+    },
+    {
+      "name": "CashboxBlockedDialog",
+      "responsibility": "Mostrar bloqueo de cobro/egreso cuando no hay caja abierta con CTA a Caja"
+    },
+    {
+      "name": "Pedido shared payment helpers",
+      "responsibility": "Normalizar badges, textos y lectura del estado payment"
+    }
+  ],
+  "interactionModel": {
+    "cashboxPageStates": [
+      "loading",
+      "no-open-cashbox",
+      "open-cashbox",
+      "closing-panel-open",
+      "expense-panel-open",
+      "history-detail-open"
+    ],
+    "ordersPaymentFlow": [
+      "Consultar caja abierta al montar la pantalla",
+      "Si no hay caja abierta, bloquear antes de abrir selector de pago",
+      "Si el backend devuelve error de caja en confirmación, reabrir modal de bloqueo"
+    ]
+  },
+  "failureModes": [
+    "Errores de apertura, egreso o cierre muestran toast y mantienen el panel abierto",
+    "Errores de carga muestran estado vacío recuperable con acción de refresh",
+    "Si no hay métodos de pago habilitados, el formulario financiero se desactiva con copy explícito"
+  ],
+  "testingStrategy": {
+    "manual": [
+      "Apertura de caja exitosa y fallida",
+      "Cobro bloqueado sin caja abierta desde lista y detalle",
+      "Cobro permitido con caja abierta",
+      "Registro de egreso desde Caja",
+      "Cierre con y sin diferencia",
+      "Visualización de historial",
+      "Contexto de caja en reportes de egresos"
+    ],
+    "staticChecks": [
+      "tsc --noEmit",
+      "eslint sobre archivos tocados"
+    ]
+  }
+}

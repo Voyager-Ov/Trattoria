@@ -9,6 +9,7 @@ import {
     CheckCircle2,
     TrendingUp,
     UtensilsCrossed,
+    Wallet,
     ChevronRight,
     Calendar,
     ShoppingBasket
@@ -18,28 +19,59 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { ValueSkeleton } from "@/components/ui/value-skeleton";
 import { getEmployeeDashboardMetrics, getRecentOrders } from "./actions";
+import { getCurrentCashbox } from "@/app/actions/cashboxActions";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+type EmployeeDashboardMetrics = {
+    pendingCount: number;
+    preparingCount: number;
+    readyCount: number;
+    completedTodayCount: number;
+};
+
+type RecentOrder = {
+    id: string;
+    numero: string;
+    clienteNombre: string | null;
+    estado: string;
+    recibidoEn: string;
+    total: number | string;
+    items?: Array<{ nombreProduct: string; cantidad: number }>;
+};
+
+type EmployeeCashboxSnapshot = {
+    currentCashbox: {
+        estado: "ABIERTA" | "CERRADA";
+        efectivoEsperado: number;
+        fechaApertura: string | Date;
+    } | null;
+};
 
 export default function EmpleadoPage() {
     const { userData } = useAuth();
-    const [metrics, setMetrics] = useState<any>(null);
-    const [orders, setOrders] = useState<any[]>([]);
+    const [metrics, setMetrics] = useState<EmployeeDashboardMetrics | null>(null);
+    const [orders, setOrders] = useState<RecentOrder[]>([]);
+    const [cashbox, setCashbox] = useState<EmployeeCashboxSnapshot["currentCashbox"]>(null);
     const [loading, setLoading] = useState(true);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [metricsRes, ordersRes] = await Promise.all([
+            const [metricsRes, ordersRes, cashboxRes] = await Promise.all([
                 getEmployeeDashboardMetrics(),
-                getRecentOrders()
+                getRecentOrders(),
+                getCurrentCashbox(),
             ]);
 
-            if (metricsRes.success) setMetrics(metricsRes.data);
-            if (ordersRes.success) setOrders(ordersRes.data);
-        } catch (error) {
+            if (metricsRes.success) setMetrics(metricsRes.data ?? null);
+            if (ordersRes.success) setOrders((ordersRes.data as RecentOrder[]) || []);
+            if (cashboxRes.success) {
+                const cashboxData = (cashboxRes.data as EmployeeCashboxSnapshot | undefined) ?? { currentCashbox: null };
+                setCashbox(cashboxData.currentCashbox);
+            }
+        } catch {
             toast.error("Error al cargar datos del dashboard");
         } finally {
             setLoading(false);
@@ -88,7 +120,7 @@ export default function EmpleadoPage() {
                         <div className="h-12 w-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                             <Clock size={24} />
                         </div>
-                        {metrics?.pendingCount > 0 && (
+                        {(metrics?.pendingCount ?? 0) > 0 && (
                             <span className="flex h-3 w-3 relative">
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
@@ -166,7 +198,7 @@ export default function EmpleadoPage() {
                             <h3 className="text-xl font-bold text-zinc-900 tracking-tight">Acceso Rápido</h3>
                             <p className="text-zinc-400 text-sm mt-1">Herramientas principales de tu turno</p>
                         </div>
-                        <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-4 bg-zinc-50/50 flex-grow">
+                        <div className="p-8 grid grid-cols-1 md:grid-cols-3 gap-4 bg-zinc-50/50 flex-grow">
                             <Link href="/empleado/pedidos" className="group">
                                 <div className="h-full bg-white border border-zinc-200 p-6 rounded-[2rem] hover:border-zinc-300 hover:shadow-lg transition-all duration-300 flex flex-col justify-between min-h-[160px]">
                                     <div className="h-12 w-12 bg-zinc-100 rounded-2xl flex items-center justify-center text-zinc-900 group-hover:bg-zinc-900 group-hover:text-white transition-colors duration-300">
@@ -176,6 +208,36 @@ export default function EmpleadoPage() {
                                         <h4 className="font-bold text-zinc-900 text-lg">Gestionar Pedidos</h4>
                                         <div className="flex items-center justify-between mt-2">
                                             <p className="text-zinc-400 text-sm">Ver Kanban y estados</p>
+                                            <div className="h-8 w-8 rounded-full bg-zinc-50 flex items-center justify-center -mr-2 group-hover:bg-zinc-100 transition-colors">
+                                                <ChevronRight size={16} className="text-zinc-400" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </Link>
+
+                            <Link href="/empleado/caja" className="group">
+                                <div className="h-full bg-white border border-zinc-200 p-6 rounded-[2rem] hover:border-zinc-300 hover:shadow-lg transition-all duration-300 flex flex-col justify-between min-h-[160px]">
+                                    <div className={cn(
+                                        "h-12 w-12 rounded-2xl flex items-center justify-center transition-colors duration-300",
+                                        cashbox ? "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-500 group-hover:text-white" : "bg-zinc-100 text-zinc-900 group-hover:bg-zinc-900 group-hover:text-white"
+                                    )}>
+                                        <Wallet size={24} />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-bold text-zinc-900 text-lg">Caja</h4>
+                                            <Badge className={cn(
+                                                "border-none rounded-full px-2 py-0 text-[10px] font-black uppercase tracking-widest",
+                                                cashbox ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
+                                            )}>
+                                                {cashbox ? "Abierta" : "Cerrada"}
+                                            </Badge>
+                                        </div>
+                                        <div className="flex items-center justify-between mt-2">
+                                            <p className="text-zinc-400 text-sm">
+                                                {cashbox ? `Esperado ${formatCurrency(cashbox.efectivoEsperado)}` : "Abrir para poder cobrar"}
+                                            </p>
                                             <div className="h-8 w-8 rounded-full bg-zinc-50 flex items-center justify-center -mr-2 group-hover:bg-zinc-100 transition-colors">
                                                 <ChevronRight size={16} className="text-zinc-400" />
                                             </div>

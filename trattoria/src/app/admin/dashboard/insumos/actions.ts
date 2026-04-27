@@ -2,18 +2,28 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { UnidadMedida, TipoMovimientoStock, CategoriaEgreso } from "@prisma/client";
+import { Prisma, UnidadMedida, TipoMovimientoStock, CategoriaEgreso } from "@prisma/client";
 
 // Helper to serialize Prisma Decimal objects
-function serializePrisma(obj: any): any {
+function serializePrisma(obj: unknown): unknown {
     if (obj === null || obj === undefined) return obj;
 
-    if (typeof obj === 'object' && (
-        obj.constructor?.name === 'Decimal' ||
-        obj._isDecimal === true ||
-        (obj.s !== undefined && obj.d !== undefined && typeof obj.toString === 'function')
-    )) {
-        return Number(obj.toString());
+    if (typeof obj === 'object') {
+        const maybeDecimal = obj as {
+            constructor?: { name?: string };
+            _isDecimal?: boolean;
+            s?: unknown;
+            d?: unknown;
+            toString?: () => string;
+        };
+
+        if (
+            maybeDecimal.constructor?.name === 'Decimal' ||
+            maybeDecimal._isDecimal === true ||
+            (maybeDecimal.s !== undefined && maybeDecimal.d !== undefined && typeof maybeDecimal.toString === 'function')
+        ) {
+            return Number(maybeDecimal.toString?.() ?? obj);
+        }
     }
 
     if (obj instanceof Date) return obj;
@@ -23,10 +33,10 @@ function serializePrisma(obj: any): any {
     }
 
     if (typeof obj === 'object') {
-        const serialized: any = {};
-        for (const key in obj) {
+        const serialized: Record<string, unknown> = {};
+        for (const key in obj as Record<string, unknown>) {
             if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                const value = obj[key];
+                const value = (obj as Record<string, unknown>)[key];
                 if (typeof value === 'function') continue;
                 serialized[key] = serializePrisma(value);
             }
@@ -35,6 +45,33 @@ function serializePrisma(obj: any): any {
     }
 
     return obj;
+}
+
+async function findOrCreateProvider(tx: Prisma.TransactionClient, proveedor?: string) {
+    const nombre = proveedor?.trim();
+    if (!nombre) {
+        return null;
+    }
+
+    const existing = await tx.provider.findFirst({
+        where: {
+            nombre: {
+                equals: nombre,
+                mode: "insensitive",
+            },
+        },
+    });
+
+    if (existing) {
+        return existing;
+    }
+
+    return tx.provider.create({
+        data: {
+            nombre,
+            activo: true,
+        },
+    });
 }
 
 export async function getSupplies() {
@@ -140,28 +177,65 @@ export async function registerStockEntry(data: {
                 }
             });
 
-            // 5. Create Egreso (expense) for the purchase
+            // 5. Persist Purchase + Egreso linked to a real provider for accounting analytics
             const montoTotal = newQuantity * newCost;
-            
-            // Generate egreso number
-            const seq = await tx.appSequence.upsert({
+            const provider = await findOrCreateProvider(tx, data.proveedor);
+
+            const egresoSeq = await tx.appSequence.upsert({
                 where: { tipo: "egreso" },
                 update: { ultimo: { increment: 1 } },
                 create: { tipo: "egreso", prefijo: "E-", ultimo: 1 }
             });
-            const numeroEgreso = `${seq.prefijo}${seq.ultimo.toString().padStart(3, '0')}`;
+            const numeroEgreso = `${egresoSeq.prefijo}${egresoSeq.ultimo.toString().padStart(3, '0')}`;
 
-            // Create the egreso
-            await tx.egreso.create({
+            const purchaseSeq = await tx.appSequence.upsert({
+                where: { tipo: "purchase" },
+                update: { ultimo: { increment: 1 } },
+                create: { tipo: "purchase", prefijo: "C-", ultimo: 1 }
+            });
+            const numeroCompra = `${purchaseSeq.prefijo}${purchaseSeq.ultimo.toString().padStart(3, '0')}`;
+
+            const egreso = await tx.egreso.create({
                 data: {
                     numero: numeroEgreso,
                     descripcion: `Compra de ${supply.nombre} - ${newQuantity} ${supply.unidad.toLowerCase()}`,
                     monto: montoTotal,
                     categoria: CategoriaEgreso.INSUMOS,
                     fecha: new Date(),
-                    proveedor: data.proveedor || null,
+                    proveedor: provider?.nombre || data.proveedor || null,
+                    providerId: provider?.id || null,
+                    metodoPago: "EFECTIVO",
+                    estadoPago: "PAGADO",
+                    fechaPago: new Date(),
+                    fechaDevengado: new Date(),
+                    neto: montoTotal,
+                    impuestos: 0,
+                    percepciones: 0,
                 }
             });
+
+            if (provider) {
+                await tx.purchase.create({
+                    data: {
+                        numero: numeroCompra,
+                        providerId: provider.id,
+                        subtotal: montoTotal,
+                        impuestos: 0,
+                        total: montoTotal,
+                        fecha: new Date(),
+                        estado: "RECIBIDO",
+                        observaciones: data.motivo || "Compra generada desde entrada de stock",
+                        egresoId: egreso.id,
+                        items: {
+                            create: {
+                                supplyId: data.supplyId,
+                                cantidad: data.cantidad,
+                                precioUnit: data.costoUnitario,
+                            },
+                        },
+                    }
+                });
+            }
 
             return updatedSupply;
         });
@@ -252,6 +326,20 @@ export async function archiveSupply(id: string) {
     }
 }
 
+export async function unarchiveSupply(id: string) {
+    try {
+        await prisma.supply.update({
+            where: { id },
+            data: { activo: true },
+        });
+        revalidatePath("/admin/dashboard/insumos");
+        return { success: true };
+    } catch (error) {
+        console.error("Error unarchiving supply:", error);
+        return { success: false, error: "Error al desarchivar el insumo" };
+    }
+}
+
 export async function getSupplyById(id: string) {
     try {
         const supply = await prisma.supply.findUnique({
@@ -259,8 +347,43 @@ export async function getSupplyById(id: string) {
             include: {
                 category: true,
                 movements: {
-                    orderBy: { createdAt: "desc" }
-                }
+                    orderBy: { createdAt: "desc" },
+                    take: 50,
+                },
+                recipeItems: {
+                    include: {
+                        product: {
+                            select: {
+                                id: true,
+                                nombre: true,
+                                precio: true,
+                                activo: true,
+                            },
+                        },
+                    },
+                },
+                purchaseItems: {
+                    include: {
+                        purchase: {
+                            select: {
+                                id: true,
+                                numero: true,
+                                fecha: true,
+                                estado: true,
+                                provider: {
+                                    select: {
+                                        id: true,
+                                        nombre: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    orderBy: {
+                        purchase: { fecha: "desc" },
+                    },
+                    take: 20,
+                },
             }
         });
         if (!supply) return { success: false, error: "Insumo no encontrado" };

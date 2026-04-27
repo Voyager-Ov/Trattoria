@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CategoriaEgreso } from "@prisma/client";
+import { CategoriaEgreso, EstadoPagoEgreso } from "@prisma/client";
 import {
     Calendar,
     CreditCard,
@@ -9,6 +9,7 @@ import {
     FileText,
     Home,
     Loader2,
+    MapPinned,
     Megaphone,
     MoreHorizontal,
     Receipt,
@@ -44,8 +45,80 @@ interface CreateEgresoDrawerProps {
         descripcion?: string;
         monto: number;
         categoria?: CategoriaEgreso | string;
-        metodoPago?: string;
+        metodoPago?: string | null;
+        proveedor?: string | null;
+        comprobante?: string | null;
+        estadoPago?: EstadoPagoEgreso | string | null;
+        centroCosto?: string | null;
+        tipoComprobante?: string | null;
+        numeroComprobante?: string | null;
         fecha: Date | string;
+        fechaDevengado?: Date | string | null;
+        fechaPago?: Date | string | null;
+        fechaVencimiento?: Date | string | null;
+        periodoDesde?: Date | string | null;
+        periodoHasta?: Date | string | null;
+        neto?: number | null;
+        impuestos?: number | null;
+        percepciones?: number | null;
+    };
+}
+
+type FormState = {
+    descripcion: string;
+    monto: string;
+    categoria: CategoriaEgreso;
+    metodoPago: string;
+    proveedor: string;
+    comprobante: string;
+    estadoPago: EstadoPagoEgreso;
+    centroCosto: string;
+    tipoComprobante: string;
+    numeroComprobante: string;
+    fecha: string;
+    fechaDevengado: string;
+    fechaPago: string;
+    fechaVencimiento: string;
+    periodoDesde: string;
+    periodoHasta: string;
+    neto: string;
+    impuestos: string;
+    percepciones: string;
+};
+
+function toDateInputValue(value?: Date | string | null) {
+    if (!value) {
+        return "";
+    }
+
+    return new Date(value).toISOString().split("T")[0];
+}
+
+function toNumericInputValue(value?: number | null) {
+    return value != null ? value.toString() : "";
+}
+
+function createInitialState(paymentMethods: PaymentMethod[]): FormState {
+    return {
+        descripcion: "",
+        monto: "",
+        categoria: "OTROS",
+        metodoPago: paymentMethods[0]?.id || "EFECTIVO",
+        proveedor: "",
+        comprobante: "",
+        estadoPago: "PAGADO",
+        centroCosto: "",
+        tipoComprobante: "",
+        numeroComprobante: "",
+        fecha: new Date().toISOString().split("T")[0],
+        fechaDevengado: "",
+        fechaPago: "",
+        fechaVencimiento: "",
+        periodoDesde: "",
+        periodoHasta: "",
+        neto: "",
+        impuestos: "",
+        percepciones: "",
     };
 }
 
@@ -57,13 +130,7 @@ export function CreateEgresoDrawer({
 }: CreateEgresoDrawerProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-    const [formData, setFormData] = useState({
-        descripcion: "",
-        monto: "",
-        categoria: "OTROS" as CategoriaEgreso,
-        metodoPago: "EFECTIVO",
-        fecha: new Date().toISOString().split("T")[0],
-    });
+    const [formData, setFormData] = useState<FormState>(createInitialState([]));
 
     useEffect(() => {
         async function fetchPaymentMethods() {
@@ -77,7 +144,7 @@ export function CreateEgresoDrawer({
             setPaymentMethods([{ id: "EFECTIVO", label: "Efectivo", enabled: true }]);
         }
 
-        fetchPaymentMethods();
+        void fetchPaymentMethods();
     }, []);
 
     useEffect(() => {
@@ -86,20 +153,47 @@ export function CreateEgresoDrawer({
                 descripcion: editingEgreso.descripcion || "",
                 monto: editingEgreso.monto.toString(),
                 categoria: (editingEgreso.categoria as CategoriaEgreso) || "OTROS",
-                metodoPago: editingEgreso.metodoPago || "EFECTIVO",
-                fecha: new Date(editingEgreso.fecha).toISOString().split("T")[0],
+                metodoPago: editingEgreso.metodoPago || paymentMethods[0]?.id || "EFECTIVO",
+                proveedor: editingEgreso.proveedor || "",
+                comprobante: editingEgreso.comprobante || "",
+                estadoPago: (editingEgreso.estadoPago as EstadoPagoEgreso) || "PAGADO",
+                centroCosto: editingEgreso.centroCosto || "",
+                tipoComprobante: editingEgreso.tipoComprobante || "",
+                numeroComprobante: editingEgreso.numeroComprobante || "",
+                fecha: toDateInputValue(editingEgreso.fecha),
+                fechaDevengado: toDateInputValue(editingEgreso.fechaDevengado),
+                fechaPago: toDateInputValue(editingEgreso.fechaPago),
+                fechaVencimiento: toDateInputValue(editingEgreso.fechaVencimiento),
+                periodoDesde: toDateInputValue(editingEgreso.periodoDesde),
+                periodoHasta: toDateInputValue(editingEgreso.periodoHasta),
+                neto: toNumericInputValue(editingEgreso.neto),
+                impuestos: toNumericInputValue(editingEgreso.impuestos),
+                percepciones: toNumericInputValue(editingEgreso.percepciones),
             });
             return;
         }
 
-        setFormData({
-            descripcion: "",
-            monto: "",
-            categoria: "OTROS",
-            metodoPago: paymentMethods.length > 0 ? paymentMethods[0].id : "EFECTIVO",
-            fecha: new Date().toISOString().split("T")[0],
-        });
+        setFormData(createInitialState(paymentMethods));
     }, [editingEgreso, open, paymentMethods]);
+
+    const categories = [
+        { id: "INSUMOS", label: "Insumos", icon: ShoppingCart },
+        { id: "SERVICIOS", label: "Servicios", icon: Zap },
+        { id: "NOMINA", label: "Nomina", icon: Users },
+        { id: "ALQUILER", label: "Alquiler", icon: Home },
+        { id: "IMPUESTOS", label: "Impuestos", icon: Receipt },
+        { id: "PUBLICIDAD", label: "Publicidad", icon: Megaphone },
+        { id: "EQUIPAMIENTO", label: "Equipamiento", icon: Wrench },
+        { id: "MANTENIMIENTO", label: "Mantenimiento", icon: TrendingDown },
+        { id: "OTROS", label: "Otros", icon: MoreHorizontal },
+    ] as const;
+
+    const expenseStates: Array<{ id: EstadoPagoEgreso; label: string }> = [
+        { id: "PAGADO", label: "Pagado" },
+        { id: "PENDIENTE", label: "Pendiente" },
+        { id: "VENCIDO", label: "Vencido" },
+        { id: "ANULADO", label: "Anulado" },
+    ];
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -109,15 +203,38 @@ export function CreateEgresoDrawer({
             return;
         }
 
+        if (formData.categoria === "NOMINA" && (!formData.centroCosto || !formData.periodoDesde || !formData.periodoHasta)) {
+            toast.error("Para nomina completa centro de costo y periodo");
+            return;
+        }
+
         setIsLoading(true);
         try {
-            const data = {
-                ...formData,
+            const payload = {
+                descripcion: formData.descripcion,
                 monto: parseFloat(formData.monto),
+                categoria: formData.categoria,
+                metodoPago: formData.metodoPago,
+                proveedor: formData.proveedor,
+                comprobante: formData.comprobante,
+                estadoPago: formData.estadoPago,
+                centroCosto: formData.centroCosto,
+                tipoComprobante: formData.tipoComprobante,
+                numeroComprobante: formData.numeroComprobante,
                 fecha: new Date(formData.fecha),
+                fechaDevengado: formData.fechaDevengado ? new Date(formData.fechaDevengado) : undefined,
+                fechaPago: formData.fechaPago ? new Date(formData.fechaPago) : undefined,
+                fechaVencimiento: formData.fechaVencimiento ? new Date(formData.fechaVencimiento) : undefined,
+                periodoDesde: formData.periodoDesde ? new Date(formData.periodoDesde) : undefined,
+                periodoHasta: formData.periodoHasta ? new Date(formData.periodoHasta) : undefined,
+                neto: formData.neto ? parseFloat(formData.neto) : undefined,
+                impuestos: formData.impuestos ? parseFloat(formData.impuestos) : undefined,
+                percepciones: formData.percepciones ? parseFloat(formData.percepciones) : undefined,
             };
 
-            const result = editingEgreso ? await updateEgreso(editingEgreso.id, data) : await createEgreso(data);
+            const result = editingEgreso
+                ? await updateEgreso(editingEgreso.id, payload)
+                : await createEgreso(payload);
 
             if (!result.success) {
                 toast.error(result.error || "Ocurrio un error");
@@ -133,18 +250,6 @@ export function CreateEgresoDrawer({
             setIsLoading(false);
         }
     };
-
-    const categories = [
-        { id: "INSUMOS", label: "Insumos", icon: ShoppingCart },
-        { id: "SERVICIOS", label: "Servicios", icon: Zap },
-        { id: "NOMINA", label: "Nomina", icon: Users },
-        { id: "ALQUILER", label: "Alquiler", icon: Home },
-        { id: "IMPUESTOS", label: "Impuestos", icon: Receipt },
-        { id: "PUBLICIDAD", label: "Publicidad", icon: Megaphone },
-        { id: "EQUIPAMIENTO", label: "Equipamiento", icon: Wrench },
-        { id: "MANTENIMIENTO", label: "Mantenimiento", icon: TrendingDown },
-        { id: "OTROS", label: "Otros", icon: MoreHorizontal },
-    ] as const;
 
     return (
         <ResponsivePanel
@@ -169,7 +274,7 @@ export function CreateEgresoDrawer({
                         <p className="text-sm text-zinc-500 md:text-lg">
                             {editingEgreso
                                 ? "Modifica los detalles del gasto registrado."
-                                : "Registra un nuevo egreso de dinero para tu negocio."}
+                                : "Registra un nuevo egreso con datos contables y operativos."}
                         </p>
                     </div>
 
@@ -215,41 +320,9 @@ export function CreateEgresoDrawer({
                             </div>
                         </div>
 
-                        <div className="space-y-3">
-                            <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-zinc-400">
-                                <CreditCard size={14} />
-                                Metodo de Pago
-                            </Label>
-                            <div className="flex flex-wrap gap-2">
-                                {paymentMethods.map((method) => {
-                                    const isSelected = formData.metodoPago === method.id;
-
-                                    return (
-                                        <button
-                                            key={method.id}
-                                            type="button"
-                                            onClick={() =>
-                                                setFormData((current) => ({
-                                                    ...current,
-                                                    metodoPago: method.id,
-                                                }))
-                                            }
-                                            className={`rounded-xl border-2 px-4 py-2 text-sm font-semibold transition-all duration-200 ${
-                                                isSelected
-                                                    ? "border-red-500 bg-red-50 text-red-600 shadow-sm"
-                                                    : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-zinc-200 hover:bg-zinc-100"
-                                            }`}
-                                        >
-                                            {method.label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
                         <div className="space-y-5">
                             <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">
-                                Detalles del Gasto
+                                Detalles principales
                             </Label>
 
                             <div className="space-y-2">
@@ -276,7 +349,7 @@ export function CreateEgresoDrawer({
                                 <div className="space-y-2">
                                     <Label htmlFor="monto" className="flex items-center gap-2 font-bold text-zinc-700">
                                         <DollarSign size={14} className="text-zinc-400" />
-                                        Monto *
+                                        Monto total *
                                     </Label>
                                     <div className="relative">
                                         <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-zinc-400">$</span>
@@ -316,6 +389,263 @@ export function CreateEgresoDrawer({
                                         className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm focus-visible:ring-red-400"
                                     />
                                 </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label htmlFor="proveedor" className="flex items-center gap-2 font-bold text-zinc-700">
+                                        <ShoppingCart size={14} className="text-zinc-400" />
+                                        Proveedor
+                                    </Label>
+                                    <Input
+                                        id="proveedor"
+                                        placeholder="Nombre del proveedor"
+                                        value={formData.proveedor}
+                                        onChange={(event) =>
+                                            setFormData((current) => ({
+                                                ...current,
+                                                proveedor: event.target.value,
+                                            }))
+                                        }
+                                        className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm focus-visible:ring-red-400"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="centroCosto" className="flex items-center gap-2 font-bold text-zinc-700">
+                                        <MapPinned size={14} className="text-zinc-400" />
+                                        Centro de costo
+                                    </Label>
+                                    <Input
+                                        id="centroCosto"
+                                        placeholder="Ej. Salon, Cocina, Delivery"
+                                        value={formData.centroCosto}
+                                        onChange={(event) =>
+                                            setFormData((current) => ({
+                                                ...current,
+                                                centroCosto: event.target.value,
+                                            }))
+                                        }
+                                        className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm focus-visible:ring-red-400"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <Label className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-zinc-400">
+                                <CreditCard size={14} />
+                                Metodo de pago
+                            </Label>
+                            <div className="flex flex-wrap gap-2">
+                                {paymentMethods.map((method) => {
+                                    const isSelected = formData.metodoPago === method.id;
+
+                                    return (
+                                        <button
+                                            key={method.id}
+                                            type="button"
+                                            onClick={() =>
+                                                setFormData((current) => ({
+                                                    ...current,
+                                                    metodoPago: method.id,
+                                                }))
+                                            }
+                                            className={`rounded-xl border-2 px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                                                isSelected
+                                                    ? "border-red-500 bg-red-50 text-red-600 shadow-sm"
+                                                    : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-zinc-200 hover:bg-zinc-100"
+                                            }`}
+                                        >
+                                            {method.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">
+                                Estado del gasto
+                            </Label>
+                            <div className="flex flex-wrap gap-2">
+                                {expenseStates.map((state) => {
+                                    const isSelected = formData.estadoPago === state.id;
+
+                                    return (
+                                        <button
+                                            key={state.id}
+                                            type="button"
+                                            onClick={() =>
+                                                setFormData((current) => ({
+                                                    ...current,
+                                                    estadoPago: state.id,
+                                                }))
+                                            }
+                                            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-all ${
+                                                isSelected
+                                                    ? "border-zinc-900 bg-zinc-900 text-white"
+                                                    : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                                            }`}
+                                        >
+                                            {state.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="space-y-5">
+                            <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">
+                                Comprobante y fechas contables
+                            </Label>
+
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <Input
+                                    placeholder="Tipo comprobante"
+                                    value={formData.tipoComprobante}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            tipoComprobante: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
+                                <Input
+                                    placeholder="Numero comprobante"
+                                    value={formData.numeroComprobante}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            numeroComprobante: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <Input
+                                    type="date"
+                                    value={formData.fechaDevengado}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            fechaDevengado: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
+                                <Input
+                                    type="date"
+                                    value={formData.fechaPago}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            fechaPago: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <Input
+                                    type="date"
+                                    value={formData.fechaVencimiento}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            fechaVencimiento: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
+                                <Input
+                                    placeholder="Comprobante / URL"
+                                    value={formData.comprobante}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            comprobante: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-5">
+                            <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">
+                                Desglose contable
+                            </Label>
+
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Neto"
+                                    value={formData.neto}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            neto: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Impuestos"
+                                    value={formData.impuestos}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            impuestos: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Percepciones"
+                                    value={formData.percepciones}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            percepciones: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <Input
+                                    type="date"
+                                    value={formData.periodoDesde}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            periodoDesde: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
+                                <Input
+                                    type="date"
+                                    value={formData.periodoHasta}
+                                    onChange={(event) =>
+                                        setFormData((current) => ({
+                                            ...current,
+                                            periodoHasta: event.target.value,
+                                        }))
+                                    }
+                                    className="h-12 rounded-xl border-zinc-200 bg-white text-base font-medium shadow-sm"
+                                />
                             </div>
                         </div>
                     </div>

@@ -2,39 +2,50 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { EstadoPedido } from "@prisma/client";
+import { EstadoPedido, Prisma } from "@prisma/client";
 import { getSessionCookie, verifySessionCookie } from "@/lib/auth";
+import { registerCashboxPayment, voidCashboxPaymentForCancellation } from "@/app/actions/cashboxActions";
+import { serializePrisma } from "@/lib/utils";
+
+type RecipeSupply = {
+    supplyId: string;
+    qtyPerUnit: Prisma.Decimal | number;
+    supply: {
+        stockActual: Prisma.Decimal | number;
+        nombre?: string;
+        unidad?: string;
+        costoUnitario?: Prisma.Decimal | number | null;
+    };
+};
+
+type OrderRecipeProduct = {
+    recipeItems: RecipeSupply[];
+};
+
+type OrderPromotionItem = {
+    quantity: number;
+    product?: OrderRecipeProduct | null;
+};
+
+type OrderItemWithRecipes = {
+    cantidad: Prisma.Decimal | number;
+    product?: OrderRecipeProduct | null;
+    promotion?: {
+        items: OrderPromotionItem[];
+    } | null;
+};
+
+type OrderWithRecipeItems = {
+    items: OrderItemWithRecipes[];
+};
 
 // ============================================================================
 // HELPER: collect ingredients required by all items in an order
 // ============================================================================
 function buildInsumosMap(
-    order: {
-        items: Array<{
-            cantidad: any;
-            product?: {
-                recipeItems: Array<{
-                    supplyId: string;
-                    qtyPerUnit: any;
-                    supply: any;
-                }>;
-            } | null;
-            promotion?: {
-                items: Array<{
-                    quantity: number;
-                    product?: {
-                        recipeItems: Array<{
-                            supplyId: string;
-                            qtyPerUnit: any;
-                            supply: any;
-                        }>;
-                    } | null;
-                }>;
-            } | null;
-        }>;
-    }
-): Map<string, { supply: any; cantidadTotal: number }> {
-    const map = new Map<string, { supply: any; cantidadTotal: number }>();
+    order: OrderWithRecipeItems,
+): Map<string, { supply: RecipeSupply["supply"]; cantidadTotal: number }> {
+    const map = new Map<string, { supply: RecipeSupply["supply"]; cantidadTotal: number }>();
 
     for (const item of order.items) {
         const cantidadItem = Number(item.cantidad);
@@ -96,6 +107,7 @@ const itemsWithSuppliesInclude = {
 async function resolveActor() {
     let actorId: string | null = null;
     let actorName: string | null = null;
+    let actorRole: string | null = null;
     try {
         const session = await getSessionCookie();
         if (session) {
@@ -107,6 +119,7 @@ async function resolveActor() {
                 });
                 if (user) {
                     actorId = user.id;
+                    actorRole = user.rol;
                     actorName = user.displayName || user.email?.split("@")[0] || "Usuario";
                     if (user.rol) actorName += ` (${user.rol})`;
                 }
@@ -115,7 +128,7 @@ async function resolveActor() {
     } catch (e) {
         console.warn("Could not identify user for order event.", e);
     }
-    return { actorId, actorName };
+    return { actorId, actorName, actorRole };
 }
 
 // ============================================================================
@@ -124,6 +137,7 @@ async function resolveActor() {
 // Rules enforced:
 //   - CANCELADO orders are immutable: no further state changes allowed.
 //   - When CANCELADO: stock is always restored (it was deducted on creation).
+//   - If the order has a registered cashbox payment, it is voided in the same transaction.
 //   - All other transitions: just update estado and timestamps.
 //   - Stock is NO LONGER deducted on FINALIZADO — it is deducted on creation.
 // ============================================================================
@@ -134,7 +148,7 @@ export async function updateOrderStatus(
     deductStock?: boolean
 ) {
     try {
-        const { actorId, actorName } = await resolveActor();
+        const { actorId, actorName, actorRole } = await resolveActor();
 
         const currentOrder = await prisma.order.findUnique({
             where: { id },
@@ -182,20 +196,63 @@ export async function updateOrderStatus(
                     }
                 }
 
-                await tx.order.update({
+                const voidedPayment = await voidCashboxPaymentForCancellation(tx, {
+                    orderId: id,
+                    reason: motive || "Pedido cancelado",
+                    actorId,
+                    actorName,
+                    actorRole,
+                });
+
+                const updatedOrder = await tx.order.update({
                     where: { id },
                     data: {
                         estado: "CANCELADO",
                         canceladoEn: new Date(),
+                        cobrado: false,
+                        cobradoEn: null,
+                        metodoPago: null,
+                        metodoPagoPreferido: null,
                         motivoCancelacion: motive,
                         events: {
                             create: {
                                 tipo: "CANCELACION",
-                                descripcion: `Pedido cancelado y stock restaurado. Motivo: ${motive || "No especificado"}`,
+                                descripcion: `Pedido cancelado${voidedPayment ? " y cobro anulado" : ""}. Motivo: ${motive || "No especificado"}`,
                                 actorId,
                                 actorName,
                             },
                         },
+                    },
+                });
+
+                await tx.auditLog.create({
+                    data: {
+                        actorId,
+                        actorRole,
+                        action: "CANCEL_ORDER",
+                        objectType: "order",
+                        objectId: id,
+                        before: serializePrisma({
+                            id: order.id,
+                            numero: order.numero,
+                            estado: order.estado,
+                            cobrado: order.cobrado,
+                            cobradoEn: order.cobradoEn,
+                            metodoPago: order.metodoPago,
+                            motivoCancelacion: order.motivoCancelacion,
+                        }) as Prisma.InputJsonValue,
+                        after: serializePrisma({
+                            id: updatedOrder.id,
+                            numero: updatedOrder.numero,
+                            estado: updatedOrder.estado,
+                            cobrado: updatedOrder.cobrado,
+                            cobradoEn: updatedOrder.cobradoEn,
+                            metodoPago: updatedOrder.metodoPago,
+                            motivoCancelacion: updatedOrder.motivoCancelacion,
+                        }) as Prisma.InputJsonValue,
+                        notes: `Pedido ${order.numero} cancelado`,
+                        reason: motive || "Pedido cancelado",
+                        origin: "WEB",
                     },
                 });
             });
@@ -238,8 +295,8 @@ export async function updateOrderStatus(
 //
 // Rules enforced:
 //   - Cannot pay a CANCELADO order.
-//   - Cannot un-pay an already-paid order (financial integrity).
-//   - metodoPago is required when marking as paid; defaults to EFECTIVO if absent.
+//   - Cobro requires an open cashbox for the current user.
+//   - Order keeps a payment snapshot, but CobroCaja is the financial source of truth.
 // ============================================================================
 export async function toggleOrderPayment(
     id: string,
@@ -247,52 +304,23 @@ export async function toggleOrderPayment(
     metodoPago?: string,
 ) {
     try {
-        const { actorId, actorName } = await resolveActor();
-
-        const currentOrder = await prisma.order.findUnique({
-            where: { id },
-            select: { estado: true, cobrado: true },
-        });
-
-        if (!currentOrder) throw new Error("Pedido no encontrado");
-
-        if (currentOrder.estado === "CANCELADO") {
-            throw new Error("No se puede cobrar un pedido cancelado");
-        }
-
-        if (currentOrder.cobrado && !cobrado) {
-            throw new Error(
-                "No se puede quitar el pago de un pedido ya cobrado (integridad financiera)"
-            );
+        if (!cobrado) {
+            throw new Error("No se puede quitar el pago manualmente; cancela el pedido para anular el cobro");
         }
 
         // Require payment method — default to EFECTIVO to prevent N/A
-        const resolvedMetodoPago = cobrado
-            ? metodoPago || "EFECTIVO"
-            : undefined;
+        if (!metodoPago?.trim()) {
+            throw new Error("Debes seleccionar un metodo de pago");
+        }
 
-        const order = await prisma.order.update({
-            where: { id },
-            data: {
-                cobrado,
-                cobradoEn: cobrado ? new Date() : null,
-                metodoPago: cobrado ? resolvedMetodoPago : null,
-                events: {
-                    create: {
-                        tipo: "COBRO",
-                        descripcion: cobrado
-                            ? `Pedido cobrado (${resolvedMetodoPago})`
-                            : "Marcado como no cobrado",
-                        actorId,
-                        actorName,
-                    },
-                },
-            },
-        });
+        const result = await registerCashboxPayment(id, metodoPago);
+        if (!result.success) {
+            throw new Error(result.error || "Error al registrar el cobro");
+        }
 
         revalidatePath("/admin/dashboard/pedidos");
         revalidatePath("/empleado/pedidos");
-        return { success: true, order: JSON.parse(JSON.stringify(order)) };
+        return { success: true, order: result.data };
     } catch (error) {
         console.error("Error toggling order payment:", error);
         return {
@@ -385,7 +413,7 @@ export async function createOrder(data: {
 
         // Create order + deduct stock in a single atomic transaction
         const newOrder = await prisma.$transaction(async (tx) => {
-            const orderData: any = {
+            const orderData: Prisma.OrderCreateInput = {
                 numero: numeroOrden,
                 origen: "INTERNO",
                 clienteNombre: data.clienteNombre,

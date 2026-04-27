@@ -93,22 +93,51 @@ export default function InsumosPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
+    async function fetchSupplies() {
+        const result = await getSupplies();
+        if (!result.success) {
+            throw new Error(result.error || "Error al cargar los insumos");
+        }
 
-    useEffect(() => {
-        loadSupplies();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        return (result.data ?? []) as Supply[];
+    }
 
     async function loadSupplies() {
         setLoading(true);
-        const result = await getSupplies();
-        if (result.success) {
-            setSupplies(result.data);
-        } else {
-            toast.error(result.error || "Error al cargar los insumos");
+        try {
+            const nextSupplies = await fetchSupplies();
+            setSupplies(nextSupplies);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Error al cargar los insumos");
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }
+
+    useEffect(() => {
+        let isActive = true;
+
+        void fetchSupplies()
+            .then((nextSupplies) => {
+                if (isActive) {
+                    setSupplies(nextSupplies);
+                }
+            })
+            .catch((error) => {
+                if (isActive) {
+                    toast.error(error instanceof Error ? error.message : "Error al cargar los insumos");
+                }
+            })
+            .finally(() => {
+                if (isActive) {
+                    setLoading(false);
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, []);
 
     const filteredSupplies = supplies.filter(s =>
         s.nombre.toLowerCase().includes(searchQuery.toLowerCase())

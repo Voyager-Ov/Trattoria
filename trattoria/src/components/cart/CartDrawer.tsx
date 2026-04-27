@@ -204,15 +204,15 @@ export function CartDrawer() {
                     ) : step === "cart" ? (
                         <div className="space-y-6">
                             {items.map((item) => (
-                                <div key={item.id} className="flex gap-4 group">
+                                <div key={item.lineKey} className="flex gap-4 group">
                                     <div className="h-20 w-20 rounded-2xl overflow-hidden bg-secondary/30 flex-shrink-0"><img src={item.imagen || "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=200"} alt={item.nombre} className="h-full w-full object-cover" /></div>
                                     <div className="flex-1 flex flex-col justify-between py-0.5">
-                                        <div className="flex justify-between gap-2"><h4 className="font-bold text-sm leading-tight line-clamp-2">{item.nombre}</h4><button onClick={() => removeItem(item.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="h-4 w-4" /></button></div>
+                                        <div className="flex justify-between gap-2"><div className="min-w-0"><h4 className="font-bold text-sm leading-tight line-clamp-2">{item.nombre}</h4>{item.selectedOptions?.length ? <p className="mt-1 text-[10px] font-medium text-zinc-500 line-clamp-2">{item.selectedOptions.map((option) => `${option.groupLabel}: ${option.optionLabel}`).join(" · ")}</p> : null}</div><button onClick={() => removeItem(item.lineKey)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="h-4 w-4" /></button></div>
                                         <div className="flex items-center justify-between mt-2">
                                             <div className="flex items-center bg-secondary/50 rounded-lg p-1">
-                                                <button onClick={() => updateQuantity(item.id, item.quantity - 1)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-background transition-colors"><Minus className="h-3 w-3" /></button>
+                                                <button onClick={() => updateQuantity(item.lineKey, item.quantity - 1)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-background transition-colors"><Minus className="h-3 w-3" /></button>
                                                 <span className="w-8 text-center text-sm font-bold font-outfit">{item.quantity}</span>
-                                                <button onClick={() => updateQuantity(item.id, item.quantity + 1)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-background transition-colors"><Plus className="h-3 w-3" /></button>
+                                                <button onClick={() => updateQuantity(item.lineKey, item.quantity + 1)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-background transition-colors"><Plus className="h-3 w-3" /></button>
                                             </div>
                                             <span className="font-bold text-primary">${(Number(item.precio) * item.quantity).toLocaleString("es-CL")}</span>
                                         </div>

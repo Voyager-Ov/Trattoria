@@ -12,7 +12,12 @@ interface WeeklyRevenueDatum {
 interface WeeklyRevenueCardProps {
     loading: boolean;
     weeklyRevenue: WeeklyRevenueDatum[];
-    totalSales: number;
+    topProduct: {
+        nombre: string;
+        count: number;
+        revenue: number;
+        periodLabel: string;
+    } | null;
 }
 
 function LoadingBars() {
@@ -33,18 +38,18 @@ function LoadingBars() {
     );
 }
 
-export function WeeklyRevenueCard({ loading, weeklyRevenue, totalSales }: WeeklyRevenueCardProps) {
+export function WeeklyRevenueCard({ loading, weeklyRevenue, topProduct }: WeeklyRevenueCardProps) {
     const safeWeeklyRevenue = weeklyRevenue.length > 0
         ? weeklyRevenue
         : [
-              { day: "LUN", revenue: 0 },
-              { day: "MAR", revenue: 0 },
-              { day: "MIE", revenue: 0 },
-              { day: "JUE", revenue: 0 },
-              { day: "VIE", revenue: 0 },
-              { day: "SAB", revenue: 0 },
-              { day: "DOM", revenue: 0 },
-          ];
+            { day: "LUN", revenue: 0 },
+            { day: "MAR", revenue: 0 },
+            { day: "MIE", revenue: 0 },
+            { day: "JUE", revenue: 0 },
+            { day: "VIE", revenue: 0 },
+            { day: "SAB", revenue: 0 },
+            { day: "DOM", revenue: 0 },
+        ];
 
     const maxRevenue = Math.max(...safeWeeklyRevenue.map((item) => item.revenue), 1);
     const weekTotal = safeWeeklyRevenue.reduce((sum, item) => sum + item.revenue, 0);
@@ -126,13 +131,24 @@ export function WeeklyRevenueCard({ loading, weeklyRevenue, totalSales }: Weekly
                         <ArrowUpRight className="text-emerald-400" />
                     </div>
                     <div className="min-w-0">
-                        <p className="text-base font-bold md:text-lg">Ventas Totales Historicas</p>
+                        <p className="text-base font-bold md:text-lg">Producto mas vendido</p>
                         <p className="text-[0.65rem] font-medium uppercase tracking-[0.18em] text-white/50 md:text-xs">
-                            Desde el inicio del sistema
+                            {topProduct?.periodLabel || "Sin ventas recientes"}
                         </p>
                     </div>
                 </div>
-                <div className="text-2xl font-black md:text-3xl">{loading ? "..." : formatCurrency(totalSales)}</div>
+                <div className="min-w-0 text-left md:text-right">
+                    <p className="truncate text-lg font-black md:text-2xl">
+                        {loading ? "..." : topProduct?.nombre || "Sin datos"}
+                    </p>
+                    <p className="text-xs font-medium uppercase tracking-[0.16em] text-white/60">
+                        {loading
+                            ? "..."
+                            : topProduct
+                                ? `${formatCurrency(topProduct.revenue)}`
+                                : "Sin movimientos"}
+                    </p>
+                </div>
             </div>
         </section>
     );

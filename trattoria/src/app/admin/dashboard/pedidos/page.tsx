@@ -14,16 +14,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { getConfigs } from "@/app/actions/configActions";
+import { getCurrentCashbox } from "@/app/actions/cashboxActions";
 import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
+import { CashboxBlockedDialog } from "@/components/dashboard/cashbox/CashboxBlockedDialog";
 
 import { updateOrderStatus, toggleOrderPayment } from "./actions";
-import { PedidoDetailPanel } from "./components/PedidoDetailPanel";
 import { PedidosDesktopTable } from "./components/PedidosDesktopTable";
 import { PedidosHero } from "./components/PedidosHero";
 import { PedidosKpiStrip } from "./components/PedidosKpiStrip";
 import { PedidosMobileList } from "./components/PedidosMobileList";
 import { PedidosToolbar } from "./components/PedidosToolbar";
-import type { Order, SortDirection, SortField } from "./components/pedido-shared";
+import type { OrderListItem, SortDirection, SortField } from "./components/pedido-shared";
 
 type PaymentMethodOption = {
     id: string;
@@ -34,9 +35,10 @@ type PaymentMethodOption = {
 export default function PedidosPage() {
     const router = useRouter();
 
-    const [orders, setOrders] = useState<Order[]>([]);
+    const [orders, setOrders] = useState<OrderListItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState<"TODOS" | EstadoPedido>("TODOS");
     const [page, setPage] = useState(1);
     const [limit] = useState(10);
@@ -44,8 +46,6 @@ export default function PedidosPage() {
     const [totalPages, setTotalPages] = useState(1);
     const [orderBy, setOrderBy] = useState<SortField>("recibidoEn");
     const [orderDir, setOrderDir] = useState<SortDirection>("desc");
-
-    const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
     const [isCancelSheetOpen, setIsCancelSheetOpen] = useState(false);
     const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
@@ -58,6 +58,8 @@ export default function PedidosPage() {
     const [paymentMethod, setPaymentMethod] = useState("EFECTIVO");
     const [isSavingPayment, setIsSavingPayment] = useState(false);
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
+    const [hasOpenCashbox, setHasOpenCashbox] = useState(false);
+    const [isCashboxGateOpen, setIsCashboxGateOpen] = useState(false);
 
     const fetchOrders = useCallback(
         async (silent = false) => {
@@ -68,7 +70,7 @@ export default function PedidosPage() {
             try {
                 const queryParams = new URLSearchParams({
                     status: statusFilter,
-                    search: searchQuery,
+                    search: debouncedSearchQuery,
                     page: page.toString(),
                     limit: limit.toString(),
                     orderBy,
@@ -91,8 +93,27 @@ export default function PedidosPage() {
                 }
             }
         },
-        [statusFilter, searchQuery, page, limit, orderBy, orderDir]
+        [statusFilter, debouncedSearchQuery, page, limit, orderBy, orderDir]
     );
+
+    const syncCashboxState = useCallback(async () => {
+        const response = await getCurrentCashbox();
+        if (response.success && response.data) {
+            const currentCashbox = (response.data as { currentCashbox?: unknown | null }).currentCashbox;
+            setHasOpenCashbox(Boolean(currentCashbox));
+            return;
+        }
+
+        setHasOpenCashbox(false);
+    }, []);
+
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery.trim());
+        }, 350);
+
+        return () => clearTimeout(timeout);
+    }, [searchQuery]);
 
     useEffect(() => {
         const loadConfigs = async () => {
@@ -116,22 +137,29 @@ export default function PedidosPage() {
         };
 
         loadConfigs();
-        fetchOrders();
-
-        const interval = setInterval(() => fetchOrders(true), 10000);
-        return () => clearInterval(interval);
-    }, [fetchOrders]);
+        void syncCashboxState();
+    }, [syncCashboxState]);
 
     useEffect(() => {
-        if (selectedOrderId && !orders.some((order) => order.id === selectedOrderId)) {
-            setSelectedOrderId(null);
-        }
-    }, [orders, selectedOrderId]);
+        void fetchOrders();
 
-    const selectedOrder = useMemo(
-        () => orders.find((order) => order.id === selectedOrderId) ?? null,
-        [orders, selectedOrderId]
-    );
+        const interval = setInterval(() => void fetchOrders(true), 30000);
+        const handleWindowFocus = () => void fetchOrders(true);
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                void fetchOrders(true);
+            }
+        };
+
+        window.addEventListener("focus", handleWindowFocus);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener("focus", handleWindowFocus);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, [fetchOrders]);
 
     const metrics = useMemo(
         () => ({
@@ -149,7 +177,6 @@ export default function PedidosPage() {
 
     const handleStatusUpdate = async (id: string, newStatus: EstadoPedido) => {
         if (newStatus === "CANCELADO") {
-            setSelectedOrderId(null);
             setCancellingOrderId(id);
             setCancelMotive("");
             setCancelDeductStock(false);
@@ -160,7 +187,7 @@ export default function PedidosPage() {
         const result = await updateOrderStatus(id, newStatus);
         if (result.success) {
             toast.success("Estado actualizado");
-            fetchOrders(true);
+            void fetchOrders(true);
         } else {
             toast.error(result.error || "Error al actualizar");
         }
@@ -178,7 +205,7 @@ export default function PedidosPage() {
         if (result.success) {
             toast.success("Pedido cancelado");
             setIsCancelSheetOpen(false);
-            fetchOrders();
+            void fetchOrders();
         } else {
             toast.error(result.error || "Error al cancelar");
         }
@@ -186,22 +213,20 @@ export default function PedidosPage() {
         setIsCancelling(false);
     };
 
-    const handleTogglePayment = async (id: string, currentCobrado: boolean) => {
-        if (!currentCobrado) {
-            setSelectedOrderId(null);
+    const handleTogglePayment = async (id: string, currentIsPaid: boolean) => {
+        if (!currentIsPaid) {
+            if (!hasOpenCashbox) {
+                setIsCashboxGateOpen(true);
+                return;
+            }
+
             setPaymentOrderId(id);
             setPaymentMethod(resolveDefaultPaymentMethod());
             setIsPaymentSheetOpen(true);
             return;
         }
 
-        const result = await toggleOrderPayment(id, false);
-        if (result.success) {
-            toast.success("Marcado como pendiente");
-            fetchOrders();
-        } else {
-            toast.error(result.error || "Error al actualizar pago");
-        }
+        toast.info("El cobro ya fue registrado. Para anularlo debes cancelar el pedido.");
     };
 
     const handleConfirmPayment = async () => {
@@ -215,8 +240,13 @@ export default function PedidosPage() {
         if (result.success) {
             toast.success("Pedido cobrado");
             setIsPaymentSheetOpen(false);
-            fetchOrders();
+            void syncCashboxState();
+            void fetchOrders();
         } else {
+            if (result.error?.toLowerCase().includes("abrir una caja")) {
+                setIsPaymentSheetOpen(false);
+                setIsCashboxGateOpen(true);
+            }
             toast.error(result.error || "Error al registrar pago");
         }
 
@@ -263,7 +293,6 @@ export default function PedidosPage() {
     };
 
     const handleViewOrder = (orderId: string) => {
-        setSelectedOrderId(null);
         router.push(`/admin/dashboard/pedidos/${orderId}`);
     };
 
@@ -272,7 +301,7 @@ export default function PedidosPage() {
             <div className="space-y-4 px-4 pb-2 pt-4 sm:px-6 md:px-8 md:pb-4 md:pt-8">
                 <PedidosHero
                     isLoading={isLoading}
-                    onRefresh={() => fetchOrders()}
+                    onRefresh={() => void fetchOrders()}
                     onCreate={() => router.push("/admin/dashboard/pedidos/nuevo")}
                 />
                 <PedidosKpiStrip metrics={metrics} />
@@ -298,7 +327,7 @@ export default function PedidosPage() {
                     page={page}
                     totalPages={totalPages}
                     onPageChange={setPage}
-                    onOpenOrder={setSelectedOrderId}
+                    onOpenOrder={handleViewOrder}
                     onClearFilters={handleClearFilters}
                 />
 
@@ -319,26 +348,6 @@ export default function PedidosPage() {
                     onClearFilters={handleClearFilters}
                 />
             </div>
-
-            <PedidoDetailPanel
-                order={selectedOrder}
-                open={Boolean(selectedOrder)}
-                onOpenChange={(open) => {
-                    if (!open) {
-                        setSelectedOrderId(null);
-                    }
-                }}
-                onViewDetail={handleViewOrder}
-                onTogglePayment={handleTogglePayment}
-                onStatusChange={handleStatusUpdate}
-                onCancelOrder={(orderId) => {
-                    setSelectedOrderId(null);
-                    setCancellingOrderId(orderId);
-                    setCancelMotive("");
-                    setCancelDeductStock(false);
-                    setIsCancelSheetOpen(true);
-                }}
-            />
 
             <div
                 aria-hidden
@@ -502,6 +511,12 @@ export default function PedidosPage() {
                     </div>
                 </SheetContent>
             </Sheet>
+
+            <CashboxBlockedDialog
+                open={isCashboxGateOpen}
+                onOpenChange={setIsCashboxGateOpen}
+                description="Este pedido todavia no puede cobrarse porque no tienes una caja abierta. Abre caja y vuelve a intentarlo."
+            />
         </div>
     );
 }

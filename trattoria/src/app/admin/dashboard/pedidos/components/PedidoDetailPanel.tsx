@@ -7,16 +7,16 @@ import { ResponsivePanel } from "@/components/ui/responsive-panel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getOrderDeliveryLabel, getOrderDisplayAddress } from "@/lib/orderDelivery";
 
-import { STATUS_CONFIG, formatOrderDate, formatOrderTotal, getPaymentBadgeConfig, type Order } from "./pedido-shared";
+import { STATUS_CONFIG, formatOrderDate, formatOrderTotal, getPaymentBadgeConfig, getPaymentMethodLabel, type OrderListItem } from "./pedido-shared";
 
 const STATUS_CHANGE_OPTIONS: EstadoPedido[] = ["RECIBIDO", "PENDIENTE", "EN_PREPARACION", "LISTO", "FINALIZADO"];
 
 interface PedidoDetailPanelProps {
-    order: Order | null;
+    order: OrderListItem | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onViewDetail: (orderId: string) => void;
-    onTogglePayment: (orderId: string, currentCobrado: boolean) => void;
+    onTogglePayment: (orderId: string, currentIsPaid: boolean) => void;
     onStatusChange: (orderId: string, status: EstadoPedido) => void;
     onCancelOrder: (orderId: string) => void;
 }
@@ -36,7 +36,7 @@ export function PedidoDetailPanel({
 
     const statusConfig = STATUS_CONFIG[order.estado];
     const StatusIcon = statusConfig.icon;
-    const paymentConfig = getPaymentBadgeConfig(order.cobrado);
+    const paymentConfig = getPaymentBadgeConfig(order.payment);
     const PaymentIcon = paymentConfig.icon;
     const deliveryLabel = getOrderDeliveryLabel(order);
     const address = getOrderDisplayAddress(order);
@@ -81,6 +81,29 @@ export function PedidoDetailPanel({
                 </section>
 
                 <section className="space-y-3 rounded-[1.5rem] border border-zinc-200 bg-white p-4">
+                    <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Pago</h4>
+                    <div className="space-y-2 text-sm text-zinc-600">
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="font-medium text-zinc-500">Estado</span>
+                            <Badge className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] shadow-none ${paymentConfig.className}`}>
+                                <PaymentIcon className="mr-1 h-3.5 w-3.5" />
+                                {paymentConfig.label}
+                            </Badge>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="font-medium text-zinc-500">Metodo</span>
+                            <span className="text-right font-semibold text-zinc-800">{getPaymentMethodLabel(order)}</span>
+                        </div>
+                        {order.payment.paidAt ? (
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="font-medium text-zinc-500">Cobrado en</span>
+                                <span className="text-right font-semibold text-zinc-800">{formatOrderDate(order.payment.paidAt)}</span>
+                            </div>
+                        ) : null}
+                    </div>
+                </section>
+
+                <section className="space-y-3 rounded-[1.5rem] border border-zinc-200 bg-white p-4">
                     <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Cliente y entrega</h4>
                     <div className="space-y-2 text-sm text-zinc-600">
                         <div className="flex items-center gap-2">
@@ -112,10 +135,9 @@ export function PedidoDetailPanel({
                                     <p className="truncate font-semibold text-zinc-800">{item.nombreProduct}</p>
                                     <p className="text-xs text-zinc-400">{Number(item.cantidad)} unidad(es)</p>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-black text-zinc-900">{formatOrderTotal(item.subtotal)}</p>
-                                    <p className="text-xs text-zinc-400">{formatOrderTotal(item.precioUnitario)} c/u</p>
-                                </div>
+                                <Badge variant="outline" className="rounded-full border-zinc-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
+                                    x{Number(item.cantidad)}
+                                </Badge>
                             </div>
                         ))}
                     </div>
@@ -158,16 +180,16 @@ export function PedidoDetailPanel({
 
                     <Button
                         type="button"
-                        variant={order.cobrado ? "outline" : "default"}
-                        disabled={order.cobrado}
-                        onClick={() => onTogglePayment(order.id, order.cobrado)}
+                        variant={order.payment.isPaid ? "outline" : "default"}
+                        disabled={order.payment.isPaid}
+                        onClick={() => onTogglePayment(order.id, order.payment.isPaid)}
                         className={
-                            order.cobrado
+                            order.payment.isPaid
                                 ? "h-12 w-full rounded-2xl border-zinc-200 text-zinc-400"
                                 : "h-12 w-full rounded-2xl bg-emerald-600 font-bold text-white hover:bg-emerald-700"
                         }
                     >
-                        {order.cobrado ? (
+                        {order.payment.isPaid ? (
                             <>
                                 <Banknote className="mr-2 h-4 w-4" />
                                 Pedido cobrado

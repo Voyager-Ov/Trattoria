@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { PedidoMobileCard } from "./PedidoMobileCard";
-import type { Order } from "./pedido-shared";
+import type { OrderListItem } from "./pedido-shared";
 
 interface PedidosMobileListProps {
-    orders: Order[];
+    orders: OrderListItem[];
     isLoading: boolean;
     total: number;
     page: number;

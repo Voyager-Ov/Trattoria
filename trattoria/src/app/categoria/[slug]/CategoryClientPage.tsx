@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Category, Product } from "@prisma/client";
 import { CatalogHeader } from "@/components/catalog/Header";
 import { ProductCard } from "@/components/catalog/ProductCard";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { SearchX, PackageOpen, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 
 interface Props {
@@ -14,13 +15,115 @@ interface Props {
   products: Product[];
 }
 
+type DisplayItem =
+  | {
+      id: string;
+      kind: "single";
+      product: Product;
+    }
+  | {
+      id: string;
+      kind: "group";
+      product: Product;
+      variants: Product[];
+      title: string;
+      description: string | null;
+      price: number;
+    };
+
+const VARIANT_GROUP_CATEGORIES = new Set(["pizzas", "tartas", "empanadas"]);
+
+function stripSuffix(value: string, suffix: string) {
+  return value.toLowerCase().endsWith(suffix.toLowerCase())
+    ? value.slice(0, value.length - suffix.length).trim()
+    : value;
+}
+
+function buildDisplayItems(categorySlug: string, items: Product[]): DisplayItem[] {
+  if (!VARIANT_GROUP_CATEGORIES.has(categorySlug.toLowerCase())) {
+    return items.map((product) => ({ id: product.id, kind: "single", product }));
+  }
+
+  const groups = new Map<string, Product[]>();
+
+  for (const product of items) {
+    const normalizedName = product.nombre.toLowerCase();
+    let groupKey = product.nombre;
+
+    if (categorySlug.toLowerCase() === "pizzas") {
+      groupKey = stripSuffix(stripSuffix(product.nombre, " - Entera"), " - Media");
+    } else if (categorySlug.toLowerCase() === "tartas") {
+      groupKey = stripSuffix(stripSuffix(product.nombre, " - Individual"), " - Familiar");
+      groupKey = stripSuffix(groupKey, "Tarta de ");
+      groupKey = `Tarta de ${groupKey}`;
+    } else if (categorySlug.toLowerCase() === "empanadas") {
+      groupKey = product.nombre.replace(/\s+x(1|6|12)$/i, "");
+    }
+
+    const groupProducts = groups.get(groupKey) ?? [];
+    groupProducts.push(product);
+    groups.set(groupKey, groupProducts);
+  }
+
+  const orderedGroups = Array.from(groups.entries()).sort((a, b) => {
+    const firstA = a[1][0];
+    const firstB = b[1][0];
+    return (firstA.orden ?? 0) - (firstB.orden ?? 0);
+  });
+
+  return orderedGroups.map(([groupKey, groupProducts]) => {
+    const sortedVariants = [...groupProducts].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+    const representative = sortedVariants[0];
+
+    if (sortedVariants.length === 1) {
+      return { id: representative.id, kind: "single", product: representative };
+    }
+
+    const title = categorySlug.toLowerCase() === "pizzas"
+      ? groupKey.replace(/^Pizza\s+/i, "Pizza ")
+      : categorySlug.toLowerCase() === "tartas"
+        ? groupKey
+        : groupKey;
+
+    return {
+      id: groupKey,
+      kind: "group",
+      product: representative,
+      variants: sortedVariants,
+      title,
+      description: representative.descripcion,
+      price: Math.min(...sortedVariants.map((variant) => Number(variant.precio))),
+    };
+  });
+}
+
 export default function CategoryClientPage({ category, products }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const expandedCardRef = useRef<HTMLDivElement | null>(null);
 
   const filteredProducts = products.filter(prod => 
     prod.nombre.toLowerCase().includes(searchQuery.toLowerCase()) || 
     (prod.descripcion?.toLowerCase() || "").includes(searchQuery.toLowerCase())
   );
+
+  const displayItems = useMemo(() => buildDisplayItems(category.slug, filteredProducts), [category.slug, filteredProducts]);
+
+  useEffect(() => {
+    if (!expandedItemId) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const card = expandedCardRef.current;
+      const target = event.target as Node | null;
+      if (!card || !target) return;
+      if (!card.contains(target)) {
+        setExpandedItemId(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [expandedItemId]);
 
   return (
     <div className="min-h-screen bg-[#FDFCFB] pb-32">
@@ -48,7 +151,7 @@ export default function CategoryClientPage({ category, products }: Props) {
               <p className="text-zinc-500 font-medium leading-relaxed max-w-xl">
                 {category.descripcion || `Mostrando todos los productos de ${category.nombre.toLowerCase()}`}
                 <span className="ml-2 bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-md text-xs font-bold inline-block relative -top-0.5">
-                  {filteredProducts.length}
+                  {displayItems.length}
                 </span>
               </p>
             </div>
@@ -67,10 +170,34 @@ export default function CategoryClientPage({ category, products }: Props) {
         </div>
 
         {/* Product Grid */}
-        {filteredProducts.length > 0 ? (
+        {displayItems.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                {filteredProducts.map((product) => (
-                    <ProductCard key={product.id} product={product} />
+                {displayItems.map((item) => (
+                    <div
+                      key={item.id}
+                      ref={item.kind === "group" && expandedItemId === item.id ? expandedCardRef : null}
+                      className={cn(
+                        "transition-all duration-200 ease-out",
+                        item.kind === "group" && expandedItemId === item.id ? "md:col-span-2" : "md:col-span-1"
+                      )}
+                    >
+                      {item.kind === "single" ? (
+                        <ProductCard product={item.product} />
+                      ) : (
+                        <ProductCard
+                          product={item.product}
+                          title={item.title}
+                          description={item.description}
+                          image={item.product.imagen}
+                          displayPrice={item.price}
+                          variants={item.variants}
+                          isExpanded={expandedItemId === item.id}
+                          onToggleExpand={() =>
+                            setExpandedItemId((current) => (current === item.id ? null : item.id))
+                          }
+                        />
+                      )}
+                    </div>
                 ))}
             </div>
         ) : (

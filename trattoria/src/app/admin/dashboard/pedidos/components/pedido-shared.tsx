@@ -14,11 +14,22 @@ export interface OrderItem {
     id: string;
     nombreProduct: string;
     cantidad: number;
+}
+
+export interface OrderDetailItem extends OrderItem {
     precioUnitario: number | string;
     subtotal: number | string;
 }
 
-export interface Order {
+export interface OrderPaymentState {
+    isPaid: boolean;
+    method: string | null;
+    paidAt: string | null;
+    source: "cashbox" | "legacy" | "none";
+    preferredMethod: string | null;
+}
+
+type OrderBase = {
     id: string;
     numero: string;
     origen: string;
@@ -29,12 +40,43 @@ export interface Order {
     recibidoEn: string;
     estado: EstadoPedido;
     cobrado: boolean;
+    cobradoEn?: string | null;
+    metodoPago?: string | null;
     total: number | string;
-    items: OrderItem[];
     customer?: {
         nombre: string;
     } | null;
+    payment: OrderPaymentState;
+};
+
+export interface OrderListItem extends OrderBase {
+    items: OrderItem[];
 }
+
+export interface OrderDetail extends OrderBase {
+    subtotal: number | string;
+    descuento: number | string;
+    deliveryFee?: number | string;
+    notas?: string | null;
+    motivoCancelacion?: string | null;
+    enPreparacionEn?: string | null;
+    listoEn?: string | null;
+    finalizadoEn?: string | null;
+    canceladoEn?: string | null;
+    items: OrderDetailItem[];
+    events?: Array<{
+        id: string;
+        tipo: string;
+        descripcion: string;
+        actorName?: string | null;
+        createdAt: string;
+        actor?: {
+            displayName?: string | null;
+        } | null;
+    }>;
+}
+
+export type Order = OrderListItem;
 
 export type SortField = "recibidoEn" | "numero" | "clienteNombre" | "estado" | "total";
 export type SortDirection = "asc" | "desc";
@@ -141,8 +183,8 @@ export function getOrderItemsPreview(items: OrderItem[]) {
     return remaining > 0 ? `${firstItem} +${remaining}` : firstItem;
 }
 
-export function getPaymentBadgeConfig(cobrado: boolean) {
-    return cobrado
+export function getPaymentBadgeConfig(payment: OrderPaymentState) {
+    return payment.isPaid
         ? {
               label: "Cobrado",
               icon: Banknote,
@@ -153,4 +195,16 @@ export function getPaymentBadgeConfig(cobrado: boolean) {
               icon: CreditCard,
               className: "bg-amber-50 text-amber-600 border-amber-100",
           };
+}
+
+export function getPaymentMethodLabel(order: Pick<OrderListItem, "payment">) {
+    if (order.payment.isPaid) {
+        return order.payment.method || "Sin metodo";
+    }
+
+    if (order.payment.preferredMethod) {
+        return `Preferencia: ${order.payment.preferredMethod}`;
+    }
+
+    return "Sin preferencia";
 }

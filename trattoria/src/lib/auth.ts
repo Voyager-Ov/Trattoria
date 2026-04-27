@@ -121,14 +121,14 @@ export async function getAuthenticatedUserServer() {
     const session = await getSessionCookie();
 
     if (!session) {
-        return null; // No session
+        console.warn('[Auth] No session cookie found');
+        return null;
     }
 
     try {
-        // 1. Verify Cookie Signature & Expiry
         const claims = await verifySessionCookie(session);
+        // console.log(`[Auth] Session valid for UID: ${claims.uid}`); // Silenced to reduce logs
 
-        // 2. Strict DB Check
         const dbUser = await prisma.user.findUnique({
             where: { firebaseUid: claims.uid },
             select: {
@@ -142,9 +142,8 @@ export async function getAuthenticatedUserServer() {
             }
         });
 
-        // 3. Validation
         if (!dbUser) {
-            console.warn(`[Auth] Session valid but User missing in DB: ${claims.uid}`);
+            console.warn(`[Auth] User missing in DB: ${claims.uid}`);
             return null;
         }
 
@@ -157,6 +156,10 @@ export async function getAuthenticatedUserServer() {
 
     } catch (error) {
         console.error('[Auth] Server verification failed:', error);
+        // Re-throw if it's a DB connection error to avoid "UNAUTHORIZED" red herring
+        if (error instanceof Error && error.message.includes('Prisma')) {
+            throw error;
+        }
         return null;
     }
 }

@@ -100,7 +100,8 @@ export async function createPublicOrder(data: {
                     tipoEntrega: input.tipoEntrega,
                     subtotal: verifiedTotal,
                     total: verifiedTotal,
-                    metodoPago: input.metodoPago,
+                    metodoPago: null,
+                    metodoPagoPreferido: input.metodoPago,
                     notas: "",
                     items: {
                         create: verifiedItems.map((item, index) => ({
@@ -135,13 +136,14 @@ export async function createPublicOrder(data: {
         revalidatePath("/admin/dashboard/pedidos");
         return { success: true, orderNumber: numeroOrden, data: JSON.parse(JSON.stringify(newOrder)) };
 
-    } catch (error: any) {
-        console.error("Error creating public order:", error?.code, error?.message);
+    } catch (error: unknown) {
+        const prismaError = error as { code?: string; message?: string } | null;
+        console.error("Error creating public order:", prismaError?.code, prismaError?.message);
 
-        if (error?.code === "P2025") {
+        if (prismaError?.code === "P2025") {
             return { success: false, error: "Uno o más productos ya no están disponibles" };
         }
-        if (error?.code === "P2002") {
+        if (prismaError?.code === "P2002") {
             return { success: false, error: "Error de duplicación en el pedido" };
         }
 
