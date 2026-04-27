@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Plus, Save, X } from "lucide-react";
+import { ChevronLeft, Loader2, Plus, Save } from "lucide-react";
 import { UnidadMedida } from "@prisma/client";
 import { toast } from "sonner";
 
@@ -11,144 +11,166 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select";
+
 import { createSupply, getSupplyCategories } from "../actions";
 
 type SupplyCategory = { id: string; nombre: string };
 
 export default function NuevoInsumoPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState<SupplyCategory[]>([]);
-  const [unidad, setUnidad] = useState<UnidadMedida>(UnidadMedida.GRAMO);
-  const [categoryId, setCategoryId] = useState("none");
+    const router = useRouter();
+    const [loading, setLoading] = useState(false);
+    const [categories, setCategories] = useState<SupplyCategory[]>([]);
+    const [unidad, setUnidad] = useState<UnidadMedida>(UnidadMedida.GRAMO);
+    const [categoryId, setCategoryId] = useState("none");
 
-  useEffect(() => {
-    async function loadCategories() {
-      const result = await getSupplyCategories();
-      if (result.success && result.data) {
-        setCategories(result.data as SupplyCategory[]);
-      }
+    useEffect(() => {
+        async function loadCategories() {
+            const result = await getSupplyCategories();
+            if (result.success && result.data) {
+                setCategories(result.data as SupplyCategory[]);
+            }
+        }
+
+        loadCategories();
+    }, []);
+
+    async function handleSubmit(formData: FormData) {
+        setLoading(true);
+
+        const result = await createSupply({
+            nombre: formData.get("nombre") as string,
+            descripcion: ((formData.get("descripcion") as string) || "").trim() || undefined,
+            unidad: formData.get("unidad") as UnidadMedida,
+            stockMinimo: Number(formData.get("stockMinimo")),
+            costoUnitario: 0,
+            categoryId: (formData.get("categoryId") as string) !== "none" ? (formData.get("categoryId") as string) : undefined,
+        });
+
+        if (!result.success) {
+            toast.error(result.error || "Error al crear el insumo");
+            setLoading(false);
+            return;
+        }
+
+        toast.success("Insumo creado correctamente");
+        router.push("/empleado/insumos");
+        router.refresh();
     }
-    loadCategories();
-  }, []);
 
-  async function handleSubmit(formData: FormData) {
-    setLoading(true);
+    return (
+        <div className="app-page-safe-bottom flex min-h-screen flex-col gap-6 bg-white px-4 py-4 sm:px-6 md:gap-8 md:px-8 md:py-8">
+            <section className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-3">
+                    <Link href="/empleado/insumos" className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 transition-colors hover:text-zinc-900">
+                        <ChevronLeft className="h-4 w-4" />
+                        Volver a insumos
+                    </Link>
+                    <div>
+                        <h1 className="text-3xl font-black tracking-tight text-zinc-950 sm:text-4xl">Nuevo insumo</h1>
+                        <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 sm:text-base">
+                            Registra el insumo con su unidad, categoria y stock minimo. El costo se completa cuando ingresas una compra de stock.
+                        </p>
+                    </div>
+                </div>
 
-    const result = await createSupply({
-      nombre: formData.get("nombre") as string,
-      descripcion: (formData.get("descripcion") as string) || undefined,
-      unidad: formData.get("unidad") as UnidadMedida,
-      stockMinimo: Number(formData.get("stockMinimo")),
-      costoUnitario: Number(formData.get("costoUnitario")),
-      categoryId: (formData.get("categoryId") as string) !== "none" ? (formData.get("categoryId") as string) : undefined,
-    });
+                <Button form="new-supply-form" type="submit" disabled={loading} className="h-11 rounded-2xl bg-zinc-950 px-5 font-bold text-white hover:bg-zinc-800">
+                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Guardar insumo
+                </Button>
+            </section>
 
-    if (!result.success) {
-      toast.error(result.error || "Error al crear el insumo");
-      setLoading(false);
-      return;
-    }
+            <form id="new-supply-form" action={handleSubmit} className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_320px]">
+                <section className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+                    <div className="grid gap-5 md:grid-cols-2">
+                        <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="nombre" className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                                Nombre
+                            </Label>
+                            <Input id="nombre" name="nombre" required className="h-12 rounded-2xl border-zinc-200" />
+                        </div>
 
-    toast.success("Insumo creado correctamente");
-    router.push("/empleado/insumos");
-    router.refresh();
-  }
+                        <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="descripcion" className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                                Descripcion
+                            </Label>
+                            <Input id="descripcion" name="descripcion" className="h-12 rounded-2xl border-zinc-200" />
+                        </div>
 
-  return (
-    <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen">
-      <div className="flex items-center gap-2 text-sm font-medium text-zinc-400">
-        <Link href="/empleado" className="hover:text-zinc-600 transition-colors">Empleado</Link>
-        <ChevronRight className="h-4 w-4" />
-        <Link href="/empleado/insumos" className="hover:text-zinc-600 transition-colors">Insumos</Link>
-        <ChevronRight className="h-4 w-4" />
-        <span className="text-zinc-900">Nuevo Insumo</span>
-      </div>
+                        <div className="space-y-2">
+                            <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Unidad</Label>
+                            <Select name="unidad" value={unidad} onValueChange={(value) => setUnidad(value as UnidadMedida)}>
+                                <SelectTrigger className="h-12 rounded-2xl border-zinc-200">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Object.values(UnidadMedida).map((value) => (
+                                        <SelectItem key={value} value={value}>
+                                            {value}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-      <div className="flex justify-between items-center bg-white p-8 rounded-[2.5rem] border border-zinc-200 shadow-sm">
-        <div>
-          <h1 className="text-4xl font-black text-zinc-900 tracking-tight flex items-center gap-3">
-            <div className="h-12 w-12 bg-zinc-900 rounded-2xl flex items-center justify-center text-white">
-              <Plus className="h-6 w-6" />
-            </div>
-            REGISTRAR INSUMO
-          </h1>
-          <p className="text-zinc-500 mt-2 font-medium">Alta rapida de inventario con categoria vinculada.</p>
+                        <div className="space-y-2">
+                            <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Categoria</Label>
+                            <Select name="categoryId" value={categoryId} onValueChange={setCategoryId}>
+                                <SelectTrigger className="h-12 rounded-2xl border-zinc-200">
+                                    <SelectValue placeholder="Sin categoria" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Sin categoria</SelectItem>
+                                    {categories.map((category) => (
+                                        <SelectItem key={category.id} value={category.id}>
+                                            {category.nombre}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="stockMinimo" className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">
+                                Stock minimo
+                            </Label>
+                            <Input
+                                id="stockMinimo"
+                                name="stockMinimo"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                defaultValue="1"
+                                className="h-12 rounded-2xl border-zinc-200"
+                            />
+                        </div>
+                    </div>
+                </section>
+
+                <aside className="space-y-4">
+                    <div className="rounded-[2rem] border border-zinc-200 bg-zinc-950 p-5 text-white shadow-xl shadow-zinc-200">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+                            <Plus className="h-5 w-5" />
+                        </div>
+                        <h2 className="mt-5 text-xl font-black tracking-tight">Alta operativa</h2>
+                        <p className="mt-2 text-sm leading-6 text-white/70">
+                            El insumo nace con costo cero y sin stock. Cuando registres una compra se guardan proveedor y costo unitario.
+                        </p>
+                    </div>
+
+                    <div className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm">
+                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Siguiente paso</p>
+                        <p className="mt-3 text-sm leading-6 text-zinc-600">
+                            Despues del alta, usa <span className="font-semibold text-zinc-950">Registrar stock</span> para cargar la primera entrada y dejar trazado el movimiento.
+                        </p>
+                    </div>
+                </aside>
+            </form>
         </div>
-        <Link href="/empleado/insumos">
-          <Button variant="outline" className="h-14 w-14 rounded-full border-zinc-200 p-0">
-            <X className="h-6 w-6 text-zinc-400" />
-          </Button>
-        </Link>
-      </div>
-
-      <form action={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-10 rounded-[3rem] border border-zinc-200 shadow-sm space-y-8">
-          <div className="space-y-3">
-            <Label>Nombre</Label>
-            <Input name="nombre" required className="h-14 bg-zinc-50 border-zinc-200 rounded-2xl" />
-          </div>
-          <div className="space-y-3">
-            <Label>Descripcion</Label>
-            <Input name="descripcion" className="h-14 bg-zinc-50 border-zinc-200 rounded-2xl" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-3">
-              <Label>Unidad</Label>
-              <Select name="unidad" value={unidad} onValueChange={(value) => setUnidad(value as UnidadMedida)}>
-                <SelectTrigger className="h-14 bg-zinc-50 border-zinc-200 rounded-2xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.values(UnidadMedida).map((value) => (
-                    <SelectItem key={value} value={value}>{value}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-3">
-              <Label>Categoria</Label>
-              <Select name="categoryId" value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger className="h-14 bg-zinc-50 border-zinc-200 rounded-2xl">
-                  <SelectValue placeholder="Sin categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sin categoria</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>{category.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-3">
-              <Label>Stock minimo</Label>
-              <Input name="stockMinimo" type="number" step="0.01" defaultValue="1" className="h-14 bg-zinc-50 border-zinc-200 rounded-2xl" />
-            </div>
-            <div className="space-y-3">
-              <Label>Costo unitario</Label>
-              <Input name="costoUnitario" type="number" step="any" defaultValue="0" className="h-14 bg-zinc-50 border-zinc-200 rounded-2xl" />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-white p-8 rounded-[2.5rem] border border-zinc-200 shadow-sm">
-            <p className="text-sm text-zinc-500">Las categorias ahora se guardan por relacion, igual que en admin.</p>
-          </div>
-          <Button type="submit" disabled={loading} className="h-16 w-full rounded-2xl bg-zinc-900 text-white font-black text-lg">
-            <Save className="h-5 w-5 mr-2" />
-            {loading ? "GUARDANDO..." : "GUARDAR INSUMO"}
-          </Button>
-        </div>
-      </form>
-    </div>
-  );
+    );
 }

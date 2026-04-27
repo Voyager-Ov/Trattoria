@@ -4,6 +4,9 @@ import {
   APP_SEQUENCES,
   CATEGORY_SEEDS,
   PRODUCT_SEEDS,
+  PRODUCT_OPTION_GROUP_SEEDS,
+  PRODUCT_OPTION_LINK_SEEDS,
+  PRODUCT_OPTION_SEEDS,
   SUPPLY_CATEGORY_SEEDS,
   SUPPLY_SEEDS,
 } from "./seed-data/masterData";
@@ -36,6 +39,10 @@ async function cleanDatabase() {
   await prisma.egreso.deleteMany();
   await prisma.promotionProduct.deleteMany();
   await prisma.promotion.deleteMany();
+  await prisma.productOptionLink.deleteMany();
+  await prisma.productOption.deleteMany();
+  await prisma.productOptionGroupAssignment.deleteMany();
+  await prisma.productOptionGroup.deleteMany();
   await prisma.productRecipeItem.deleteMany();
   await prisma.product.deleteMany();
   await prisma.category.deleteMany();
@@ -168,6 +175,7 @@ async function seedProducts(categoryBySlug: Map<string, string>) {
         costoUnitario: product.costoUnitario,
         categoryId,
         unidad: "UNIDAD",
+        catalogRole: product.catalogRole,
         activo: true,
         disponible: true,
         stockActual: 0,
@@ -182,6 +190,93 @@ async function seedProducts(categoryBySlug: Map<string, string>) {
 
   console.log(`Created ${PRODUCT_SEEDS.length} product(s).`);
   return productByName;
+}
+
+async function seedProductOptions(productByName: Map<string, string>) {
+  const groupByKey = new Map<string, string>();
+  const optionByGroupAndSlug = new Map<string, string>();
+
+  for (const group of PRODUCT_OPTION_GROUP_SEEDS) {
+    const created = await prisma.productOptionGroup.create({
+      data: {
+        key: group.key,
+        nombre: group.nombre,
+        priceMode: group.priceMode,
+        required: group.required,
+        orden: group.orden,
+      },
+    });
+
+    groupByKey.set(group.key, created.id);
+  }
+
+  for (const seed of PRODUCT_OPTION_SEEDS) {
+    const groupId = groupByKey.get(seed.groupKey);
+    if (!groupId) {
+      throw new Error(`Missing option group "${seed.groupKey}" for option "${seed.label}".`);
+    }
+
+    const optionProductId = seed.optionProductName ? productByName.get(seed.optionProductName) : null;
+    if (seed.optionProductName && !optionProductId) {
+      throw new Error(`Missing option product "${seed.optionProductName}" for option "${seed.label}".`);
+    }
+
+    const created = await prisma.productOption.create({
+      data: {
+        groupId,
+        label: seed.label,
+        slug: seed.slug,
+        optionProductId,
+        orden: seed.orden,
+        recipeMultiplier: seed.recipeMultiplier,
+        metadata: seed.metadata as object | undefined,
+      },
+    });
+
+    optionByGroupAndSlug.set(`${seed.groupKey}:${seed.slug}`, created.id);
+  }
+
+  for (const group of PRODUCT_OPTION_GROUP_SEEDS) {
+    const baseProductNames = PRODUCT_OPTION_LINK_SEEDS.filter((link) => link.groupKey === group.key).map((link) => link.baseProductName);
+    const uniqueBaseProductNames = [...new Set(baseProductNames)];
+
+    for (const [index, baseProductName] of uniqueBaseProductNames.entries()) {
+      const productId = productByName.get(baseProductName);
+      const groupId = groupByKey.get(group.key);
+
+      if (!productId || !groupId) {
+        throw new Error(`Missing assignment references for base product "${baseProductName}" and group "${group.key}".`);
+      }
+
+      await prisma.productOptionGroupAssignment.create({
+        data: {
+          productId,
+          groupId,
+          orden: index,
+        },
+      });
+    }
+  }
+
+  for (const link of PRODUCT_OPTION_LINK_SEEDS) {
+    const baseProductId = productByName.get(link.baseProductName);
+    const optionId = optionByGroupAndSlug.get(`${link.groupKey}:${link.optionSlug}`);
+
+    if (!baseProductId || !optionId) {
+      throw new Error(`Missing option link references for "${link.baseProductName}" -> "${link.groupKey}:${link.optionSlug}".`);
+    }
+
+    await prisma.productOptionLink.create({
+      data: {
+        baseProductId,
+        optionId,
+        price: link.price,
+        orden: link.orden,
+      },
+    });
+  }
+
+  console.log(`Created ${PRODUCT_OPTION_GROUP_SEEDS.length} option group(s), ${PRODUCT_OPTION_SEEDS.length} option(s) and ${PRODUCT_OPTION_LINK_SEEDS.length} option link(s).`);
 }
 
 async function seedRecipes(productByName: Map<string, string>, supplyByName: Map<string, string>) {
@@ -227,6 +322,7 @@ async function main() {
   const supplyCategoryByName = await seedSupplyCategories();
   const supplyByName = await seedSupplies(supplyCategoryByName);
   const productByName = await seedProducts(categoryBySlug);
+  await seedProductOptions(productByName);
   await seedRecipes(productByName, supplyByName);
 
   console.log("Master seed completed successfully.");

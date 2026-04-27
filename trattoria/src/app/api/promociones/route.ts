@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { serializePrisma } from "@/lib/utils";
+import { getSystemNow } from "@/lib/system-time";
 
 export async function GET() {
     try {
-        const now = new Date();
+        const now = getSystemNow();
         
         // Obtener promociones activas
         const promotions = await prisma.promotion.findMany({

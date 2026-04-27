@@ -9,6 +9,13 @@ const outfit = Outfit({ subsets: ['latin'], variable: '--font-outfit' });
 export const metadata: Metadata = {
     title: 'Trattoria',
     description: 'Arroyito',
+    icons: {
+        icon: [
+            { url: '/favicon.png', type: 'image/png' },
+        ],
+        shortcut: ['/favicon.png'],
+        apple: ['/favicon.png'],
+    },
 };
 
 import { CartProvider } from '@/providers/CartProvider';

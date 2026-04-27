@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 import { serializePrisma } from '@/lib/utils';
+import { requireEmployeeApiAuth } from '@/lib/serverAuth';
 
 export async function GET(request: NextRequest) {
+    const auth = await requireEmployeeApiAuth(request);
+    if (auth.error) return auth.error;
+
     try {
         const searchParams = request.nextUrl.searchParams;
         const q = searchParams.get('q')?.toLowerCase() || '';
@@ -77,6 +81,8 @@ export async function GET(request: NextRequest) {
             imagen: p.imagen,
             categoria: p.category.nombre,
             categoryId: p.categoryId,
+            categoryIds: [p.categoryId],
+            categoryNames: [p.category.nombre],
             activo: p.activo,
             disponible: p.disponible,
             unidad: p.unidad,
@@ -112,6 +118,8 @@ export async function GET(request: NextRequest) {
                 imagen: p.imagen,
                 categoria: p.categories.map(c => c.nombre).join(', ') || 'Varias',
                 categoryId: p.categories[0]?.id || 'promo',
+                categoryIds: p.categories.map(c => c.id),
+                categoryNames: p.categories.map(c => c.nombre),
                 activo: p.isActive,
                 disponible: true,
                 unidad: 'PROMO',

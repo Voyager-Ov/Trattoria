@@ -117,11 +117,23 @@ export function CartDrawer() {
                 tipoEntrega: isDelivery ? "DELIVERY" : "RETIRO",
                 metodoPago: formData.metodoPago,
                 total: totalPrice,
-                items: items.map((item) => ({ productId: item.id, cantidad: item.quantity, precioUnitario: Number(item.precio), nombreProduct: item.nombre })),
+                items: items.map((item) => ({ 
+                    productId: item.id, 
+                    cantidad: item.quantity, 
+                    precioUnitario: Number(item.precio), 
+                    nombreProduct: item.nombre,
+                    options: item.selectedOptions
+                })),
             });
             if (!result.success) return toast.error(result.error || "Error al procesar el pedido");
 
-            const itemsText = items.map((item) => `• ${item.nombre} x${item.quantity} - $${(Number(item.precio) * item.quantity).toLocaleString("es-CL")}`).join("\n");
+            const itemsText = items.map((item) => {
+                const optionsText = item.selectedOptions?.length 
+                    ? ` (${item.selectedOptions.map(o => o.optionLabel).join(", ")})` 
+                    : "";
+                const itemPrice = Number(item.precio) + (item.selectedOptions || []).reduce((sum, opt) => sum + opt.priceDelta, 0);
+                return `• ${item.nombre}${optionsText} x${item.quantity} - $${(itemPrice * item.quantity).toLocaleString("es-CL")}`;
+            }).join("\n");
             const paymentLabel = paymentMethods.find((method) => method.id === formData.metodoPago)?.label || formData.metodoPago;
             const addressLabel = isDelivery ? formData.direccion.trim() : "Retiro en el local";
             let message = (whatsappSettings.templateMessage || "Hola {nombre}, recibimos tu pedido #{id}.")
@@ -214,7 +226,9 @@ export function CartDrawer() {
                                                 <span className="w-8 text-center text-sm font-bold font-outfit">{item.quantity}</span>
                                                 <button onClick={() => updateQuantity(item.lineKey, item.quantity + 1)} className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-background transition-colors"><Plus className="h-3 w-3" /></button>
                                             </div>
-                                            <span className="font-bold text-primary">${(Number(item.precio) * item.quantity).toLocaleString("es-CL")}</span>
+                                             <span className="font-bold text-primary">
+                                                 ${((Number(item.precio) + (item.selectedOptions || []).reduce((sum, opt) => sum + opt.priceDelta, 0)) * item.quantity).toLocaleString("es-CL")}
+                                             </span>
                                         </div>
                                     </div>
                                 </div>

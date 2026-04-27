@@ -16,6 +16,38 @@ type ProductSeed = {
   recipe: RecipeSeed[];
 };
 
+export type CatalogRoleSeed = "STANDARD" | "CONFIGURABLE_BASE" | "OPTION_PRODUCT";
+
+export type CatalogProductSeed = ProductSeed & {
+  catalogRole: CatalogRoleSeed;
+};
+
+export type ProductOptionGroupSeed = {
+  key: string;
+  nombre: string;
+  priceMode: "ADD" | "OVERRIDE";
+  required: boolean;
+  orden: number;
+};
+
+export type ProductOptionSeed = {
+  groupKey: string;
+  slug: string;
+  label: string;
+  optionProductName?: string;
+  orden: number;
+  recipeMultiplier?: number;
+  metadata?: Record<string, unknown>;
+};
+
+export type ProductOptionLinkSeed = {
+  baseProductName: string;
+  groupKey: string;
+  optionSlug: string;
+  price: number;
+  orden: number;
+};
+
 type SupplySeed = {
   nombre: string;
   categoryName: string;
@@ -180,6 +212,10 @@ const SUPPLY_COST_BY_NAME = Object.fromEntries(SUPPLY_SEEDS.map((supply) => [sup
 const calculateRecipeCost = (recipe: readonly RecipeSeed[]): number =>
   roundMoney(recipe.reduce((total, item) => total + (SUPPLY_COST_BY_NAME[item.supplyName] ?? 0) * item.qtyPerUnit, 0));
 const makeProduct = (data: Omit<ProductSeed, "costoUnitario">): ProductSeed => ({ ...data, costoUnitario: calculateRecipeCost(data.recipe) });
+const makeCatalogProduct = (data: Omit<CatalogProductSeed, "costoUnitario">): CatalogProductSeed => {
+  const { catalogRole, ...productData } = data;
+  return { ...makeProduct(productData), catalogRole };
+};
 
 const buildPizzaRecipe = (toppings: RecipeSeed[], options?: { withSauce?: boolean; mozzarellaQty?: number }): RecipeSeed[] => {
   const recipe: RecipeSeed[] = [ingredient("Disco de pizza", 1, "UNIDAD")];
@@ -299,16 +335,188 @@ const postreProducts: ProductSeed[] = [
   makeProduct({ nombre: "Chocolina", descripcion: "Chocolina con receta corta inferida.", precio: 5500, categorySlug: "postres", orden: 2, recipe: [ingredient("Chocolinas", 1, "PORCION"), ingredient("Dulce de leche", 0.08, "KILOGRAMO"), ingredient("Crema", 0.05, "LITRO"), ingredient("Queso crema", 0.04, "KILOGRAMO")] }),
 ];
 
-export const PRODUCT_SEEDS: readonly ProductSeed[] = [
-  ...buildPizzaProducts(),
-  ...pastaProducts,
-  ...buildTartaProducts(),
-  ...calzoniProducts,
-  ...buildEmpanadaProducts(),
-  ...milanesaProducts,
-  ...hamburguesaProducts,
-  ...postreProducts,
+const configurablePastaSauces = [
+  {
+    nombre: "Salsa Fileto",
+    descripcion: "Salsa fileto de tomate para combinar con cualquier pasta.",
+    precio: 1200,
+    orden: 10,
+    recipe: [ingredient("Salsa de tomate", 0.2, "KILOGRAMO")],
+  },
+  {
+    nombre: "Salsa Bolognesa",
+    descripcion: "Salsa bolognesa para combinar con cualquier pasta.",
+    precio: 1600,
+    orden: 11,
+    recipe: [ingredient("Salsa bolognesa", 0.22, "KILOGRAMO")],
+  },
+  {
+    nombre: "Salsa Parisienne",
+    descripcion: "Salsa parisienne para combinar con cualquier pasta.",
+    precio: 2200,
+    orden: 12,
+    recipe: [ingredient("Salsa parisienne", 0.22, "KILOGRAMO")],
+  },
+  {
+    nombre: "Salsa Peceto",
+    descripcion: "Salsa de peceto para combinar con cualquier pasta.",
+    precio: 2600,
+    orden: 13,
+    recipe: [ingredient("Salsa peceto", 0.22, "KILOGRAMO")],
+  },
+] as const;
+
+const configurablePastaBases = [
+  {
+    nombre: "Ñoquis",
+    descripcion: "Porcion de ñoquis de la casa. Elegi la salsa para completar el plato.",
+    precio: 5900,
+    orden: 0,
+    recipe: [ingredient("Porcion de noquis", 1, "PORCION"), ingredient("Queso parmesano", 0.015, "KILOGRAMO")],
+  },
+  {
+    nombre: "Ravioles",
+    descripcion: "Porcion de ravioles de la casa. Elegi la salsa para completar el plato.",
+    precio: 6300,
+    orden: 1,
+    recipe: [ingredient("Porcion de ravioles", 1, "PORCION"), ingredient("Queso parmesano", 0.015, "KILOGRAMO")],
+  },
+  {
+    nombre: "Canelones",
+    descripcion: "Porcion de canelones de la casa. Elegi la salsa para completar el plato.",
+    precio: 6300,
+    orden: 2,
+    recipe: [ingredient("Porcion de canelones", 1, "PORCION"), ingredient("Queso parmesano", 0.015, "KILOGRAMO")],
+  },
+  {
+    nombre: "Tallarines",
+    descripcion: "Porcion de tallarines de la casa. Elegi la salsa para completar el plato.",
+    precio: 5900,
+    orden: 3,
+    recipe: [ingredient("Porcion de tallarines", 1, "PORCION"), ingredient("Queso parmesano", 0.015, "KILOGRAMO")],
+  },
+] as const;
+
+const buildConfigurablePizzaProducts = (): CatalogProductSeed[] =>
+  pizzaDefinitions.map(([nombre, wholePrice, halfPrice, descripcion, recipe], index) =>
+    makeCatalogProduct({
+      nombre: `Pizza ${nombre}`,
+      descripcion: `${descripcion} Elegi si la queres media o entera.`,
+      precio: halfPrice,
+      categorySlug: "pizzas",
+      orden: index,
+      recipe: [...recipe],
+      catalogRole: "CONFIGURABLE_BASE",
+    })
+  );
+
+const buildConfigurablePastaProducts = (): CatalogProductSeed[] => [
+  ...configurablePastaBases.map((pasta) =>
+    makeCatalogProduct({
+      nombre: pasta.nombre,
+      descripcion: pasta.descripcion,
+      precio: pasta.precio,
+      categorySlug: "pastas",
+      orden: pasta.orden,
+      recipe: [...pasta.recipe],
+      catalogRole: "CONFIGURABLE_BASE",
+    })
+  ),
+  ...configurablePastaSauces.map((sauce) =>
+    makeCatalogProduct({
+      nombre: sauce.nombre,
+      descripcion: sauce.descripcion,
+      precio: sauce.precio,
+      categorySlug: "pastas",
+      orden: sauce.orden,
+      recipe: [...sauce.recipe],
+      catalogRole: "OPTION_PRODUCT",
+    })
+  ),
+  makeCatalogProduct({
+    nombre: "Lasagna",
+    descripcion: "Porcion de lasagna de la casa.",
+    precio: 9000,
+    categorySlug: "pastas",
+    orden: 20,
+    recipe: [ingredient("Porcion de lasagna", 1, "PORCION"), ingredient("Salsa de tomate", 0.12, "KILOGRAMO"), ingredient("Mozzarella", 0.04, "KILOGRAMO")],
+    catalogRole: "CONFIGURABLE_BASE",
+  }),
+];
+
+const buildConfigurableEmpanadaProducts = (): CatalogProductSeed[] =>
+  empanadaDefinitions.map(([nombreBase, singleRecipe], index) =>
+    makeCatalogProduct({
+      nombre: nombreBase,
+      descripcion: `${nombreBase}. Elegi si queres 1, 6 o 12 unidades del mismo sabor.`,
+      precio: Number(empanadaVariants[0][1]),
+      categorySlug: "empanadas",
+      orden: index,
+      recipe: [...singleRecipe],
+      catalogRole: "CONFIGURABLE_BASE",
+    })
+  );
+
+export const PRODUCT_OPTION_GROUP_SEEDS: readonly ProductOptionGroupSeed[] = [
+  { key: "pasta-salsa", nombre: "Salsa", priceMode: "ADD", required: true, orden: 0 },
+  { key: "pizza-size", nombre: "Tamaño", priceMode: "OVERRIDE", required: true, orden: 1 },
+  { key: "empanada-quantity", nombre: "Cantidad", priceMode: "OVERRIDE", required: true, orden: 2 },
+] as const;
+
+export const PRODUCT_OPTION_SEEDS: readonly ProductOptionSeed[] = [
+  { groupKey: "pasta-salsa", slug: "fileto", label: "Fileto", optionProductName: "Salsa Fileto", orden: 0, recipeMultiplier: 1 },
+  { groupKey: "pasta-salsa", slug: "bolognesa", label: "Bolognesa", optionProductName: "Salsa Bolognesa", orden: 1, recipeMultiplier: 1 },
+  { groupKey: "pasta-salsa", slug: "parisienne", label: "Parisienne", optionProductName: "Salsa Parisienne", orden: 2, recipeMultiplier: 1 },
+  { groupKey: "pasta-salsa", slug: "peceto", label: "Peceto", optionProductName: "Salsa Peceto", orden: 3, recipeMultiplier: 1 },
+  { groupKey: "pizza-size", slug: "media", label: "Media", orden: 0, recipeMultiplier: 0.5 },
+  { groupKey: "pizza-size", slug: "entera", label: "Entera", orden: 1, recipeMultiplier: 1 },
+  { groupKey: "empanada-quantity", slug: "x1", label: "1 unidad", orden: 0, recipeMultiplier: 1 },
+  { groupKey: "empanada-quantity", slug: "x6", label: "6 unidades", orden: 1, recipeMultiplier: 6 },
+  { groupKey: "empanada-quantity", slug: "x12", label: "12 unidades", orden: 2, recipeMultiplier: 12 },
+] as const;
+
+export const PRODUCT_OPTION_LINK_SEEDS: readonly ProductOptionLinkSeed[] = [
+  ...configurablePastaBases.flatMap((base) =>
+    configurablePastaSauces.map((sauce, index) => ({
+      baseProductName: base.nombre,
+      groupKey: "pasta-salsa",
+      optionSlug: sauce.nombre.replace(/^Salsa\s+/i, "").toLowerCase(),
+      price: sauce.precio,
+      orden: index,
+    }))
+  ),
+  ...configurablePastaSauces.map((sauce, index) => ({
+    baseProductName: "Lasagna",
+    groupKey: "pasta-salsa",
+    optionSlug: sauce.nombre.replace(/^Salsa\s+/i, "").toLowerCase(),
+    price: sauce.precio,
+    orden: index,
+  })),
+  ...pizzaDefinitions.flatMap(([nombre, wholePrice, halfPrice]) => [
+    { baseProductName: `Pizza ${nombre}`, groupKey: "pizza-size", optionSlug: "media", price: halfPrice, orden: 0 },
+    { baseProductName: `Pizza ${nombre}`, groupKey: "pizza-size", optionSlug: "entera", price: wholePrice, orden: 1 },
+  ]),
+  ...empanadaDefinitions.flatMap(([nombreBase]) =>
+    empanadaVariants.map(([suffix, price], index) => ({
+      baseProductName: nombreBase,
+      groupKey: "empanada-quantity",
+      optionSlug: suffix.toLowerCase(),
+      price,
+      orden: index,
+    }))
+  ),
+] as const;
+
+export const PRODUCT_SEEDS: readonly CatalogProductSeed[] = [
+  ...buildConfigurablePizzaProducts(),
+  ...buildConfigurablePastaProducts(),
+  ...buildTartaProducts().map((product) => ({ ...product, catalogRole: "STANDARD" as const })),
+  ...calzoniProducts.map((product) => ({ ...product, catalogRole: "STANDARD" as const })),
+  ...buildConfigurableEmpanadaProducts(),
+  ...milanesaProducts.map((product) => ({ ...product, catalogRole: "STANDARD" as const })),
+  ...hamburguesaProducts.map((product) => ({ ...product, catalogRole: "STANDARD" as const })),
+  ...postreProducts.map((product) => ({ ...product, catalogRole: "STANDARD" as const })),
 ] as const;
 
 if (CATEGORY_SEEDS.length !== 8) throw new Error(`Expected 8 product categories, received ${CATEGORY_SEEDS.length}.`);
-if (PRODUCT_SEEDS.length !== 88) throw new Error(`Expected 88 products, received ${PRODUCT_SEEDS.length}.`);
+if (PRODUCT_SEEDS.length !== 60) throw new Error(`Expected 60 products, received ${PRODUCT_SEEDS.length}.`);

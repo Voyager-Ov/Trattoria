@@ -6,6 +6,7 @@ import { EstadoPedido, Prisma } from "@prisma/client";
 import { getSessionCookie, verifySessionCookie } from "@/lib/auth";
 import { registerCashboxPayment, voidCashboxPaymentForCancellation } from "@/app/actions/cashboxActions";
 import { serializePrisma } from "@/lib/utils";
+import { getSystemNow } from "@/lib/system-time";
 
 type RecipeSupply = {
     supplyId: string;
@@ -208,7 +209,7 @@ export async function updateOrderStatus(
                     where: { id },
                     data: {
                         estado: "CANCELADO",
-                        canceladoEn: new Date(),
+                        canceladoEn: getSystemNow(),
                         cobrado: false,
                         cobradoEn: null,
                         metodoPago: null,
@@ -263,9 +264,9 @@ export async function updateOrderStatus(
                 where: { id },
                 data: {
                     estado: status,
-                    ...(status === "EN_PREPARACION" ? { enPreparacionEn: new Date() } : {}),
-                    ...(status === "LISTO" ? { listoEn: new Date() } : {}),
-                    ...(status === "FINALIZADO" ? { finalizadoEn: new Date() } : {}),
+                    ...(status === "EN_PREPARACION" ? { enPreparacionEn: getSystemNow() } : {}),
+                    ...(status === "LISTO" ? { listoEn: getSystemNow() } : {}),
+                    ...(status === "FINALIZADO" ? { finalizadoEn: getSystemNow() } : {}),
                     events: {
                         create: {
                             tipo: "CAMBIO_ESTADO",

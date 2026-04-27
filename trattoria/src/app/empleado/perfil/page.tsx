@@ -1,79 +1,82 @@
 "use client";
 
-import { useAuth } from '@/lib/hooks/useAuth';
-import { redirect } from 'next/navigation';
-import { ProfileForm } from './profile-form';
-import { SecurityCard } from '@/app/admin/dashboard/perfil/security-card'; // Reuse from admin
-import { Separator } from '@/components/ui/separator';
-import { User, Key } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { KeyRound, ShieldCheck, UserRound } from "lucide-react";
+
+import { useAuth } from "@/lib/hooks/useAuth";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+
+import { ProfileForm } from "./profile-form";
+import { SecurityCard } from "./security-card";
 
 export default function EmpleadoProfilePage() {
+    const router = useRouter();
     const { user, loading } = useAuth();
 
     useEffect(() => {
         if (!loading && !user) {
-            redirect('/login');
+            router.replace("/login");
         }
-    }, [user, loading]);
+    }, [loading, router, user]);
 
-    if (loading) {
-        return <div className="p-8">Cargando...</div>;
-    }
-
-    if (!user) {
-        return null;
+    if (loading || !user) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-white">
+                <p className="text-sm font-medium text-zinc-500">Cargando perfil...</p>
+            </div>
+        );
     }
 
     return (
-        <div className="flex flex-col gap-8 p-4 md:p-8 bg-zinc-50 min-h-screen animate-in fade-in duration-700">
-            {/* Header Section */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-                <div>
-                    <h1 className="text-3xl md:text-4xl font-black text-zinc-900 tracking-tight">Mi Perfil</h1>
-                    <p className="text-zinc-500 mt-2 text-base md:text-lg">Gestiona tu información personal y seguridad.</p>
-                </div>
-                <div className="h-12 w-12 bg-zinc-900 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-zinc-200 hidden md:flex">
-                    <User size={24} />
-                </div>
-            </div>
+        <div className="app-page-safe-bottom flex min-h-screen flex-col gap-6 bg-white px-4 py-4 sm:px-6 md:gap-8 md:px-8 md:py-8">
+            <section className="overflow-hidden rounded-[2rem] border border-zinc-200 bg-zinc-950 p-6 text-white shadow-xl shadow-zinc-200 md:p-8">
+                <Badge className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white hover:bg-white/10">
+                    Perfil de empleado
+                </Badge>
+                <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">Mi perfil</h1>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-white/70 sm:text-base">
+                    Actualiza tu informacion personal y el acceso a la cuenta desde el mismo lenguaje visual del portal nuevo.
+                </p>
+            </section>
 
-            <div className="grid gap-8 lg:grid-cols-12">
-                {/* Left Column: Personal Info (Larger) */}
-                <div className="lg:col-span-7 space-y-6">
-                    <div className="bg-white rounded-[2rem] border border-zinc-200 shadow-sm overflow-hidden p-6 md:p-8">
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="h-10 w-10 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-600">
-                                <User size={20} />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-zinc-900">Información Personal</h3>
-                                <p className="text-zinc-500 text-sm">Tus datos básicos de contacto.</p>
-                            </div>
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+                <article className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+                    <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-700">
+                            <UserRound className="h-5 w-5" />
                         </div>
-                        <Separator className="mb-6" />
-                        <ProfileForm user={user} />
+                        <div>
+                            <h2 className="text-xl font-black tracking-tight text-zinc-950">Informacion personal</h2>
+                            <p className="mt-1 text-sm text-zinc-500">Email, nombre y telefono del usuario operativo.</p>
+                        </div>
                     </div>
-                </div>
+                    <Separator className="my-6" />
+                    <ProfileForm user={user} />
+                </article>
 
-                {/* Right Column: Security */}
-                <div className="lg:col-span-5 space-y-6">
-                    {/* Security Card */}
-                    <div className="bg-white rounded-[2rem] border border-zinc-200 shadow-sm overflow-hidden p-6 md:p-8">
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="h-10 w-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600">
-                                <Key size={20} />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-zinc-900">Seguridad</h3>
-                                <p className="text-zinc-500 text-sm">Cambia tu contraseña.</p>
-                            </div>
+                <article className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+                    <div className="flex items-center gap-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                            <KeyRound className="h-5 w-5" />
                         </div>
-                        <Separator className="mb-6" />
-                        <SecurityCard />
+                        <div>
+                            <h2 className="text-xl font-black tracking-tight text-zinc-950">Seguridad</h2>
+                            <p className="mt-1 text-sm text-zinc-500">Gestiona la contrasena asociada a tu cuenta.</p>
+                        </div>
                     </div>
-                </div>
-            </div>
+                    <Separator className="my-6" />
+                    <SecurityCard />
+
+                    <div className="mt-6 rounded-[1.5rem] border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm leading-6 text-emerald-900">
+                        <div className="flex items-start gap-3">
+                            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
+                            <p>Mantener actualizados tus datos y credenciales ayuda a sostener el acceso operativo del turno sin depender del admin.</p>
+                        </div>
+                    </div>
+                </article>
+            </section>
         </div>
     );
 }

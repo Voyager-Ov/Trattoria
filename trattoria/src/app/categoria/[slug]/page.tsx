@@ -1,17 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ChevronLeft } from "lucide-react";
-import type { Category, Product } from "@prisma/client";
+import type { Category } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CatalogHeader } from "@/components/catalog/Header";
 import { CartDrawer } from "@/components/cart/CartDrawer";
+import { mapPublicCatalogProduct, publicCatalogProductInclude, type PublicCatalogProduct } from "@/lib/catalog-config";
 import { serializePrisma } from "@/lib/utils";
 import CategoryClientPage from "./CategoryClientPage";
 
 export const dynamic = "force-dynamic";
 
 type CategoryPageData =
-    | { status: "ok"; category: Category; products: Product[] }
+    | { status: "ok"; category: Category; products: PublicCatalogProduct[] }
     | { status: "not-found" }
     | { status: "error" };
 
@@ -32,14 +33,19 @@ async function loadCategoryPageData(slug: string): Promise<CategoryPageData> {
             where: {
                 categoryId: category.id,
                 activo: true,
+                disponible: true,
                 deletedAt: null,
+                catalogRole: {
+                    not: "OPTION_PRODUCT",
+                },
             },
+            include: publicCatalogProductInclude,
             orderBy: {
                 orden: "asc",
             },
         });
 
-        return { status: "ok", category, products };
+        return { status: "ok", category, products: products.map(mapPublicCatalogProduct) };
     } catch (error) {
         console.error(`Error fetching category page for slug "${slug}":`, error);
         return { status: "error" };
@@ -93,7 +99,7 @@ export default async function CategoriaPage({ params }: { params: Promise<{ slug
     }
 
     const serializedCategory = serializePrisma(result.category) as Category;
-    const serializedProducts = serializePrisma(result.products) as Product[];
+    const serializedProducts = serializePrisma(result.products) as PublicCatalogProduct[];
 
     return <CategoryClientPage category={serializedCategory} products={serializedProducts} />;
 }

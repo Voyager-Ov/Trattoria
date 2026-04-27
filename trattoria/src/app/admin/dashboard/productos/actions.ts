@@ -122,6 +122,19 @@ export async function getProductById(id: string) {
     }
 }
 
+function revalidateProductSurfaces(id?: string) {
+    revalidatePath("/admin/dashboard/productos");
+    revalidatePath("/empleado/productos");
+    revalidatePath("/api/admin/dashboard/productos");
+    revalidatePath("/api/productos");
+    if (id) {
+        revalidatePath(`/admin/dashboard/productos/${id}`);
+        revalidatePath(`/api/admin/dashboard/productos/${id}`);
+    }
+    revalidatePath("/categoria/[slug]", "page");
+    revalidatePath("/");
+}
+
 export async function toggleProductAvailability(id: string, currentStatus: boolean) {
     try {
         await prisma.product.update({
@@ -138,13 +151,27 @@ export async function toggleProductAvailability(id: string, currentStatus: boole
     }
 }
 
+export async function toggleProductActive(id: string, currentStatus: boolean) {
+    try {
+        await prisma.product.update({
+            where: { id },
+            data: { activo: !currentStatus },
+        });
+        revalidateProductSurfaces(id);
+        return { success: true };
+    } catch (error) {
+        console.error("Error toggling product active state:", error);
+        return { success: false, error: "Error al cambiar el estado del producto" };
+    }
+}
+
 export async function softDeleteProduct(id: string) {
     try {
         await prisma.product.update({
             where: { id },
             data: { deletedAt: new Date() },
         });
-        revalidatePath("/admin/dashboard/productos");
+        revalidateProductSurfaces(id);
         return { success: true };
     } catch (error) {
         console.error("Error deleting product:", error);

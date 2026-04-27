@@ -14,7 +14,7 @@ export interface StoreStatus {
     nextOpen?: Date;
 }
 
-const TIMEZONE = "America/Santiago"; // Default to Chile as inferred from codebase
+const TIMEZONE = "America/Argentina/Cordoba";
 
 export function getStoreStatus(
     hoursConfig: BusinessHours,
@@ -33,7 +33,7 @@ export function getStoreStatus(
 
     // We need to parse the day name exactly as stored in config (Spanish, capitalized)
     // Intl returns lowercase usually: "lunes", "martes"...
-    const formatter = new Intl.DateTimeFormat('es-CL', { ...options, weekday: 'long' });
+    const formatter = new Intl.DateTimeFormat('es-AR', { ...options, weekday: 'long' });
     const parts = formatter.formatToParts(now);
     const dayNameLower = parts.find(p => p.type === 'weekday')?.value.toLowerCase() || "";
 
@@ -65,7 +65,7 @@ export function getStoreStatus(
 
     // Parse current time to minutes for comparison
     // We can't trust parts order blindly, so let's use another formatter for time
-    const timeFormatter = new Intl.DateTimeFormat('es-CL', {
+    const timeFormatter = new Intl.DateTimeFormat('es-AR', {
         timeZone: TIMEZONE,
         hour: '2-digit',
         minute: '2-digit',

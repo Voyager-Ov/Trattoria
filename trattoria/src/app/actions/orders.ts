@@ -17,6 +17,13 @@ const PublicOrderSchema = z.object({
         cantidad: z.number().int().min(1).max(99),
         precioUnitario: z.number(),
         nombreProduct: z.string().max(200),
+        options: z.array(z.object({
+            groupId: z.string(),
+            groupLabel: z.string(),
+            optionId: z.string(),
+            optionLabel: z.string(),
+            priceDelta: z.number(),
+        })).optional(),
     })).min(1, "El pedido no puede estar vacío").max(30, "Máximo 30 ítems por pedido"),
     total: z.number(),
 }).superRefine((data, ctx) => {
@@ -35,7 +42,13 @@ export async function createPublicOrder(data: {
     clienteDireccion?: string;
     tipoEntrega: "DELIVERY" | "RETIRO";
     metodoPago: string;
-    items: { productId: string, cantidad: number, precioUnitario: number, nombreProduct: string }[];
+    items: { 
+        productId: string, 
+        cantidad: number, 
+        precioUnitario: number, 
+        nombreProduct: string,
+        options?: { groupId: string, groupLabel: string, optionId: string, optionLabel: string, priceDelta: number }[]
+    }[];
     total: number;
 }) {
     try {
@@ -72,13 +85,20 @@ export async function createPublicOrder(data: {
         }
 
         const priceMap = new Map(dbProducts.map((product) => [product.id, Number(product.precio)]));
-        const verifiedItems = input.items.map((item) => ({
-            productId: item.productId,
-            nombreProduct: item.nombreProduct,
-            cantidad: item.cantidad,
-            precioUnitario: priceMap.get(item.productId)!,
-            subtotal: item.cantidad * priceMap.get(item.productId)!,
-        }));
+        const verifiedItems = input.items.map((item) => {
+            const basePrice = priceMap.get(item.productId) || 0;
+            const optionsPrice = (item.options || []).reduce((sum, opt) => sum + opt.priceDelta, 0);
+            const unitPrice = basePrice + optionsPrice;
+            
+            return {
+                productId: item.productId,
+                nombreProduct: item.nombreProduct,
+                cantidad: item.cantidad,
+                precioUnitario: unitPrice,
+                subtotal: item.cantidad * unitPrice,
+                options: item.options || [],
+            };
+        });
         const verifiedTotal = verifiedItems.reduce((sum, item) => sum + item.subtotal, 0);
 
         const seq = await prisma.appSequence.upsert({
@@ -110,6 +130,7 @@ export async function createPublicOrder(data: {
                             cantidad: item.cantidad,
                             precioUnitario: item.precioUnitario,
                             subtotal: item.subtotal,
+                            configSnapshot: item.options.length > 0 ? (item.options as any) : null,
                             orden: index
                         }))
                     }

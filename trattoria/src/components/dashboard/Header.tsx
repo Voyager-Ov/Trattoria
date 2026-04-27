@@ -19,6 +19,7 @@ import { DynamicBreadcrumb } from "./DynamicBreadcrumb";
 import { HeaderSearch } from "./HeaderSearch";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { getCurrentUserProfile } from "@/app/admin/dashboard/userActions";
+import { SystemTimeBadge } from "@/components/shared/SystemTimeBadge";
 import { getAdminPageLabel } from "./adminNavigation";
 
 type HeaderProfile = {
@@ -74,6 +75,8 @@ export function Header() {
             <div className="hidden md:block">
                 <HeaderSearch />
             </div>
+
+            <SystemTimeBadge />
 
             <div className="flex items-center gap-3">
                 <div className="hidden text-right md:block">

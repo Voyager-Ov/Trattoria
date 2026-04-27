@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 import { serializePrisma } from '@/lib/utils';
+import { requireEmployeeApiAuth } from '@/lib/serverAuth';
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
+    const auth = await requireEmployeeApiAuth(request);
+    if (auth.error) return auth.error;
+
     try {
         const categories = await prisma.category.findMany({
             where: {
