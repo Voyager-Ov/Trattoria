@@ -20,6 +20,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { requireEmployee } from "@/lib/serverAuth";
 import { serializePrisma } from "@/lib/utils";
+import { getSystemNow } from "@/lib/system-time";
 
 type PaymentMethodOption = {
     id: string;
@@ -620,7 +621,7 @@ export async function registerCashboxPayment(orderId: string, metodoPago: string
                 throw new Error("El pedido ya tiene un cobro registrado");
             }
 
-            const paidAt = new Date();
+            const paidAt = getSystemNow();
             const payment = await tx.cobroCaja.create({
                 data: {
                     pedidoId: order.id,
@@ -718,7 +719,7 @@ export async function voidCashboxPaymentForCancellation(
         return null;
     }
 
-    const voidedAt = new Date();
+    const voidedAt = getSystemNow();
     const updatedPayment = await tx.cobroCaja.update({
         where: { id: payment.id },
         data: {
@@ -770,7 +771,7 @@ export async function registerCashboxExpense(input: {
             }
 
             const provider = await resolveProviderFromName(tx, input.proveedor);
-            const now = new Date();
+            const now = getSystemNow();
 
             const sequence = await tx.appSequence.upsert({
                 where: { tipo: "egreso" },
@@ -875,7 +876,7 @@ export async function closeCashbox(input: {
                 where: { id: cashbox.id },
                 data: {
                     estado: "CERRADA",
-                    fechaCierre: new Date(),
+                    fechaCierre: getSystemNow(),
                     efectivoContado: input.efectivoContado,
                     diferenciaEfectivo,
                     observacionesCierre: input.observacionesCierre?.trim() || null,

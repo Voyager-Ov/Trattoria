@@ -1,71 +1,91 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
+    ArrowLeft,
     ChevronLeft,
-    Search,
-    Plus,
-    Minus,
-    Trash2,
-    Save,
-    UserPlus,
-    ShoppingBag,
     Loader2,
-    Check
+    Plus,
+    Save,
+    Search,
+    ShoppingBag,
+    Trash2,
+    UserPlus,
 } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { searchCustomers, createOrder } from "@/app/admin/dashboard/pedidos/actions";
 import { toast } from "sonner";
 
-interface Product {
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+import { createOrder, searchCustomers } from "../actions";
+
+type MenuItem = {
     id: string;
     nombre: string;
     precio: number;
-    categoria: { nombre: string };
-    imagen?: string;
-    type: 'PRODUCTO' | 'PROMOCION';
-}
+    categoria: string;
+    imagen?: string | null;
+    type: "PRODUCTO" | "PROMOCION";
+    categoryId: string;
+    categoryIds?: string[];
+    categoryNames?: string[];
+    activo: boolean;
+    disponible: boolean;
+};
 
-interface CartItem {
+type CartItem = {
     productId: string;
     nombre: string;
     cantidad: number;
     precio: number;
-    type: 'PRODUCTO' | 'PROMOCION';
-}
+    type: "PRODUCTO" | "PROMOCION";
+};
 
-interface Customer {
+type Customer = {
     id: string;
     nombre: string;
     telefono?: string;
     email?: string;
-}
+};
+
+type Category = {
+    id: string;
+    nombre: string;
+};
+
+type CategoryOption = {
+    id: string;
+    nombre: string;
+    description: string;
+    totalItems: number;
+};
+
+const UNCATEGORIZED_PROMOS_ID = "__promociones__";
 
 export default function NuevoPedidoPage() {
     const router = useRouter();
-    const [loading, setLoading] = useState(false);
-    const [searchingProducts, setSearchingProducts] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [loadingCatalog, setLoadingCatalog] = useState(true);
 
-    // Form states
     const [customerQuery, setCustomerQuery] = useState("");
     const [clienteNombre, setClienteNombre] = useState("");
     const [clienteTelefono, setClienteTelefono] = useState("");
     const [clienteDireccion, setClienteDireccion] = useState("");
-    const [activeTab, setActiveTab] = useState<'PRODUCTO' | 'PROMOCION'>('PRODUCTO');
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+    const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
     const [productQuery, setProductQuery] = useState("");
-    const [products, setProducts] = useState<Product[]>([]);
     const [cart, setCart] = useState<CartItem[]>([]);
 
-    // Search Customers
     useEffect(() => {
         const timer = setTimeout(async () => {
             if (customerQuery.length >= 3) {
@@ -79,78 +99,155 @@ export default function NuevoPedidoPage() {
                 setCustomers([]);
             }
         }, 300);
+
         return () => clearTimeout(timer);
     }, [customerQuery]);
 
-    // Search Products (Menu)
     useEffect(() => {
-        const fetchProducts = async () => {
-            setSearchingProducts(true);
+        const loadCatalog = async () => {
+            setLoadingCatalog(true);
             try {
-                const res = await fetch(`/api/admin/dashboard/productos?q=${productQuery}`);
-                const data = await res.json();
-                if (data.success && Array.isArray(data.data)) {
-                    // Normalize categoria if it's a string
-                    const normalized = data.data.map((p: any) => ({
-                        ...p,
-                        categoria: typeof p.categoria === 'string' ? { nombre: p.categoria } : p.categoria
-                    }));
-                    setProducts(normalized);
-                } else {
-                    setProducts([]);
+                const [menuRes, catRes] = await Promise.all([
+                    fetch("/api/admin/dashboard/productos"),
+                    fetch("/api/admin/dashboard/productos/categorias"),
+                ]);
+
+                const menuData = await menuRes.json();
+                const catData = await catRes.json();
+
+                if (!menuRes.ok || !menuData.success) {
+                    throw new Error(menuData.error || "No se pudo cargar el catalogo");
                 }
+
+                if (!catRes.ok || !catData.success) {
+                    throw new Error(catData.error || "No se pudieron cargar las categorias");
+                }
+
+                setMenuItems(menuData.data);
+                setCategories(catData.data);
             } catch (error) {
-                console.error("Error fetching products:", error);
+                console.error("Error loading catalog:", error);
+                toast.error("Error al cargar el catalogo");
             } finally {
-                setSearchingProducts(false);
+                setLoadingCatalog(false);
             }
         };
 
-        const timer = setTimeout(fetchProducts, 300);
-        return () => clearTimeout(timer);
-    }, [productQuery]);
+        loadCatalog();
+    }, []);
 
-    const addToCart = (product: Product) => {
-        setCart(prev => {
-            const existing = prev.find(item => item.productId === product.id);
+    const operationalMenuItems = useMemo(
+        () =>
+            menuItems.filter((item) => {
+                if (!item.activo) {
+                    return false;
+                }
+
+                if (item.type === "PRODUCTO") {
+                    return item.disponible;
+                }
+
+                return true;
+            }),
+        [menuItems]
+    );
+
+    const categoryOptions = useMemo<CategoryOption[]>(() => {
+        const mapped = categories
+            .map((category) => {
+                const totalItems = operationalMenuItems.filter((item) => (item.categoryIds ?? [item.categoryId]).includes(category.id)).length;
+
+                return {
+                    id: category.id,
+                    nombre: category.nombre,
+                    description: totalItems === 1 ? "1 opcion disponible" : `${totalItems} opciones disponibles`,
+                    totalItems,
+                };
+            })
+            .filter((category) => category.totalItems > 0);
+
+        const uncategorizedPromos = operationalMenuItems.filter(
+            (item) => item.type === "PROMOCION" && (item.categoryIds?.length ?? 0) === 0
+        );
+
+        if (uncategorizedPromos.length > 0) {
+            mapped.push({
+                id: UNCATEGORIZED_PROMOS_ID,
+                nombre: "Promociones",
+                description: uncategorizedPromos.length === 1 ? "1 promocion sin categoria" : `${uncategorizedPromos.length} promociones sin categoria`,
+                totalItems: uncategorizedPromos.length,
+            });
+        }
+
+        return mapped;
+    }, [categories, operationalMenuItems]);
+
+    const selectedCategory = categoryOptions.find((category) => category.id === selectedCategoryId) ?? null;
+
+    const visibleItems = useMemo(() => {
+        if (!selectedCategoryId) {
+            return [];
+        }
+
+        return operationalMenuItems.filter((item) => {
+            const itemCategoryIds = item.categoryIds ?? [item.categoryId];
+            const matchesCategory =
+                selectedCategoryId === UNCATEGORIZED_PROMOS_ID
+                    ? item.type === "PROMOCION" && itemCategoryIds.length === 0
+                    : itemCategoryIds.includes(selectedCategoryId);
+
+            const matchesSearch =
+                productQuery.trim().length === 0 ||
+                item.nombre.toLowerCase().includes(productQuery.toLowerCase()) ||
+                item.categoria.toLowerCase().includes(productQuery.toLowerCase());
+
+            return matchesCategory && matchesSearch;
+        });
+    }, [operationalMenuItems, productQuery, selectedCategoryId]);
+
+    const total = useMemo(() => cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0), [cart]);
+
+    const addToCart = (item: MenuItem) => {
+        setCart((prev) => {
+            const existing = prev.find((cartItem) => cartItem.productId === item.id);
             if (existing) {
-                return prev.map(item =>
-                    item.productId === product.id
-                        ? { ...item, cantidad: item.cantidad + 1 }
-                        : item
+                return prev.map((cartItem) =>
+                    cartItem.productId === item.id ? { ...cartItem, cantidad: cartItem.cantidad + 1 } : cartItem
                 );
             }
-            return [...prev, {
-                productId: product.id,
-                nombre: product.nombre,
-                cantidad: 1,
-                precio: product.precio,
-                type: product.type
-            }];
+
+            return [
+                ...prev,
+                {
+                    productId: item.id,
+                    nombre: item.nombre,
+                    cantidad: 1,
+                    precio: item.precio,
+                    type: item.type,
+                },
+            ];
         });
     };
 
+    const handleSelectMenuItem = (item: MenuItem) => {
+        addToCart(item);
+    };
+
     const updateQuantity = (productId: string, delta: number) => {
-        setCart(prev => prev.map(item => {
-            if (item.productId === productId) {
-                const newQty = Math.max(1, item.cantidad + delta);
-                return { ...item, cantidad: newQty };
-            }
-            return item;
-        }));
+        setCart((prev) =>
+            prev.map((item) =>
+                item.productId === productId ? { ...item, cantidad: Math.max(1, item.cantidad + delta) } : item
+            )
+        );
     };
 
     const removeFromCart = (productId: string) => {
-        setCart(prev => prev.filter(item => item.productId !== productId));
+        setCart((prev) => prev.filter((item) => item.productId !== productId));
     };
-
-    const total = useMemo(() => {
-        return cart.reduce((acc, item) => acc + (item.precio * item.cantidad), 0);
-    }, [cart]);
 
     const handleSubmit = async () => {
         if (cart.length === 0) {
-            toast.error("El carrito está vacío");
+            toast.error("El carrito esta vacio");
             return;
         }
 
@@ -160,14 +257,14 @@ export default function NuevoPedidoPage() {
                 customerId: selectedCustomer?.id || null,
                 clienteNombre: selectedCustomer ? selectedCustomer.nombre : (clienteNombre || customerQuery || "Venta de Mostrador"),
                 clienteTelefono: selectedCustomer ? selectedCustomer.telefono : clienteTelefono,
-                clienteDireccion: clienteDireccion,
-                items: cart.map(item => ({
+                clienteDireccion,
+                items: cart.map((item) => ({
                     productId: item.productId,
-                    type: item.type as 'PRODUCTO' | 'PROMOCION',
+                    type: item.type,
                     nombreProduct: item.nombre,
                     cantidad: item.cantidad,
-                    precioUnitario: item.precio
-                }))
+                    precioUnitario: item.precio,
+                })),
             });
 
             if (result.success) {
@@ -177,7 +274,7 @@ export default function NuevoPedidoPage() {
             } else {
                 toast.error(result.error || "Error al crear el pedido");
             }
-        } catch (error) {
+        } catch {
             toast.error("Error inesperado en el servidor");
         } finally {
             setSubmitting(false);
@@ -185,270 +282,310 @@ export default function NuevoPedidoPage() {
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-2rem)] bg-zinc-50/30 overflow-hidden rounded-[2rem]">
-            {/* Header */}
-            <header className="p-6 flex items-center justify-between bg-white border-b border-zinc-100">
-                <div className="flex items-center gap-4">
-                    <Link href="/empleado/pedidos">
-                        <Button variant="ghost" size="icon" className="rounded-full">
-                            <ChevronLeft className="h-5 w-5" />
-                        </Button>
+        <div className="app-page-safe-bottom flex min-h-screen flex-col gap-5 bg-white px-4 py-4 sm:px-6 md:gap-6 md:px-8 md:py-8">
+            <section className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-3">
+                    <Link href="/empleado/pedidos" className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 transition-colors hover:text-zinc-900">
+                        <ChevronLeft className="h-4 w-4" />
+                        Volver a pedidos
                     </Link>
+
                     <div>
-                        <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Nuevo Pedido</h1>
-                        <p className="text-sm text-zinc-500 font-medium">Crea una nueva orden interna</p>
+                        <h1 className="text-2xl font-black tracking-tight text-zinc-950 sm:text-3xl">Nuevo Pedido</h1>
+                        <p className="mt-1 text-sm text-zinc-500 sm:text-base">Primero elige una categoria y luego agrega productos o promociones.</p>
                     </div>
                 </div>
+
                 <Button
                     onClick={handleSubmit}
                     disabled={submitting || cart.length === 0}
-                    className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-full px-6 h-11 gap-2 shadow-lg shadow-zinc-200"
+                    className="h-11 rounded-2xl bg-zinc-900 px-5 font-bold text-white shadow-lg shadow-zinc-200 hover:bg-zinc-800 md:h-12 md:px-6"
                 >
-                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     Confirmar Pedido
                 </Button>
-            </header>
+            </section>
 
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-                {/* Left: Products Selection */}
-                <div className="flex-1 flex flex-col min-w-0 bg-zinc-50/50 p-6 overflow-hidden">
-                    {/* Search & Customer Section */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        {/* Customer Search */}
-                        <div className="flex flex-col justify-between relative">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-wider text-zinc-400">Cliente (Opcional)</Label>
-                                <div className="relative">
-                                    <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                                    <Input
-                                        placeholder="Buscar cliente por nombre o teléfono..."
-                                        className="pl-10 h-11 border-zinc-200 focus:ring-zinc-900 rounded-xl"
-                                        value={selectedCustomer ? selectedCustomer.nombre : customerQuery}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
+            <section className="grid gap-5 xl:grid-cols-[minmax(0,1.8fr)_360px]">
+                <div className="space-y-5">
+                    <article className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm">
+                        <div className="space-y-2">
+                            <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Cliente (opcional)</Label>
+                            <div className="relative">
+                                <UserPlus className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                                <Input
+                                    placeholder="Buscar cliente por nombre o telefono..."
+                                    className="h-12 rounded-2xl border-zinc-200 pl-10"
+                                    value={selectedCustomer ? selectedCustomer.nombre : customerQuery}
+                                    onChange={(event) => {
+                                        const value = event.target.value;
+                                        setSelectedCustomer(null);
+                                        setCustomerQuery(value);
+                                        setClienteNombre(value);
+                                    }}
+                                />
+                                {selectedCustomer && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
                                             setSelectedCustomer(null);
-                                            setCustomerQuery(val);
-                                            setClienteNombre(val);
+                                            setClienteNombre("");
+                                            setClienteTelefono("");
+                                            setClienteDireccion("");
                                         }}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 transition-colors hover:text-zinc-600"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {!selectedCustomer && (
+                            <div className="mt-4 grid gap-4 md:grid-cols-2">
+                                <div className="space-y-2">
+                                    <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Telefono</Label>
+                                    <Input
+                                        placeholder="Ej: 11 5555-5555"
+                                        className="h-11 rounded-2xl border-zinc-200"
+                                        value={clienteTelefono}
+                                        onChange={(event) => setClienteTelefono(event.target.value)}
                                     />
-                                    {selectedCustomer && (
-                                        <button
-                                            onClick={() => {
-                                                setSelectedCustomer(null);
-                                                setClienteNombre("");
-                                                setClienteTelefono("");
-                                                setClienteDireccion("");
-                                            }}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Direccion</Label>
+                                    <Input
+                                        placeholder="Calle 123, depto 1"
+                                        className="h-11 rounded-2xl border-zinc-200"
+                                        value={clienteDireccion}
+                                        onChange={(event) => setClienteDireccion(event.target.value)}
+                                    />
                                 </div>
                             </div>
+                        )}
 
-                            {!selectedCustomer && (
-                                <div className="grid grid-cols-2 gap-4 mt-2">
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Teléfono</Label>
-                                        <Input
-                                            placeholder="Ej: 11 5555-5555"
-                                            className="h-10 border-zinc-200 rounded-xl"
-                                            value={clienteTelefono}
-                                            onChange={(e) => setClienteTelefono(e.target.value)}
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Dirección</Label>
-                                        <Input
-                                            placeholder="Calle 123, Depto 1"
-                                            className="h-10 border-zinc-200 rounded-xl"
-                                            value={clienteDireccion}
-                                            onChange={(e) => setClienteDireccion(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
-                            {customers.length > 0 && !selectedCustomer && (
-                                <div className="absolute z-50 w-full mt-1 bg-white border border-zinc-100 rounded-xl shadow-xl p-2 max-h-48 overflow-auto top-[74px]">
-                                    {customers.map(c => (
+                        {customers.length > 0 && !selectedCustomer && (
+                            <div className="relative mt-3">
+                                <div className="absolute z-20 w-full rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl">
+                                    {customers.map((customer) => (
                                         <button
-                                            key={c.id}
-                                            onClick={() => setSelectedCustomer(c)}
-                                            className="w-full text-left p-3 hover:bg-zinc-50 rounded-lg flex flex-col gap-0.5"
+                                            key={customer.id}
+                                            type="button"
+                                            onClick={() => setSelectedCustomer(customer)}
+                                            className="flex w-full flex-col gap-0.5 rounded-xl p-3 text-left transition-colors hover:bg-zinc-50"
                                         >
-                                            <span className="font-semibold text-sm text-zinc-900">{c.nombre}</span>
-                                            <span className="text-xs text-zinc-500">{c.telefono || c.email || 'Sin contacto'}</span>
+                                            <span className="font-semibold text-zinc-900">{customer.nombre}</span>
+                                            <span className="text-xs text-zinc-500">{customer.telefono || customer.email || "Sin contacto"}</span>
                                         </button>
                                     ))}
                                 </div>
+                            </div>
+                        )}
+                    </article>
+
+                    <article className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Paso 1</p>
+                                <h2 className="mt-1 text-xl font-black tracking-tight text-zinc-950">Categorias</h2>
+                                <p className="mt-1 text-sm text-zinc-500">Selecciona la seccion del menu desde la que vas a cargar items.</p>
+                            </div>
+                            {selectedCategory && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSelectedCategoryId(null);
+                                        setProductQuery("");
+                                    }}
+                                    className="rounded-2xl border-zinc-200"
+                                >
+                                    <ArrowLeft className="mr-2 h-4 w-4" />
+                                    Cambiar categoria
+                                </Button>
                             )}
                         </div>
 
-                        {/* Product Search */}
-                        <div className="flex flex-col justify-between">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-wider text-zinc-400">Buscar Productos</Label>
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                                    <Input
-                                        placeholder="Pizza, Pasta, Bebidas..."
-                                        className="pl-10 h-11 border-zinc-200 focus:ring-zinc-900 rounded-xl"
-                                        value={productQuery}
-                                        onChange={(e) => setProductQuery(e.target.value)}
-                                    />
+                        {loadingCatalog ? (
+                            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                {Array.from({ length: 6 }).map((_, index) => (
+                                    <div key={index} className="h-32 animate-pulse rounded-[1.75rem] bg-zinc-100" />
+                                ))}
+                            </div>
+                        ) : selectedCategory ? (
+                            <div className="mt-6 space-y-4">
+                                <div className="rounded-[1.5rem] border border-zinc-200 bg-zinc-50 p-4">
+                                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Categoria seleccionada</p>
+                                    <h3 className="mt-1 text-lg font-black tracking-tight text-zinc-950">{selectedCategory.nombre}</h3>
+                                    <p className="mt-1 text-sm text-zinc-500">{selectedCategory.description}</p>
                                 </div>
-                            </div>
 
-                            {/* Type Filter Switcher */}
-                            <div className="flex w-full p-1 bg-zinc-100/80 backdrop-blur-sm rounded-xl border border-zinc-200/50 shadow-inner mt-2">
-                                <button
-                                    onClick={() => setActiveTab('PRODUCTO')}
-                                    className={`flex-1 flex items-center justify-center gap-2 px-6 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 ${activeTab === 'PRODUCTO'
-                                        ? 'bg-white text-zinc-900 shadow-md ring-1 ring-zinc-200/50'
-                                        : 'text-zinc-500 hover:text-zinc-700 hover:bg-white/40'
-                                        }`}
-                                >
-                                    <ShoppingBag className={`h-3.5 w-3.5 ${activeTab === 'PRODUCTO' ? 'text-zinc-900' : 'text-zinc-400'}`} />
-                                    Productos
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('PROMOCION')}
-                                    className={`flex-1 flex items-center justify-center gap-2 px-6 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all duration-200 ${activeTab === 'PROMOCION'
-                                        ? 'bg-white text-zinc-900 shadow-md ring-1 ring-zinc-200/50'
-                                        : 'text-zinc-500 hover:text-zinc-700 hover:bg-white/40'
-                                        }`}
-                                >
-                                    <Plus className={`h-3.5 w-3.5 ${activeTab === 'PROMOCION' ? 'text-zinc-900' : 'text-zinc-400'}`} />
-                                    Promociones
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Products Grid */}
-                    <div className="flex-1 overflow-y-auto -mx-2 px-2 scrollbar-thin scrollbar-thumb-zinc-200 scrollbar-track-transparent">
-                        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-8">
-                            {searchingProducts ? (
-                                Array(8).fill(0).map((_, i) => (
-                                    <div key={i} className="h-48 bg-zinc-200 animate-pulse rounded-2xl" />
-                                ))
-                            ) : products.filter(p => p.type === activeTab).length === 0 ? (
-                                <div className="col-span-full py-20 text-center">
-                                    <div className="bg-zinc-100 h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <Search className="h-8 w-8 text-zinc-300" />
+                                <div className="space-y-2">
+                                    <Label className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Paso 2</Label>
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                                        <Input
+                                            placeholder="Buscar dentro de la categoria..."
+                                            className="h-12 rounded-2xl border-zinc-200 pl-10"
+                                            value={productQuery}
+                                            onChange={(event) => setProductQuery(event.target.value)}
+                                        />
                                     </div>
-                                    <p className="text-zinc-500 font-medium">No se encontraron {activeTab === 'PRODUCTO' ? 'productos' : 'promociones'}</p>
-                                    <p className="text-zinc-400 text-sm">Intenta con otros términos</p>
                                 </div>
-                            ) : products.filter(p => p.type === activeTab).map(p => (
-                                <Card
-                                    key={p.id}
-                                    className="group overflow-hidden border-zinc-100 hover:border-zinc-300 hover:shadow-md transition-all rounded-2xl cursor-pointer"
-                                    onClick={() => addToCart(p)}
-                                >
-                                    <CardContent className="p-0">
-                                        <div className="aspect-[4/3] bg-zinc-100 relative">
-                                            {p.imagen ? (
-                                                <img src={p.imagen} alt={p.nombre} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center">
-                                                    <ShoppingBag className="h-8 w-8 text-zinc-300" />
-                                                </div>
-                                            )}
-                                            <div className="absolute top-2 right-2">
-                                                <Badge className="bg-white/90 backdrop-blur-md text-zinc-900 hover:bg-white/90 border-none font-bold">
-                                                    ${p.precio}
-                                                </Badge>
+
+                                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                    {visibleItems.length === 0 ? (
+                                        <div className="col-span-full rounded-[1.75rem] border border-dashed border-zinc-200 bg-zinc-50/70 px-6 py-12 text-center">
+                                            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-zinc-300 shadow-sm">
+                                                <Search className="h-6 w-6" />
                                             </div>
+                                            <p className="font-semibold text-zinc-900">No encontramos items para esa busqueda</p>
+                                            <p className="mt-1 text-sm text-zinc-500">Prueba con otro nombre o cambia de categoria.</p>
                                         </div>
-                                        <div className="p-4 space-y-1">
-                                            <span className="text-[10px] uppercase font-bold text-orange-600 tracking-wider">
-                                                {p.categoria.nombre}
-                                            </span>
-                                            <h3 className="font-bold text-zinc-900 text-sm line-clamp-1">{p.nombre}</h3>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Right: Cart Summary */}
-                <div className="w-full md:w-96 bg-white border-l border-zinc-100 flex flex-col">
-                    <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
-                        <h2 className="font-bold text-lg text-zinc-900">Carrito</h2>
-                        <Badge variant="outline" className="rounded-full">{cart.length} items</Badge>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-zinc-100 scrollbar-track-transparent">
-                        {cart.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-center space-y-4 py-20">
-                                <div className="h-16 w-16 bg-zinc-50 rounded-full flex items-center justify-center">
-                                    <ShoppingBag className="h-8 w-8 text-zinc-300" />
-                                </div>
-                                <div>
-                                    <p className="font-bold text-zinc-900">El carrito está vacío</p>
-                                    <p className="text-sm text-zinc-500">Agrega productos del menú para comenzar.</p>
+                                    ) : (
+                                        visibleItems.map((item) => (
+                                            <Card
+                                                key={item.id}
+                                                className="overflow-hidden rounded-[1.75rem] border-zinc-200 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lg"
+                                            >
+                                                <button type="button" onClick={() => handleSelectMenuItem(item)} className="block w-full text-left">
+                                                    <CardContent className="p-0">
+                                                        <div className="relative aspect-[4/3] bg-zinc-100">
+                                                            {item.imagen ? (
+                                                                <Image src={item.imagen} alt={item.nombre} fill className="object-cover" sizes="(min-width: 1280px) 280px, (min-width: 640px) 50vw, 100vw" unoptimized />
+                                                            ) : (
+                                                                <div className="flex h-full w-full items-center justify-center">
+                                                                    <ShoppingBag className="h-8 w-8 text-zinc-300" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="space-y-3 p-4">
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="min-w-0">
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <Badge variant="outline" className="rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em]">
+                                                                            {item.type === "PROMOCION" ? "Promocion" : "Producto"}
+                                                                        </Badge>
+                                                                    </div>
+                                                                    <h3 className="mt-2 line-clamp-2 text-base font-black tracking-tight text-zinc-950">{item.nombre}</h3>
+                                                                </div>
+                                                                <Badge className="rounded-full bg-zinc-900 px-3 py-1 text-sm font-black text-white hover:bg-zinc-900">
+                                                                    {formatPrice(item.precio)}
+                                                                </Badge>
+                                                            </div>
+                                                            <p className="text-sm text-zinc-500">{item.categoryNames?.join(", ") || item.categoria}</p>
+                                                        </div>
+                                                    </CardContent>
+                                                </button>
+                                            </Card>
+                                        ))
+                                    )}
                                 </div>
                             </div>
                         ) : (
-                            <div className="space-y-4">
-                                {cart.map(item => (
-                                    <div key={item.productId} className="flex gap-4 items-center">
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="font-bold text-sm text-zinc-900 truncate">{item.nombre}</h4>
-                                            <p className="text-xs text-zinc-500 font-medium">${item.precio} c/u</p>
+                            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                                {categoryOptions.map((category) => (
+                                    <button
+                                        key={category.id}
+                                        type="button"
+                                        onClick={() => setSelectedCategoryId(category.id)}
+                                        className="rounded-[1.75rem] border border-zinc-200 bg-zinc-50/70 p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:bg-white hover:shadow-lg"
+                                    >
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Categoria</p>
+                                                <h3 className="mt-2 truncate text-lg font-black tracking-tight text-zinc-950">{category.nombre}</h3>
+                                            </div>
+                                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-zinc-400 shadow-sm">
+                                                <ShoppingBag className="h-5 w-5" />
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-2 bg-zinc-50 p-1 rounded-full border border-zinc-100">
+                                        <p className="mt-4 text-sm text-zinc-500">{category.description}</p>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </article>
+                </div>
+
+                <aside className="rounded-[2rem] border border-zinc-200 bg-white shadow-sm xl:sticky xl:top-6 xl:h-fit">
+                    <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
+                        <div>
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Carrito</p>
+                            <h2 className="mt-1 text-lg font-black tracking-tight text-zinc-950">{cart.length} item(s)</h2>
+                        </div>
+                        <Badge variant="outline" className="rounded-full px-3 py-1">
+                            {formatPrice(total)}
+                        </Badge>
+                    </div>
+
+                    <div className="max-h-[420px] overflow-y-auto px-5 py-4">
+                        {cart.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
+                                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-50">
+                                    <ShoppingBag className="h-8 w-8 text-zinc-300" />
+                                </div>
+                                <p className="font-semibold text-zinc-900">El carrito esta vacio</p>
+                                <p className="mt-1 text-sm text-zinc-500">Selecciona una categoria y agrega items para comenzar.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {cart.map((item) => (
+                                    <div key={item.productId} className="rounded-[1.5rem] bg-zinc-50 p-4">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="truncate font-semibold text-zinc-900">{item.nombre}</p>
+                                                <p className="mt-1 text-sm text-zinc-500">{formatPrice(item.precio)} c/u</p>
+                                            </div>
                                             <button
-                                                onClick={() => updateQuantity(item.productId, -1)}
-                                                className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-white text-zinc-600 transition-colors"
+                                                type="button"
+                                                onClick={() => removeFromCart(item.productId)}
+                                                className="rounded-full p-2 text-zinc-400 transition-colors hover:bg-white hover:text-red-500"
                                             >
-                                                <Minus className="h-3 w-3" />
-                                            </button>
-                                            <span className="text-sm font-bold w-6 text-center">{item.cantidad}</span>
-                                            <button
-                                                onClick={() => updateQuantity(item.productId, 1)}
-                                                className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-white text-zinc-600 transition-colors"
-                                            >
-                                                <Plus className="h-3 w-3" />
+                                                <Trash2 className="h-4 w-4" />
                                             </button>
                                         </div>
-                                        <button
-                                            onClick={() => removeFromCart(item.productId)}
-                                            className="h-8 w-8 flex items-center justify-center rounded-full text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
+
+                                        <div className="mt-4 flex items-center justify-between">
+                                            <div className="flex items-center gap-2 rounded-full border border-zinc-200 bg-white p-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateQuantity(item.productId, -1)}
+                                                    className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-600 transition-colors hover:bg-zinc-50"
+                                                >
+                                                    -
+                                                </button>
+                                                <span className="w-8 text-center text-sm font-black text-zinc-950">{item.cantidad}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateQuantity(item.productId, 1)}
+                                                    className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-600 transition-colors hover:bg-zinc-50"
+                                                >
+                                                    <Plus className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+
+                                            <p className="text-sm font-black text-zinc-950">{formatPrice(item.precio * item.cantidad)}</p>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
 
-                    <div className="p-6 bg-zinc-50/50 border-t border-zinc-100 space-y-4">
-                        <div className="flex items-center justify-between text-zinc-500 font-medium">
-                            <span>Subtotal</span>
-                            <span>${total.toFixed(2)}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-xl font-black text-zinc-900">
+                    <div className="border-t border-zinc-100 px-5 py-4">
+                        <div className="flex items-center justify-between text-sm font-medium text-zinc-500">
                             <span>Total</span>
-                            <span>${total.toFixed(2)}</span>
+                            <span className="text-lg font-black text-zinc-950">{formatPrice(total)}</span>
                         </div>
-
-                        <div className="p-4 bg-orange-50 rounded-2xl flex items-start gap-3 border border-orange-100">
-                            <Check className="h-5 w-5 text-orange-600 mt-0.5" />
-                            <div>
-                                <p className="text-sm font-bold text-orange-900">Pago en Caja</p>
-                                <p className="text-xs text-orange-700/70">Este pedido se registrará como pendiente de pago.</p>
-                            </div>
-                        </div>
+                        <p className="mt-3 text-xs text-zinc-400">El pedido se registra igual que hoy; solo cambia la forma de seleccionar los items.</p>
                     </div>
-                </div>
-            </div>
+                </aside>
+            </section>
         </div>
     );
+}
+
+function formatPrice(value: number) {
+    return `$${Number(value).toLocaleString("es-AR")}`;
 }

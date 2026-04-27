@@ -10,22 +10,24 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 
+import { PublicCatalogProduct } from "@/lib/catalog-config";
+
 interface Props {
   category: Category;
-  products: Product[];
+  products: PublicCatalogProduct[];
 }
 
 type DisplayItem =
   | {
       id: string;
       kind: "single";
-      product: Product;
+      product: PublicCatalogProduct;
     }
   | {
       id: string;
       kind: "group";
-      product: Product;
-      variants: Product[];
+      product: PublicCatalogProduct;
+      variants: PublicCatalogProduct[];
       title: string;
       description: string | null;
       price: number;
@@ -39,7 +41,7 @@ function stripSuffix(value: string, suffix: string) {
     : value;
 }
 
-function buildDisplayItems(categorySlug: string, items: Product[]): DisplayItem[] {
+function buildDisplayItems(categorySlug: string, items: PublicCatalogProduct[]): DisplayItem[] {
   if (!VARIANT_GROUP_CATEGORIES.has(categorySlug.toLowerCase())) {
     return items.map((product) => ({ id: product.id, kind: "single", product }));
   }
@@ -169,20 +171,26 @@ export default function CategoryClientPage({ category, products }: Props) {
           </div>
         </div>
 
-        {/* Product Grid */}
+        {/* Product Grid / Flex Layout */}
         {displayItems.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                {displayItems.map((item) => (
+            <div className="flex flex-wrap gap-4 md:gap-6">
+                {displayItems.map((item) => {
+                    const isExpanded = expandedItemId === item.id;
+                    return (
                     <div
                       key={item.id}
-                      ref={item.kind === "group" && expandedItemId === item.id ? expandedCardRef : null}
+                      ref={isExpanded ? expandedCardRef : null}
                       className={cn(
-                        "transition-all duration-200 ease-out",
-                        item.kind === "group" && expandedItemId === item.id ? "md:col-span-2" : "md:col-span-1"
+                        "transition-all duration-500 ease-in-out shrink-0",
+                        isExpanded ? "w-full" : "w-full md:w-[calc(50%-0.75rem)]"
                       )}
                     >
                       {item.kind === "single" ? (
-                        <ProductCard product={item.product} />
+                        <ProductCard 
+                          product={item.product} 
+                          isExpanded={isExpanded}
+                          onToggleExpand={() => setExpandedItemId((current) => (current === item.id ? null : item.id))}
+                        />
                       ) : (
                         <ProductCard
                           product={item.product}
@@ -191,14 +199,15 @@ export default function CategoryClientPage({ category, products }: Props) {
                           image={item.product.imagen}
                           displayPrice={item.price}
                           variants={item.variants}
-                          isExpanded={expandedItemId === item.id}
+                          isExpanded={isExpanded}
                           onToggleExpand={() =>
                             setExpandedItemId((current) => (current === item.id ? null : item.id))
                           }
                         />
                       )}
                     </div>
-                ))}
+                  );
+                })}
             </div>
         ) : (
             <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-zinc-100 shadow-sm text-center px-4">

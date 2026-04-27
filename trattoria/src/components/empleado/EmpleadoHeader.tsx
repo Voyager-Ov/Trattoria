@@ -17,6 +17,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { getCurrentUserProfile } from "@/app/admin/dashboard/userActions";
+import { SystemTimeBadge } from "@/components/shared/SystemTimeBadge";
 import { getEmployeePageLabel } from "./employeeNavigation";
 
 type HeaderProfile = {
@@ -64,6 +65,8 @@ export function EmpleadoHeader() {
                     </div>
                 </div>
             </div>
+
+            <SystemTimeBadge />
 
             <div className="flex items-center gap-3">
                 <div className="hidden text-right md:block">

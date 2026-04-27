@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { createProduct, deletePromotion, softDeleteProduct, toggleProductAvailability } from "./actions";
+import { createProduct, deletePromotion, softDeleteProduct, toggleProductActive, toggleProductAvailability } from "./actions";
 import { CreateCategorySheet } from "./components/CreateCategorySheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,8 @@ import { ResponsivePanel } from "@/components/ui/responsive-panel";
 type Category = Prisma.CategoryGetPayload<{ select: { id: true; nombre: true } }>;
 type SortField = "codigo" | "nombre" | "categoria" | "precio" | "costo" | "margen" | "unidad" | "fecha" | "estado";
 type SortDirection = "asc" | "desc";
-type StatusFilter = "todos" | "activos" | "desactivados";
+type AdministrativeStatusFilter = "todos" | "activos" | "desactivados";
+type AvailabilityFilter = "todas" | "disponibles" | "agotados";
 
 interface MenuItem {
     id: string;
@@ -53,6 +54,7 @@ interface MenuItem {
     categoria: string;
     categoryId: string;
     activo: boolean;
+    disponible?: boolean;
     unidad: UnidadMedida;
     createdAt: string | Date;
     updatedAt?: string | Date;
@@ -100,15 +102,42 @@ function getTypeBadgeClasses(type: MenuItem["type"]) {
     return type === "PRODUCTO" ? "bg-blue-50 text-blue-600 border-none" : "bg-violet-50 text-violet-600 border-none";
 }
 
-function getStatusLabel(status: StatusFilter) {
+function getAdministrativeStatusLabel(status: AdministrativeStatusFilter) {
     switch (status) {
         case "activos":
             return "Activos";
         case "desactivados":
             return "Desactivados";
         default:
-            return "Todos";
+            return "Todas";
     }
+}
+
+function getAvailabilityLabel(status: AvailabilityFilter) {
+    switch (status) {
+        case "disponibles":
+            return "Disponibles";
+        case "agotados":
+            return "Agotados";
+        default:
+            return "Todas";
+    }
+}
+
+function matchesAdministrativeFilter(item: MenuItem, filter: AdministrativeStatusFilter) {
+    return filter === "todos" || (filter === "activos" ? item.activo : !item.activo);
+}
+
+function matchesAvailabilityFilter(item: MenuItem, filter: AvailabilityFilter) {
+    if (filter === "todas") {
+        return true;
+    }
+
+    if (item.type !== "PRODUCTO") {
+        return false;
+    }
+
+    return filter === "disponibles" ? item.disponible : !item.disponible;
 }
 
 function MetricCard({
@@ -156,7 +185,8 @@ export default function ProductosPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-    const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
+    const [administrativeFilter, setAdministrativeFilter] = useState<AdministrativeStatusFilter>("todos");
+    const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("todas");
     const [sortField, setSortField] = useState<SortField>("nombre");
     const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
     const [filtersOpen, setFiltersOpen] = useState(false);
@@ -216,7 +246,8 @@ export default function ProductosPage() {
     const clearFilters = () => {
         setSearchQuery("");
         setSelectedCategories([]);
-        setStatusFilter("todos");
+        setAdministrativeFilter("todos");
+        setAvailabilityFilter("todas");
         setSortField("nombre");
         setSortDirection("asc");
     };
@@ -293,6 +324,25 @@ export default function ProductosPage() {
         }
     };
 
+    const handleToggleActive = async (item: MenuItem) => {
+        if (item.type !== "PRODUCTO") {
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const res = await toggleProductActive(item.id, item.activo);
+            if (res.success) {
+                toast.success(item.activo ? "Producto desactivado" : "Producto activado");
+                await refreshData();
+            } else {
+                toast.error(res.error || "Error al actualizar");
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const filteredAndSortedItems = useMemo(() => {
         const term = searchQuery.toLowerCase();
 
@@ -306,12 +356,10 @@ export default function ProductosPage() {
 
             const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(item.categoryId);
 
-            const matchesStatus =
-                statusFilter === "todos" ||
-                (statusFilter === "activos" && item.activo) ||
-                (statusFilter === "desactivados" && item.type === "PRODUCTO" && !item.activo);
+            const matchesAdministrativeStatus = matchesAdministrativeFilter(item, administrativeFilter);
+            const matchesAvailabilityStatus = matchesAvailabilityFilter(item, availabilityFilter);
 
-            return matchesSearch && matchesCategory && matchesStatus;
+            return matchesSearch && matchesCategory && matchesAdministrativeStatus && matchesAvailabilityStatus;
         });
 
         filtered.sort((a, b) => {
@@ -351,14 +399,19 @@ export default function ProductosPage() {
         });
 
         return filtered;
-    }, [menuItems, searchQuery, selectedCategories, statusFilter, sortField, sortDirection]);
+    }, [administrativeFilter, availabilityFilter, menuItems, searchQuery, selectedCategories, sortField, sortDirection]);
 
     const totalMenuItems = menuItems.length;
     const activeProducts = menuItems.filter((item) => item.type === "PRODUCTO" && item.activo).length;
     const promotionsCount = menuItems.filter((item) => item.type === "PROMOCION").length;
     const disabledProducts = menuItems.filter((item) => item.type === "PRODUCTO" && !item.activo).length;
-    const activeFilterCount = (searchQuery ? 1 : 0) + (selectedCategories.length > 0 ? selectedCategories.length : 0) + (statusFilter !== "todos" ? 1 : 0);
-    const hasActiveFilters = searchQuery !== "" || selectedCategories.length > 0 || statusFilter !== "todos";
+    const activeFilterCount =
+        (searchQuery ? 1 : 0) +
+        (selectedCategories.length > 0 ? selectedCategories.length : 0) +
+        (administrativeFilter !== "todos" ? 1 : 0) +
+        (availabilityFilter !== "todas" ? 1 : 0);
+    const hasActiveFilters =
+        searchQuery !== "" || selectedCategories.length > 0 || administrativeFilter !== "todos" || availabilityFilter !== "todas";
 
     return (
         <div className="app-page-safe-bottom space-y-5 pb-6 md:space-y-8 md:pb-10">
@@ -453,7 +506,7 @@ export default function ProductosPage() {
                             ) : null}
                         </Button>
 
-                        <div className="hidden items-center gap-3 md:flex">
+                        <div className="hidden items-center gap-3 md:flex md:flex-wrap">
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" className="h-12 rounded-full border-zinc-200 px-6 text-zinc-600">
@@ -486,14 +539,14 @@ export default function ProductosPage() {
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" className="h-12 rounded-full border-zinc-200 px-6 text-zinc-600">
-                                        {getStatusLabel(statusFilter)}
+                                        Estado: {getAdministrativeStatusLabel(administrativeFilter)}
                                         <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-56 rounded-2xl border-zinc-100 p-2 shadow-xl">
-                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("todos")}>Todos</DropdownMenuItem>
-                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("activos")}>Activos</DropdownMenuItem>
-                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setStatusFilter("desactivados")}>Desactivados</DropdownMenuItem>
+                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setAdministrativeFilter("todos")}>Todos</DropdownMenuItem>
+                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setAdministrativeFilter("activos")}>Activos</DropdownMenuItem>
+                                    <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => setAdministrativeFilter("desactivados")}>Desactivados</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
@@ -528,10 +581,18 @@ export default function ProductosPage() {
                                     </div>
                                 );
                             })}
-                            {statusFilter !== "todos" ? (
+                            {administrativeFilter !== "todos" ? (
                                 <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 shadow-sm">
-                                    Estado: {getStatusLabel(statusFilter)}
-                                    <button type="button" onClick={() => setStatusFilter("todos")} className="rounded-full p-1 hover:bg-zinc-100">
+                                    Estado: {getAdministrativeStatusLabel(administrativeFilter)}
+                                    <button type="button" onClick={() => setAdministrativeFilter("todos")} className="rounded-full p-1 hover:bg-zinc-100">
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </div>
+                            ) : null}
+                            {availabilityFilter !== "todas" ? (
+                                <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-600 shadow-sm">
+                                    Disponibilidad: {getAvailabilityLabel(availabilityFilter)}
+                                    <button type="button" onClick={() => setAvailabilityFilter("todas")} className="rounded-full p-1 hover:bg-zinc-100">
                                         <X className="h-3 w-3" />
                                     </button>
                                 </div>
@@ -780,6 +841,11 @@ export default function ProductosPage() {
                                                     </DropdownMenuItem>
                                                     {item.type === "PRODUCTO" ? <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => void handleDuplicate(item)}>Duplicar</DropdownMenuItem> : null}
                                                     {item.type === "PRODUCTO" ? (
+                                                        <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => void handleToggleActive(item)}>
+                                                            {item.activo ? "Desactivar" : "Activar"}
+                                                        </DropdownMenuItem>
+                                                    ) : null}
+                                                    {item.type === "PRODUCTO" ? (
                                                         <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => void handleToggleAvailability(item)}>
                                                             {item.activo ? "Desactivar producto" : "Activar producto"}
                                                         </DropdownMenuItem>
@@ -813,18 +879,34 @@ export default function ProductosPage() {
             >
                 <div className="space-y-6">
                     <section className="space-y-3">
-                        <h3 className="text-sm font-black uppercase tracking-[0.18em] text-zinc-400">Estado</h3>
+                        <h3 className="text-sm font-black uppercase tracking-[0.18em] text-zinc-400">Estado administrativo</h3>
                         <div className="grid grid-cols-2 gap-2">
-                            {(["todos", "activos", "desactivados"] as StatusFilter[]).map((status) => (
+                            {(["todos", "activos", "desactivados"] as AdministrativeStatusFilter[]).map((status) => (
                                 <button
                                     key={status}
                                     type="button"
-                                    onClick={() => setStatusFilter(status)}
-                                    className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                                        statusFilter === status ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
-                                    }`}
+                                    onClick={() => setAdministrativeFilter(status)}
+                                    className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${administrativeFilter === status ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                        }`}
                                 >
-                                    {getStatusLabel(status)}
+                                    {getAdministrativeStatusLabel(status)}
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+
+                    <section className="space-y-3">
+                        <h3 className="text-sm font-black uppercase tracking-[0.18em] text-zinc-400">Disponibilidad</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                            {(["todas", "disponibles", "agotados"] as AvailabilityFilter[]).map((status) => (
+                                <button
+                                    key={status}
+                                    type="button"
+                                    onClick={() => setAvailabilityFilter(status)}
+                                    className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${availabilityFilter === status ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                        }`}
+                                >
+                                    {getAvailabilityLabel(status)}
                                 </button>
                             ))}
                         </div>
@@ -847,9 +929,8 @@ export default function ProductosPage() {
                                         key={category.id}
                                         type="button"
                                         onClick={() => toggleCategorySelection(category.id)}
-                                        className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                                            active ? "bg-orange-500 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
-                                        }`}
+                                        className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${active ? "bg-orange-500 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                            }`}
                                     >
                                         <span className="truncate">{category.nombre}</span>
                                         {active ? <span className="text-xs font-black">ON</span> : null}
@@ -867,9 +948,8 @@ export default function ProductosPage() {
                                     key={option.value}
                                     type="button"
                                     onClick={() => setSortField(option.value)}
-                                    className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
-                                        sortField === option.value ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
-                                    }`}
+                                    className={`rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors ${sortField === option.value ? "bg-zinc-900 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                        }`}
                                 >
                                     {option.label}
                                 </button>
@@ -879,18 +959,16 @@ export default function ProductosPage() {
                             <button
                                 type="button"
                                 onClick={() => setSortDirection("asc")}
-                                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
-                                    sortDirection === "asc" ? "bg-orange-500 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
-                                }`}
+                                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${sortDirection === "asc" ? "bg-orange-500 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                    }`}
                             >
                                 Ascendente
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setSortDirection("desc")}
-                                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
-                                    sortDirection === "desc" ? "bg-orange-500 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
-                                }`}
+                                className={`rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${sortDirection === "desc" ? "bg-orange-500 text-white" : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100"
+                                    }`}
                             >
                                 Descendente
                             </button>
@@ -1010,6 +1088,11 @@ export default function ProductosPage() {
                                 <Button type="button" variant="outline" className="h-11 rounded-2xl border-zinc-200" disabled={isSubmitting} onClick={() => void handleDuplicate(selectedItem)}>
                                     <Copy className="mr-2 h-4 w-4" />
                                     Duplicar
+                                </Button>
+                            ) : null}
+                            {selectedItem.type === "PRODUCTO" ? (
+                                <Button type="button" variant="outline" className="h-11 rounded-2xl border-zinc-200" disabled={isSubmitting} onClick={() => void handleToggleActive(selectedItem)}>
+                                    {selectedItem.activo ? "Desactivar" : "Activar"}
                                 </Button>
                             ) : null}
                             {selectedItem.type === "PRODUCTO" ? (

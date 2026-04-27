@@ -55,6 +55,17 @@ enum UnidadMedida {
   PORCION
 }
 
+enum ProductCatalogRole {
+  STANDARD
+  CONFIGURABLE_BASE
+  OPTION_PRODUCT
+}
+
+enum ProductOptionPriceMode {
+  ADD
+  OVERRIDE
+}
+
 enum TipoMovimientoStock {
   IN // Entrada (compra, abastecimiento)
   OUT // Salida (consumo por pedido)
@@ -290,6 +301,9 @@ model Product {
   // Precio
   precio Decimal @db.Decimal(10, 2)
 
+  // Rol dentro del catÃ¡logo configurable
+  catalogRole ProductCatalogRole @default(STANDARD)
+
   // Costo (opcional, para cálculo de rentabilidad)
   // Se puede calcular desde receta o ingresar manualmente
   costoUnitario Decimal? @db.Decimal(10, 2)
@@ -315,14 +329,103 @@ model Product {
   deletedAt DateTime? // Soft-delete
 
   // Relaciones
-  orderItems  OrderItem[]
-  recipeItems ProductRecipeItem[] // Receta (insumos requeridos)
-  promotions  PromotionProduct[]
+  orderItems             OrderItem[]
+  recipeItems            ProductRecipeItem[] // Receta (insumos requeridos)
+  promotions             PromotionProduct[]
+  optionGroupAssignments ProductOptionGroupAssignment[]
+  optionLinksAsBase      ProductOptionLink[] @relation("BaseProductOptionLinks")
+  optionVariants         ProductOption[]     @relation("OptionProduct")
 
   @@index([categoryId, activo])
   @@index([activo, disponible])
+  @@index([catalogRole, activo, disponible])
   @@index([deletedAt])
   @@map("products")
+}
+
+model ProductOptionGroup {
+  id String @id @default(cuid())
+
+  key       String
+  nombre    String
+  priceMode ProductOptionPriceMode
+  required  Boolean @default(true)
+  orden     Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments ProductOptionGroupAssignment[]
+  options     ProductOption[]
+
+  @@unique([key])
+  @@index([orden])
+  @@map("product_option_groups")
+}
+
+model ProductOptionGroupAssignment {
+  id String @id @default(cuid())
+
+  productId String
+  groupId   String
+  orden     Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  product Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  group   ProductOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, groupId])
+  @@index([productId, orden])
+  @@index([groupId])
+  @@map("product_option_group_assignments")
+}
+
+model ProductOption {
+  id String @id @default(cuid())
+
+  groupId          String
+  label            String
+  slug             String
+  optionProductId  String?
+  metadata         Json?
+  recipeMultiplier Decimal? @db.Decimal(10, 3)
+  activo           Boolean  @default(true)
+  orden            Int      @default(0)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  group         ProductOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  optionProduct Product?           @relation("OptionProduct", fields: [optionProductId], references: [id], onDelete: SetNull)
+  links         ProductOptionLink[]
+
+  @@unique([groupId, slug])
+  @@index([groupId, activo, deletedAt])
+  @@index([optionProductId])
+  @@map("product_options")
+}
+
+model ProductOptionLink {
+  id String @id @default(cuid())
+
+  baseProductId String
+  optionId      String
+  price         Decimal @db.Decimal(10, 2)
+  activo        Boolean @default(true)
+  orden         Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  baseProduct Product       @relation("BaseProductOptionLinks", fields: [baseProductId], references: [id], onDelete: Cascade)
+  option      ProductOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([baseProductId, optionId])
+  @@index([baseProductId, activo, orden])
+  @@index([optionId])
+  @@map("product_option_links")
 }
 
 // =============================================================================
@@ -454,6 +557,9 @@ model OrderItem {
 
   // Notas específicas del ítem (ej: "sin cebolla")
   notas String?
+
+  // Snapshot estructurado para productos configurables
+  configSnapshot Json?
 
   // Orden dentro del pedido
   orden Int @default(0)

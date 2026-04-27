@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
                             id: true,
                             nombreProduct: true,
                             cantidad: true,
+                            configSnapshot: true,
                         },
                         orderBy: {
                             orden: "asc",

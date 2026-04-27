@@ -4,12 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
 import { EstadoPedido } from "@prisma/client";
 import { requireEmployee } from "@/lib/serverAuth";
+import { getSystemNow } from "@/lib/system-time";
 
 export async function getEmployeeDashboardMetrics() {
     // F-04d: Requires active employee or admin session
     await requireEmployee();
     try {
-        const today = new Date();
+        const today = getSystemNow();
         const startOfToday = startOfDay(today);
         const endOfToday = endOfDay(today);
 

@@ -4,6 +4,7 @@ import { CategoriaEgreso, EstadoPagoEgreso, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
+import { getSystemNow } from "@/lib/system-time";
 import { requireAdmin } from "@/lib/serverAuth";
 
 export type EgresoFilter = {
@@ -23,7 +24,7 @@ export type EgresoPayload = {
     providerId?: string | null;
     metodoPago?: string;
     comprobante?: string;
-    estadoPago?: EstadoPagoEgreso;
+                        fecha: data.fecha || getSystemNow(),
     tipoComprobante?: string;
     numeroComprobante?: string;
     centroCosto?: string;
@@ -362,7 +363,7 @@ export async function updateEgreso(id: string, data: Partial<EgresoPayload>) {
                     ...(data.impuestos !== undefined ? { impuestos: data.impuestos } : {}),
                     ...(data.percepciones !== undefined ? { percepciones: data.percepciones } : {}),
                     ...providerPatch,
-                    updatedAt: new Date(),
+                        updatedAt: getSystemNow(),
                 },
                 include: {
                     provider: {
@@ -413,7 +414,7 @@ export async function deleteEgreso(id: string) {
         await prisma.$transaction(async (tx) => {
             await tx.egreso.update({
                 where: { id },
-                data: { deletedAt: new Date() },
+                    data: { deletedAt: getSystemNow() },
             });
 
             await tx.auditLog.create({

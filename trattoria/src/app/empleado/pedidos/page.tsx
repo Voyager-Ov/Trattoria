@@ -55,6 +55,7 @@ import { EstadoPedido } from "@prisma/client";
 import { getConfigs } from "@/app/actions/configActions";
 import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
 import { getOrderDeliveryLabel, getOrderDisplayAddress } from "@/lib/orderDelivery";
+import { formatSystemDateTime } from "@/lib/system-time";
 import { CashboxBlockedDialog } from "@/components/dashboard/cashbox/CashboxBlockedDialog";
 import type { OrderListItem } from "@/app/admin/dashboard/pedidos/components/pedido-shared";
 
@@ -67,14 +68,14 @@ type PaymentMethodOption = {
     sortOrder: number;
 };
 
-// Native formatter for local dates
 const formatDate = (date: string | Date) => {
-    return new Intl.DateTimeFormat('es-ES', {
+    return formatSystemDateTime(date, {
         day: 'numeric',
         month: 'short',
         hour: '2-digit',
-        minute: '2-digit'
-    }).format(new Date(date));
+        minute: '2-digit',
+        hour12: false,
+    });
 };
 
 const STATUS_CONFIG: Record<string, { label: string, color: string, icon: LucideIcon, border: string, bg: string, variant: string }> = {

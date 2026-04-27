@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { Prisma, UnidadMedida, TipoMovimientoStock, CategoriaEgreso } from "@prisma/client";
+import { getSystemNow } from "@/lib/system-time";
 
 // Helper to serialize Prisma Decimal objects
 function serializePrisma(obj: unknown): unknown {
@@ -201,13 +202,13 @@ export async function registerStockEntry(data: {
                     descripcion: `Compra de ${supply.nombre} - ${newQuantity} ${supply.unidad.toLowerCase()}`,
                     monto: montoTotal,
                     categoria: CategoriaEgreso.INSUMOS,
-                    fecha: new Date(),
+                    fecha: getSystemNow(),
                     proveedor: provider?.nombre || data.proveedor || null,
                     providerId: provider?.id || null,
                     metodoPago: "EFECTIVO",
                     estadoPago: "PAGADO",
-                    fechaPago: new Date(),
-                    fechaDevengado: new Date(),
+                    fechaPago: getSystemNow(),
+                    fechaDevengado: getSystemNow(),
                     neto: montoTotal,
                     impuestos: 0,
                     percepciones: 0,
@@ -222,7 +223,7 @@ export async function registerStockEntry(data: {
                         subtotal: montoTotal,
                         impuestos: 0,
                         total: montoTotal,
-                        fecha: new Date(),
+                        fecha: getSystemNow(),
                         estado: "RECIBIDO",
                         observaciones: data.motivo || "Compra generada desde entrada de stock",
                         egresoId: egreso.id,
@@ -309,7 +310,7 @@ export async function softDeleteSupply(id: string) {
     try {
         await prisma.supply.update({
             where: { id },
-            data: { deletedAt: new Date() },
+            data: { deletedAt: getSystemNow() },
         });
         revalidatePath("/empleado/insumos");
         return { success: true };

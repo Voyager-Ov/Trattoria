@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:analytics": "tsx scripts/seed-analytics-demo.ts",
+    "db:backfill-configurable": "tsx scripts/backfill-configurable-catalog.ts",
     "db:rebuild": "tsx scripts/db-rebuild.ts",
     "db:studio": "prisma studio",
     "seed:admin": "tsx scripts/seed-admin.ts",

@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { getOrderDeliveryLabel, getOrderDisplayAddress } from "@/lib/orderDelivery";
+import { formatSystemDateTime } from "@/lib/system-time";
 import { cn } from "@/lib/utils";
 
 import { updateOrderStatus, toggleOrderPayment, getOrderSuppliesAndCost } from "../actions";
@@ -57,12 +58,13 @@ interface PedidoDetailClientProps {
 
 const formatShortDate = (date: string | Date | null) => {
     if (!date) return "N/A";
-    return new Intl.DateTimeFormat('es-ES', {
+    return formatSystemDateTime(date, {
         day: 'numeric',
         month: 'short',
         hour: '2-digit',
-        minute: '2-digit'
-    }).format(new Date(date));
+        minute: '2-digit',
+        hour12: false,
+    });
 };
 
 export function PedidoDetailClient({ order: initialOrder }: PedidoDetailClientProps) {
@@ -230,6 +232,11 @@ export function PedidoDetailClient({ order: initialOrder }: PedidoDetailClientPr
                                         )}>
                                             <div className="flex-1">
                                                 <p className="font-bold text-zinc-900">{item.nombreProduct}</p>
+                                                {item.configSnapshot && Array.isArray(item.configSnapshot) && item.configSnapshot.length > 0 && (
+                                                    <p className="text-xs text-zinc-500 font-medium mt-0.5 leading-tight">
+                                                        {item.configSnapshot.map((opt: any) => `${opt.groupLabel}: ${opt.optionLabel}`).join(' · ')}
+                                                    </p>
+                                                )}
                                                 <p className="text-sm text-zinc-500 font-medium mt-0.5">
                                                     {item.cantidad} × ${Number(item.precioUnitario).toLocaleString('es-AR')}
                                                 </p>

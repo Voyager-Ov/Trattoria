@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { getOrderDeliveryLabel, getOrderDisplayAddress } from "@/lib/orderDelivery";
+import { formatSystemDateTime } from "@/lib/system-time";
 import { CashboxBlockedDialog } from "@/components/dashboard/cashbox/CashboxBlockedDialog";
 
 interface OrderItem {
@@ -56,6 +57,7 @@ interface OrderItem {
     cantidad: number;
     precioUnitario: number | string;
     subtotal: number | string;
+    configSnapshot?: any;
 }
 
 interface Order {
@@ -138,23 +140,25 @@ const STATUS_CONFIG: Record<string, { label: string, color: string, icon: Lucide
 
 const formatDate = (date: string | Date | null) => {
     if (!date) return "N/A";
-    return new Intl.DateTimeFormat('es-ES', {
+    return formatSystemDateTime(date, {
         day: 'numeric',
         month: 'long',
         year: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
-    }).format(new Date(date));
+        minute: '2-digit',
+        hour12: false,
+    });
 };
 
 const formatShortDate = (date: string | Date | null) => {
     if (!date) return "N/A";
-    return new Intl.DateTimeFormat('es-ES', {
+    return formatSystemDateTime(date, {
         day: 'numeric',
         month: 'short',
         hour: '2-digit',
-        minute: '2-digit'
-    }).format(new Date(date));
+        minute: '2-digit',
+        hour12: false,
+    });
 };
 
 export default function EmpleadoOrderDetailPage() {
@@ -419,6 +423,11 @@ export default function EmpleadoOrderDetailPage() {
                                         )}>
                                             <div className="flex-1">
                                                 <p className="font-bold text-zinc-900">{item.nombreProduct}</p>
+                                                {item.configSnapshot && Array.isArray(item.configSnapshot) && item.configSnapshot.length > 0 && (
+                                                    <p className="text-xs text-zinc-500 font-medium mt-0.5 leading-tight">
+                                                        {item.configSnapshot.map((opt: any) => `${opt.groupLabel}: ${opt.optionLabel}`).join(' · ')}
+                                                    </p>
+                                                )}
                                                 <p className="text-sm text-zinc-500 font-medium mt-0.5">
                                                     {item.cantidad} × ${Number(item.precioUnitario).toLocaleString('es-AR')}
                                                 </p>
