@@ -91,10 +91,26 @@ export function ProductCard({
     }
   }, [isExpanded]);
 
-  const handleSelectOption = (groupId: string, groupLabel: string, optionId: string, optionLabel: string, priceDelta: number) => {
+  const handleSelectOption = (
+    groupId: string,
+    groupLabel: string,
+    optionId: string,
+    optionLabel: string,
+    priceDelta: number,
+    recipeMultiplier?: number | null,
+    optionProductId?: string | null
+  ) => {
     setSelectedOptions(prev => ({
       ...prev,
-      [groupId]: { groupId, groupLabel, optionId, optionLabel, priceDelta }
+      [groupId]: { 
+        groupId, 
+        groupLabel, 
+        optionId, 
+        optionLabel, 
+        priceDelta,
+        recipeMultiplier,
+        optionProductId
+      }
     }));
   };
 
@@ -302,7 +318,15 @@ export function ProductCard({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleSelectOption(group.id, group.nombre, option.id, option.label, priceDelta);
+                              handleSelectOption(
+                                group.id,
+                                group.nombre,
+                                option.id,
+                                option.label,
+                                priceDelta,
+                                option.recipeMultiplier,
+                                option.optionProductId
+                              );
                             }}
                             className={cn(
                               "anim-option flex items-center gap-3 px-5 py-3 rounded-full border transition-all duration-300 ease-out",

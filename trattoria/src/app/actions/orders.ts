@@ -23,6 +23,8 @@ const PublicOrderSchema = z.object({
             optionId: z.string(),
             optionLabel: z.string(),
             priceDelta: z.number(),
+            recipeMultiplier: z.number().nullable().optional(),
+            optionProductId: z.string().nullable().optional(),
         })).optional(),
     })).min(1, "El pedido no puede estar vacío").max(30, "Máximo 30 ítems por pedido"),
     total: z.number(),
@@ -47,7 +49,15 @@ export async function createPublicOrder(data: {
         cantidad: number, 
         precioUnitario: number, 
         nombreProduct: string,
-        options?: { groupId: string, groupLabel: string, optionId: string, optionLabel: string, priceDelta: number }[]
+        options?: { 
+            groupId: string, 
+            groupLabel: string, 
+            optionId: string, 
+            optionLabel: string, 
+            priceDelta: number,
+            recipeMultiplier?: number | null,
+            optionProductId?: string | null
+        }[]
     }[];
     total: number;
 }) {

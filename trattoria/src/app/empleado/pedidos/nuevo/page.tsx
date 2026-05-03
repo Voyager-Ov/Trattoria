@@ -45,6 +45,15 @@ type CartItem = {
     cantidad: number;
     precio: number;
     type: "PRODUCTO" | "PROMOCION";
+    options?: {
+        groupId: string;
+        groupLabel: string;
+        optionId: string;
+        optionLabel: string;
+        priceDelta: number;
+        recipeMultiplier?: number | null;
+        optionProductId?: string | null;
+    }[];
 };
 
 type Customer = {
@@ -207,26 +216,54 @@ export default function NuevoPedidoPage() {
 
     const total = useMemo(() => cart.reduce((acc, item) => acc + item.precio * item.cantidad, 0), [cart]);
 
-    const addToCart = (item: MenuItem) => {
+    const addToCart = (
+        product: MenuItem,
+        options: {
+            groupId: string;
+            groupLabel: string;
+            optionId: string;
+            optionLabel: string;
+            priceDelta: number;
+            recipeMultiplier?: number | null;
+            optionProductId?: string | null;
+        }[] = []
+    ) => {
+        const optionsPrice = options.reduce((sum, opt) => sum + opt.priceDelta, 0);
+        const unitPrice = product.precio + optionsPrice;
+
+        let configuredName = product.nombre;
+        if (options.length > 0) {
+            configuredName = `${product.nombre} + ${options.map((o) => o.optionLabel).join(" + ")}`;
+        }
+
+        const configHash = options
+            .map((o) => o.optionId)
+            .sort()
+            .join("|");
+        const cartItemId = `${product.id}-${configHash}`;
+
         setCart((prev) => {
-            const existing = prev.find((cartItem) => cartItem.productId === item.id);
+            const existing = prev.find((cartItem) => cartItem.productId === cartItemId);
             if (existing) {
                 return prev.map((cartItem) =>
-                    cartItem.productId === item.id ? { ...cartItem, cantidad: cartItem.cantidad + 1 } : cartItem
+                    cartItem.productId === cartItemId ? { ...cartItem, cantidad: cartItem.cantidad + 1 } : cartItem
                 );
             }
 
             return [
                 ...prev,
                 {
-                    productId: item.id,
-                    nombre: item.nombre,
+                    productId: item.id, // item is MenuItem here, but logic needs careful name mapping
+                    id: cartItemId,
+                    nombre: configuredName,
                     cantidad: 1,
-                    precio: item.precio,
-                    type: item.type,
+                    precio: unitPrice,
+                    type: product.type,
+                    options,
                 },
             ];
         });
+        toast.success(`${product.nombre} agregado`);
     };
 
     const handleSelectMenuItem = (item: MenuItem) => {
@@ -264,6 +301,7 @@ export default function NuevoPedidoPage() {
                     nombreProduct: item.nombre,
                     cantidad: item.cantidad,
                     precioUnitario: item.precio,
+                    options: item.options,
                 })),
             });
 

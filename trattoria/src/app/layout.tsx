@@ -27,7 +27,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="es" className="h-full bg-background">
+        <html lang="es" className="h-full bg-background" suppressHydrationWarning>
             <body className={cn(inter.variable, outfit.variable, "min-h-[100dvh] font-sans antialiased bg-background")}>
                 <CartProvider>
                     {children}

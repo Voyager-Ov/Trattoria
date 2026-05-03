@@ -28,8 +28,15 @@ type OrderPromotionItem = {
     product?: OrderRecipeProduct | null;
 };
 
+// configSnapshot stored in the DB is an arbitrary JSON blob.
+// We only care about the recipeMultiplier field from each option selection.
+type ConfigSnapshotOption = {
+    recipeMultiplier?: number | null;
+};
+
 type OrderItemWithRecipes = {
     cantidad: Prisma.Decimal | number;
+    configSnapshot?: Prisma.JsonValue | null;
     product?: OrderRecipeProduct | null;
     promotion?: {
         items: OrderPromotionItem[];
@@ -40,8 +47,22 @@ type OrderWithRecipeItems = {
     items: OrderItemWithRecipes[];
 };
 
+// Derive the combined recipe multiplier for an order item by multiplying
+// every recipeMultiplier present in its configSnapshot together.
+// If no option has a multiplier, returns 1 (neutral).
+function getItemRecipeMultiplier(item: OrderItemWithRecipes): number {
+    if (!item.configSnapshot || !Array.isArray(item.configSnapshot)) return 1;
+
+    const options = item.configSnapshot as ConfigSnapshotOption[];
+    return options.reduce((acc, opt) => {
+        const m = typeof opt?.recipeMultiplier === "number" ? opt.recipeMultiplier : null;
+        return m !== null && m > 0 ? acc * m : acc;
+    }, 1);
+}
+
 // ============================================================================
 // HELPER: collect ingredients required by all items in an order
+// Now option-aware: applies recipeMultiplier from configSnapshot if present.
 // ============================================================================
 function buildInsumosMap(
     order: OrderWithRecipeItems,
@@ -50,10 +71,13 @@ function buildInsumosMap(
 
     for (const item of order.items) {
         const cantidadItem = Number(item.cantidad);
+        // Apply the combined recipe multiplier from options (e.g. 2.5 for "Familiar")
+        const recipeMultiplier = getItemRecipeMultiplier(item);
+        const effectiveCantidad = cantidadItem * recipeMultiplier;
 
         if (item.product && item.product.recipeItems.length > 0) {
             for (const recipeItem of item.product.recipeItems) {
-                const qty = Number(recipeItem.qtyPerUnit) * cantidadItem;
+                const qty = Number(recipeItem.qtyPerUnit) * effectiveCantidad;
                 const existing = map.get(recipeItem.supplyId);
                 if (existing) {
                     existing.cantidadTotal += qty;
@@ -66,6 +90,7 @@ function buildInsumosMap(
         if (item.promotion && item.promotion.items) {
             for (const promoItem of item.promotion.items) {
                 if (promoItem.product && promoItem.product.recipeItems.length > 0) {
+                    // Promotions don't support per-item option multipliers yet
                     const cantidadPromo = promoItem.quantity * cantidadItem;
                     for (const recipeItem of promoItem.product.recipeItems) {
                         const qty = Number(recipeItem.qtyPerUnit) * cantidadPromo;
@@ -371,7 +396,15 @@ export async function createOrder(data: {
         cantidad: number;
         precioUnitario: number;
         nombreProduct: string;
-        options?: { groupId: string; groupLabel: string; optionId: string; optionLabel: string; priceDelta: number }[];
+        options?: {
+            groupId: string;
+            groupLabel: string;
+            optionId: string;
+            optionLabel: string;
+            priceDelta: number;
+            recipeMultiplier?: number | null;
+            optionProductId?: string | null;
+        }[];
     }[];
     notas?: string;
 }) {
@@ -525,10 +558,13 @@ export async function getOrderSuppliesAndCost(orderId: string) {
 
         for (const item of order.items) {
             const cantidadItem = Number(item.cantidad);
+            // Apply option multiplier for accurate profitability (e.g. 2.5x for Familiar)
+            const recipeMultiplier = getItemRecipeMultiplier(item);
+            const effectiveCantidad = cantidadItem * recipeMultiplier;
 
             if (item.product && item.product.recipeItems.length > 0) {
                 for (const recipeItem of item.product.recipeItems) {
-                    const cantidadInsumo = Number(recipeItem.qtyPerUnit) * cantidadItem;
+                    const cantidadInsumo = Number(recipeItem.qtyPerUnit) * effectiveCantidad;
                     const supplyId = recipeItem.supplyId;
                     const costoUnitario = Number(recipeItem.supply.costoUnitario || 0);
 

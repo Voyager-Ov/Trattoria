@@ -34,7 +34,15 @@ interface CartItem {
     cantidad: number;
     precio: number;
     type: 'PRODUCTO' | 'PROMOCION';
-    options?: { groupId: string; groupLabel: string; optionId: string; optionLabel: string; priceDelta: number }[];
+    options?: { 
+        groupId: string; 
+        groupLabel: string; 
+        optionId: string; 
+        optionLabel: string; 
+        priceDelta: number;
+        recipeMultiplier?: number | null;
+        optionProductId?: string | null;
+    }[];
 }
 
 interface Customer {
@@ -601,13 +609,27 @@ interface AdminProductCardProps {
     onToggleExpand: () => void;
     onAddToCart: (
         product: AdminCatalogProduct,
-        options?: { groupId: string; groupLabel: string; optionId: string; optionLabel: string; priceDelta: number }[]
+        options?: { 
+            groupId: string; 
+            groupLabel: string; 
+            optionId: string; 
+            optionLabel: string; 
+            priceDelta: number;
+            recipeMultiplier?: number | null;
+            optionProductId?: string | null;
+        }[]
     ) => void;
 }
 
 function AdminProductCard({ product, title, displayPrice, variants, isExpanded, onToggleExpand, onAddToCart }: AdminProductCardProps) {
     const isExpandable = Boolean((variants && variants.length > 1) || (product.optionGroups && product.optionGroups.length > 0));
-    const [selectedOptions, setSelectedOptions] = useState<Record<string, { optionId: string; optionLabel: string; priceDelta: number }>>({});
+    const [selectedOptions, setSelectedOptions] = useState<Record<string, { 
+        optionId: string; 
+        optionLabel: string; 
+        priceDelta: number;
+        recipeMultiplier?: number | null;
+        optionProductId?: string | null;
+    }>>({});
     const cardTitle = title ?? product.nombre;
     const cardPrice = displayPrice ?? product.precio;
 
@@ -619,6 +641,8 @@ function AdminProductCard({ product, title, displayPrice, variants, isExpanded, 
             optionId: option.optionId,
             optionLabel: option.optionLabel,
             priceDelta: option.priceDelta,
+            recipeMultiplier: option.recipeMultiplier,
+            optionProductId: option.optionProductId,
         };
     });
 
@@ -805,6 +829,8 @@ function AdminProductCard({ product, title, displayPrice, variants, isExpanded, 
                                                                 optionId: option.id,
                                                                 optionLabel: option.label,
                                                                 priceDelta,
+                                                                recipeMultiplier: option.recipeMultiplier,
+                                                                optionProductId: option.optionProductId,
                                                             },
                                                         }))
                                                     }
@@ -852,12 +878,26 @@ interface AdminProductConfiguratorPanelProps {
     onOpenChange: (open: boolean) => void;
     onConfirm: (
         product: PublicCatalogProduct & { type: 'PRODUCTO' | 'PROMOCION', categoriaNombre: string },
-        options: { groupId: string; groupLabel: string; optionId: string; optionLabel: string; priceDelta: number }[]
+        options: { 
+            groupId: string; 
+            groupLabel: string; 
+            optionId: string; 
+            optionLabel: string; 
+            priceDelta: number;
+            recipeMultiplier?: number | null;
+            optionProductId?: string | null;
+        }[]
     ) => void;
 }
 
 function AdminProductConfiguratorPanel({ product, open, onOpenChange, onConfirm }: AdminProductConfiguratorPanelProps) {
-    const [selectedOptions, setSelectedOptions] = useState<Record<string, { optionId: string; optionLabel: string; priceDelta: number }>>({});
+    const [selectedOptions, setSelectedOptions] = useState<Record<string, { 
+        optionId: string; 
+        optionLabel: string; 
+        priceDelta: number;
+        recipeMultiplier?: number | null;
+        optionProductId?: string | null;
+    }>>({});
 
     if (!product) {
         return null;
@@ -871,6 +911,8 @@ function AdminProductConfiguratorPanel({ product, open, onOpenChange, onConfirm 
             optionId: option.optionId,
             optionLabel: option.optionLabel,
             priceDelta: option.priceDelta,
+            recipeMultiplier: option.recipeMultiplier,
+            optionProductId: option.optionProductId,
         };
     });
 
@@ -982,6 +1024,8 @@ function AdminProductConfiguratorPanel({ product, open, onOpenChange, onConfirm 
                                                             optionId: option.id,
                                                             optionLabel: option.label,
                                                             priceDelta,
+                                                            recipeMultiplier: option.recipeMultiplier,
+                                                            optionProductId: option.optionProductId,
                                                         },
                                                     }))
                                                 }

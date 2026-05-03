@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Prisma, UnidadMedida } from "@prisma/client";
+import { Prisma, UnidadMedida, ProductCatalogRole } from "@prisma/client";
 import {
     ChevronDown,
     ChevronUp,
@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { createProduct, deletePromotion, softDeleteProduct, toggleProductActive, toggleProductAvailability } from "./actions";
+import { createProduct, deletePromotion, softDeleteProduct, toggleProductActive, updateProductRole } from "./actions";
 import { CreateCategorySheet } from "./components/CreateCategorySheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -209,9 +209,12 @@ export default function ProductosPage() {
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
     const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);
+    const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
 
-    const refreshData = useCallback(async () => {
-        setIsLoading(true);
+    const refreshData = useCallback(async (options?: { silent?: boolean }) => {
+        if (!options?.silent) {
+            setIsLoading(true);
+        }
 
         try {
             const [menuRes, catRes] = await Promise.all([
@@ -270,7 +273,7 @@ export default function ProductosPage() {
     };
 
     const handleDuplicate = async (product: MenuItem) => {
-        setIsSubmitting(true);
+        setProcessingIds((prev) => new Set(prev).add(product.id));
 
         try {
             const res = await createProduct({
@@ -285,12 +288,16 @@ export default function ProductosPage() {
 
             if (res.success) {
                 toast.success("Producto duplicado");
-                await refreshData();
+                await refreshData({ silent: true });
             } else {
                 toast.error(res.error || "Error al duplicar");
             }
         } finally {
-            setIsSubmitting(false);
+            setProcessingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(product.id);
+                return next;
+            });
         }
     };
 
@@ -300,63 +307,82 @@ export default function ProductosPage() {
             return;
         }
 
-        if (item.type === "PRODUCTO") {
-            const res = await softDeleteProduct(item.id);
+        setProcessingIds((prev) => new Set(prev).add(item.id));
+        try {
+            if (item.type === "PRODUCTO") {
+                const res = await softDeleteProduct(item.id);
+                if (res.success) {
+                    toast.success("Producto eliminado");
+                    setSelectedItem((current) => (current?.id === item.id ? null : current));
+                    await refreshData({ silent: true });
+                } else {
+                    toast.error(res.error || "Error al eliminar");
+                }
+                return;
+            }
+
+            const res = await deletePromotion(item.id);
             if (res.success) {
-                toast.success("Producto eliminado");
+                toast.success("Promocion eliminada");
                 setSelectedItem((current) => (current?.id === item.id ? null : current));
-                await refreshData();
+                await refreshData({ silent: true });
             } else {
                 toast.error(res.error || "Error al eliminar");
             }
-            return;
-        }
-
-        const res = await deletePromotion(item.id);
-        if (res.success) {
-            toast.success("Promocion eliminada");
-            setSelectedItem((current) => (current?.id === item.id ? null : current));
-            await refreshData();
-        } else {
-            toast.error(res.error || "Error al eliminar");
-        }
-    };
-
-    const handleToggleAvailability = async (item: MenuItem) => {
-        if (item.type !== "PRODUCTO") {
-            return;
-        }
-
-        setIsSubmitting(true);
-        try {
-            const res = await toggleProductAvailability(item.id, item.activo);
-            if (res.success) {
-                toast.success(item.activo ? "Producto desactivado" : "Producto activado");
-                await refreshData();
-            } else {
-                toast.error(res.error || "Error al actualizar");
-            }
         } finally {
-            setIsSubmitting(false);
+            setProcessingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(item.id);
+                return next;
+            });
         }
     };
+
 
     const handleToggleActive = async (item: MenuItem) => {
         if (item.type !== "PRODUCTO") {
             return;
         }
 
-        setIsSubmitting(true);
+        setProcessingIds((prev) => new Set(prev).add(item.id));
         try {
             const res = await toggleProductActive(item.id, item.activo);
             if (res.success) {
                 toast.success(item.activo ? "Producto desactivado" : "Producto activado");
-                await refreshData();
+                await refreshData({ silent: true });
             } else {
                 toast.error(res.error || "Error al actualizar");
             }
         } finally {
-            setIsSubmitting(false);
+            setProcessingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(item.id);
+                return next;
+            });
+        }
+    };
+
+    const handleToggleRole = async (item: MenuItem, role: ProductCatalogRole) => {
+        if (item.type !== "PRODUCTO") {
+            return;
+        }
+
+        setProcessingIds((prev) => new Set(prev).add(item.id));
+        try {
+            const res = await updateProductRole(item.id, role);
+            if (res.success) {
+                const label = role === "OPTION_PRODUCT" ? "opcion" : "producto simple";
+                toast.success(`Producto convertido en ${label}`);
+                await refreshData({ silent: true });
+            } else {
+                toast.error(res.error || "Error al actualizar");
+            }
+        } finally {
+            setProcessingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(item.id);
+                return next;
+            });
         }
     };
 
@@ -764,7 +790,7 @@ export default function ProductosPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100 bg-white">
-                            {isLoading ? (
+                            {isLoading && menuItems.length === 0 ? (
                                 <tr>
                                     <td colSpan={9} className="py-20 text-center">
                                         <div className="flex flex-col items-center gap-2">
@@ -780,8 +806,14 @@ export default function ProductosPage() {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredAndSortedItems.map((item) => (
-                                    <tr key={item.id} className="transition-all duration-150 hover:bg-zinc-50/50">
+                                filteredAndSortedItems.map((item) => {
+                                    const isProcessing = processingIds.has(item.id);
+                                    return (
+                                        <tr
+                                            key={item.id}
+                                            className={`transition-all duration-300 ${isProcessing ? "cursor-wait opacity-40 grayscale pointer-events-none" : "hover:bg-zinc-50/50"
+                                                }`}
+                                        >
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col gap-2">
                                                 <Badge variant="secondary" className={`font-bold ${getTypeBadgeClasses(item.type)}`}>
@@ -874,10 +906,22 @@ export default function ProductosPage() {
                                                             {item.activo ? "Desactivar" : "Activar"}
                                                         </DropdownMenuItem>
                                                     ) : null}
-                                                    {item.type === "PRODUCTO" ? (
-                                                        <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => void handleToggleAvailability(item)}>
-                                                            {item.activo ? "Desactivar producto" : "Activar producto"}
-                                                        </DropdownMenuItem>
+                                                    {item.type === "PRODUCTO" && item.catalogRole !== "CONFIGURABLE_BASE" ? (
+                                                        <>
+                                                            <DropdownMenuSeparator className="bg-zinc-100" />
+                                                            <DropdownMenuLabel className="px-3 pb-1 text-[0.6rem] font-bold uppercase tracking-wider text-zinc-400">
+                                                                Tipo de producto
+                                                            </DropdownMenuLabel>
+                                                            {item.catalogRole === "OPTION_PRODUCT" ? (
+                                                                <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => void handleToggleRole(item, "STANDARD")}>
+                                                                    Convertir en simple
+                                                                </DropdownMenuItem>
+                                                            ) : (
+                                                                <DropdownMenuItem className="my-0.5 rounded-xl" onClick={() => void handleToggleRole(item, "OPTION_PRODUCT")}>
+                                                                    Convertir en opcion
+                                                                </DropdownMenuItem>
+                                                            )}
+                                                        </>
                                                     ) : null}
                                                     <DropdownMenuSeparator className="bg-zinc-100" />
                                                     <DropdownMenuItem
@@ -890,7 +934,8 @@ export default function ProductosPage() {
                                             </DropdownMenu>
                                         </td>
                                     </tr>
-                                ))
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
@@ -1122,25 +1167,49 @@ export default function ProductosPage() {
                                 </Link>
                             </Button>
                             {selectedItem.type === "PRODUCTO" ? (
-                                <Button type="button" variant="outline" className="h-11 rounded-2xl border-zinc-200" disabled={isSubmitting} onClick={() => void handleDuplicate(selectedItem)}>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-11 rounded-2xl border-zinc-200"
+                                    disabled={processingIds.has(selectedItem.id)}
+                                    onClick={() => void handleDuplicate(selectedItem)}
+                                >
                                     <Copy className="mr-2 h-4 w-4" />
                                     Duplicar
                                 </Button>
                             ) : null}
                             {selectedItem.type === "PRODUCTO" ? (
-                                <Button type="button" variant="outline" className="h-11 rounded-2xl border-zinc-200" disabled={isSubmitting} onClick={() => void handleToggleActive(selectedItem)}>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-11 rounded-2xl border-zinc-200"
+                                    disabled={processingIds.has(selectedItem.id)}
+                                    onClick={() => void handleToggleActive(selectedItem)}
+                                >
                                     {selectedItem.activo ? "Desactivar" : "Activar"}
                                 </Button>
                             ) : null}
-                            {selectedItem.type === "PRODUCTO" ? (
-                                <Button type="button" variant="outline" className="h-11 rounded-2xl border-zinc-200" disabled={isSubmitting} onClick={() => void handleToggleAvailability(selectedItem)}>
-                                    {selectedItem.activo ? "Desactivar producto" : "Activar producto"}
+                            {selectedItem.type === "PRODUCTO" && selectedItem.catalogRole !== "CONFIGURABLE_BASE" ? (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="h-11 rounded-2xl border-zinc-200"
+                                    disabled={processingIds.has(selectedItem.id)}
+                                    onClick={() =>
+                                        void handleToggleRole(
+                                            selectedItem,
+                                            selectedItem.catalogRole === "OPTION_PRODUCT" ? "STANDARD" : "OPTION_PRODUCT"
+                                        )
+                                    }
+                                >
+                                    {selectedItem.catalogRole === "OPTION_PRODUCT" ? "Convertir en simple" : "Convertir en opcion"}
                                 </Button>
                             ) : null}
                             <Button
                                 type="button"
                                 variant="outline"
                                 className="h-11 rounded-2xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                disabled={processingIds.has(selectedItem.id)}
                                 onClick={() => void handleDelete(selectedItem)}
                             >
                                 <Trash2 className="mr-2 h-4 w-4" />

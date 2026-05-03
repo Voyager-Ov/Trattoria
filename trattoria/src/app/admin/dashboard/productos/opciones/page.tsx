@@ -538,7 +538,7 @@ export default function OpcionesPage() {
                     )}
                 </div>
 
-                <div className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-2">
+                <div className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm">
                     <div className="mb-4 flex items-center justify-between">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Opciones</p>

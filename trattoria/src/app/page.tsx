@@ -27,8 +27,64 @@ async function getCategories() {
     }
 }
 
+export type SearchableProduct = {
+    id: string;
+    nombre: string;
+    descripcion: string | null;
+    imagen: string | null;
+    precio: number;
+    categorySlug: string;
+    categoryNombre: string;
+};
+
+async function getSearchableProducts(): Promise<SearchableProduct[]> {
+    try {
+        const products = await prisma.product.findMany({
+            where: {
+                activo: true,
+                disponible: true,
+                deletedAt: null,
+                catalogRole: { not: "OPTION_PRODUCT" },
+                category: {
+                    activo: true,
+                    deletedAt: null,
+                },
+            },
+            select: {
+                id: true,
+                nombre: true,
+                descripcion: true,
+                imagen: true,
+                precio: true,
+                category: {
+                    select: {
+                        slug: true,
+                        nombre: true,
+                    },
+                },
+            },
+            orderBy: { nombre: "asc" },
+        });
+        return products.map((p) => ({
+            id: p.id,
+            nombre: p.nombre,
+            descripcion: p.descripcion,
+            imagen: p.imagen,
+            precio: Number(p.precio),
+            categorySlug: p.category.slug,
+            categoryNombre: p.category.nombre,
+        }));
+    } catch (error) {
+        console.error("Error fetching searchable products:", error);
+        return [];
+    }
+}
+
 export default async function CatalogHomePage() {
-    const categories = await getCategories();
+    const [categories, products] = await Promise.all([
+        getCategories(),
+        getSearchableProducts(),
+    ]);
     const hasCatalogError = categories === null;
 
     return (
@@ -55,7 +111,7 @@ export default async function CatalogHomePage() {
                     </section>
                 ) : (
                     <Suspense fallback={null}>
-                        <CatalogSearch categories={categories} />
+                        <CatalogSearch categories={categories} products={products} />
                     </Suspense>
                 )}
             </main>
@@ -68,3 +124,4 @@ export default async function CatalogHomePage() {
         </div>
     );
 }
+

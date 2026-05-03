@@ -139,15 +139,13 @@ export async function toggleProductAvailability(id: string, currentStatus: boole
     try {
         await prisma.product.update({
             where: { id },
-            data: { activo: !currentStatus },
+            data: { disponible: !currentStatus },
         });
-        revalidatePath("/admin/dashboard/productos");
-        revalidatePath("/categoria/[slug]", "page");
-        revalidatePath("/");
+        revalidateProductSurfaces(id);
         return { success: true };
     } catch (error) {
         console.error("Error toggling product availability:", error);
-        return { success: false, error: "Error al cambiar el estado" };
+        return { success: false, error: "Error al cambiar la disponibilidad" };
     }
 }
 
@@ -162,6 +160,20 @@ export async function toggleProductActive(id: string, currentStatus: boolean) {
     } catch (error) {
         console.error("Error toggling product active state:", error);
         return { success: false, error: "Error al cambiar el estado del producto" };
+    }
+}
+
+export async function updateProductRole(id: string, role: ProductCatalogRole) {
+    try {
+        await prisma.product.update({
+            where: { id },
+            data: { catalogRole: role },
+        });
+        revalidateProductSurfaces(id);
+        return { success: true };
+    } catch (error) {
+        console.error("Error updating product role:", error);
+        return { success: false, error: "Error al actualizar el tipo de producto" };
     }
 }
 

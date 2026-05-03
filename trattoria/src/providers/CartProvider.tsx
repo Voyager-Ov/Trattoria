@@ -9,6 +9,8 @@ export interface ProductSelectionOption {
     optionId: string;
     optionLabel: string;
     priceDelta: number;
+    recipeMultiplier?: number | null;
+    optionProductId?: string | null;
 }
 
 export interface CartItem extends Product {

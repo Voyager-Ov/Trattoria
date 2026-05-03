@@ -42,7 +42,7 @@ export function CategoryCard({ category, productCount }: CategoryCardProps) {
             {category.nombre}
           </h3>
           
-          <p className="text-sm text-zinc-600 line-clamp-2 leading-relaxed font-medium">
+          <p className="text-sm text-zinc-600 line-clamp-3 leading-relaxed font-medium">
             {category.descripcion || "Explora nuestros productos de esta categoría."}
           </p>
           
