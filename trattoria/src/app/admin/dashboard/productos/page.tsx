@@ -60,6 +60,7 @@ interface MenuItem {
     updatedAt?: string | Date;
     deletedAt?: string | Date | null;
     costoUnitario?: number | null;
+    catalogRole?: string;
 }
 
 const SORT_OPTIONS: Array<{ value: SortField; label: string }> = [
@@ -100,6 +101,22 @@ function calculateMargin(precio: number, costo?: number | null) {
 
 function getTypeBadgeClasses(type: MenuItem["type"]) {
     return type === "PRODUCTO" ? "bg-blue-50 text-blue-600 border-none" : "bg-violet-50 text-violet-600 border-none";
+}
+
+function getCatalogRoleBadge(catalogRole?: string) {
+    if (!catalogRole || catalogRole === "STANDARD") {
+        return null;
+    }
+
+    if (catalogRole === "CONFIGURABLE_BASE") {
+        return { label: "Configurable", className: "bg-teal-50 text-teal-700 border-none" };
+    }
+
+    if (catalogRole === "OPTION_PRODUCT") {
+        return { label: "Opcion", className: "bg-amber-50 text-amber-700 border-none" };
+    }
+
+    return null;
 }
 
 function getAdministrativeStatusLabel(status: AdministrativeStatusFilter) {
@@ -427,34 +444,28 @@ export default function ProductosPage() {
                         <p className="text-sm font-medium text-zinc-500 md:text-base">Gestiona productos, promociones y categorias del menu.</p>
                     </div>
 
-                    <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-auto lg:grid-cols-3">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="h-11 justify-between rounded-2xl border-zinc-200 bg-white px-4 font-medium text-zinc-700 shadow-sm md:rounded-full md:px-5">
-                                    <span className="flex items-center gap-2">
-                                        <ListTree className="h-4 w-4" />
-                                        Categorias
-                                    </span>
-                                    <ChevronDown className="h-4 w-4 opacity-50" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56 rounded-2xl border-zinc-100 p-2 shadow-xl">
-                                <DropdownMenuLabel className="px-3 pb-2 text-[0.65rem] font-bold uppercase tracking-widest text-zinc-400">
-                                    Gestion de categorias
-                                </DropdownMenuLabel>
-                                <DropdownMenuItem asChild className="my-0.5 cursor-pointer rounded-xl">
-                                    <Link href="/admin/dashboard/productos/categorias">Ver todas</Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator className="bg-zinc-100" />
-                                <DropdownMenuItem
-                                    className="my-0.5 cursor-pointer rounded-xl focus:bg-orange-50 focus:text-orange-600"
-                                    onClick={() => setIsCategorySheetOpen(true)}
-                                >
-                                    <Plus className="mr-2 h-3.5 w-3.5" />
-                                    Nueva categoria
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                    <div className="flex w-full flex-wrap gap-3 lg:w-auto">
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="h-11 rounded-2xl border-zinc-200 bg-white px-4 font-medium text-zinc-700 shadow-sm md:rounded-full md:px-5"
+                        >
+                            <Link href="/admin/dashboard/productos/categorias" className="flex items-center gap-2">
+                                <ListTree className="h-4 w-4" />
+                                Categorias
+                            </Link>
+                        </Button>
+
+                        <Button
+                            asChild
+                            variant="outline"
+                            className="h-11 rounded-2xl border-zinc-200 bg-white px-4 font-medium text-zinc-700 shadow-sm md:rounded-full md:px-5"
+                        >
+                            <Link href="/admin/dashboard/productos/opciones" className="flex items-center gap-2">
+                                <ListTree className="h-4 w-4" />
+                                Opciones
+                            </Link>
+                        </Button>
 
                         <Button asChild className="h-11 rounded-2xl bg-zinc-900 text-white hover:bg-zinc-800 md:rounded-full">
                             <Link href="/admin/dashboard/productos/promociones/nueva">
@@ -649,6 +660,14 @@ export default function ProductosPage() {
                                                 <Badge variant="secondary" className={`font-bold ${getTypeBadgeClasses(item.type)}`}>
                                                     {item.type}
                                                 </Badge>
+                                                {item.type === "PRODUCTO" && getCatalogRoleBadge(item.catalogRole) ? (
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className={`font-bold ${getCatalogRoleBadge(item.catalogRole)?.className}`}
+                                                    >
+                                                        {getCatalogRoleBadge(item.catalogRole)?.label}
+                                                    </Badge>
+                                                ) : null}
                                                 <Badge variant="outline" className="border-zinc-200 text-zinc-500">
                                                     {item.categoria}
                                                 </Badge>
@@ -764,9 +783,19 @@ export default function ProductosPage() {
                                 filteredAndSortedItems.map((item) => (
                                     <tr key={item.id} className="transition-all duration-150 hover:bg-zinc-50/50">
                                         <td className="px-6 py-4">
-                                            <Badge variant="secondary" className={`font-bold ${getTypeBadgeClasses(item.type)}`}>
-                                                {item.type}
-                                            </Badge>
+                                            <div className="flex flex-col gap-2">
+                                                <Badge variant="secondary" className={`font-bold ${getTypeBadgeClasses(item.type)}`}>
+                                                    {item.type}
+                                                </Badge>
+                                                {item.type === "PRODUCTO" && getCatalogRoleBadge(item.catalogRole) ? (
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className={`font-bold ${getCatalogRoleBadge(item.catalogRole)?.className}`}
+                                                    >
+                                                        {getCatalogRoleBadge(item.catalogRole)?.label}
+                                                    </Badge>
+                                                ) : null}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
@@ -1022,6 +1051,14 @@ export default function ProductosPage() {
                                     <Badge variant="secondary" className={`font-bold ${getTypeBadgeClasses(selectedItem.type)}`}>
                                         {selectedItem.type}
                                     </Badge>
+                                    {selectedItem.type === "PRODUCTO" && getCatalogRoleBadge(selectedItem.catalogRole) ? (
+                                        <Badge
+                                            variant="secondary"
+                                            className={`font-bold ${getCatalogRoleBadge(selectedItem.catalogRole)?.className}`}
+                                        >
+                                            {getCatalogRoleBadge(selectedItem.catalogRole)?.label}
+                                        </Badge>
+                                    ) : null}
                                     <Badge variant="outline" className="border-zinc-200 text-zinc-500">
                                         {selectedItem.categoria}
                                     </Badge>

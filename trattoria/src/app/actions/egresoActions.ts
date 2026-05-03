@@ -24,7 +24,7 @@ export type EgresoPayload = {
     providerId?: string | null;
     metodoPago?: string;
     comprobante?: string;
-                        fecha: data.fecha || getSystemNow(),
+    estadoPago?: EstadoPagoEgreso;
     tipoComprobante?: string;
     numeroComprobante?: string;
     centroCosto?: string;

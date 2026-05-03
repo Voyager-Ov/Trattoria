@@ -1,0 +1,292 @@
+{
+  "meta": {
+    "feature_id": "configurable-products",
+    "document_type": "todos",
+    "status": "approved",
+    "created": "2026-05-02",
+    "version": "2.0"
+  },
+
+  "execution_batches": [
+    {
+      "batch": 1,
+      "label": "Backend — Server Actions",
+      "description": "Todas las funciones de persistencia. Sin UI. Un solo archivo tocado.",
+      "task_ids": ["T01", "T02", "T03", "T04", "T05", "T06", "T07", "T08", "T09", "T10", "T11"]
+    },
+    {
+      "batch": 2,
+      "label": "UI — Gestión de Opciones",
+      "description": "Página /opciones con CRUD de grupos y opciones. Archivo nuevo.",
+      "task_ids": ["T12"]
+    },
+    {
+      "batch": 3,
+      "label": "UI — Formulario Nuevo Producto",
+      "description": "Extender /nuevo con selector de tipo y sección de opciones.",
+      "task_ids": ["T13"]
+    },
+    {
+      "batch": 4,
+      "label": "UI — Página de Edición",
+      "description": "Crear /[id] con precarga y actualización.",
+      "task_ids": ["T14"]
+    },
+    {
+      "batch": 5,
+      "label": "Integración — Lista y API",
+      "description": "Badges, navegación y API route. Dos archivos en paralelo.",
+      "task_ids": ["T15", "T16"]
+    }
+  ],
+
+  "tasks": [
+    {
+      "id": "T01",
+      "title": "Agregar types ConfigurableProductPayload y ProductOptionGroupWithOptions",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": true,
+      "depends_on": [],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["Type ConfigurableProductPayload exportado", "Type ProductOptionGroupWithOptions exportado"],
+      "exit_criteria": "Los types compilan sin error y son importables desde otros archivos."
+    },
+    {
+      "id": "T02",
+      "title": "Agregar getProductOptionGroups()",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": true,
+      "depends_on": ["T01"],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["Función getProductOptionGroups() exportada"],
+      "exit_criteria": "Retorna { success: true, data: ProductOptionGroupWithOptions[] } con options filtradas por deletedAt null y _count.assignments."
+    },
+    {
+      "id": "T03",
+      "title": "Agregar createProductOptionGroup() y updateProductOptionGroup()",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": true,
+      "depends_on": ["T01"],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["Función createProductOptionGroup() con P2002 handling", "Función updateProductOptionGroup() sin update de key"],
+      "exit_criteria": "Create: P2002 retorna error amigable. Update: key inmutable. Ambos revalidan /opciones."
+    },
+    {
+      "id": "T04",
+      "title": "Agregar deleteProductOptionGroup()",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": true,
+      "depends_on": ["T01"],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["Función deleteProductOptionGroup() con guard de assignments"],
+      "exit_criteria": "Si _count.assignments > 0, retorna error 'No se puede eliminar: el grupo tiene X productos asignados'. Si 0, hard delete."
+    },
+    {
+      "id": "T05",
+      "title": "Agregar createProductOption() y updateProductOption()",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": true,
+      "depends_on": ["T01"],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["Función createProductOption() con P2002 en [groupId, slug]", "Función updateProductOption() sin update de slug"],
+      "exit_criteria": "Create: P2002 retorna error amigable. Update: slug inmutable."
+    },
+    {
+      "id": "T06",
+      "title": "Agregar softDeleteProductOption()",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": true,
+      "depends_on": ["T01"],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["Función softDeleteProductOption()"],
+      "exit_criteria": "Sets deletedAt = new Date(). No hard delete. Revalida /opciones."
+    },
+    {
+      "id": "T07",
+      "title": "Agregar getOptionProductCandidates()",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": true,
+      "depends_on": [],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["Función getOptionProductCandidates()"],
+      "exit_criteria": "Retorna productos con catalogRole=OPTION_PRODUCT, activo=true, deletedAt=null. Shape: { id, nombre }[]."
+    },
+    {
+      "id": "T08",
+      "title": "Agregar getProductWithConfiguration()",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": true,
+      "depends_on": [],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["Función getProductWithConfiguration(id)"],
+      "exit_criteria": "Retorna producto con category, recipeItems+supply, optionGroupAssignments+group+options, optionLinksAsBase+option. Usa serializePrisma()."
+    },
+    {
+      "id": "T09",
+      "title": "Agregar createConfigurableProduct()",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": false,
+      "depends_on": ["T01"],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["Función createConfigurableProduct() con $transaction"],
+      "exit_criteria": "Transacción crea product + recipeItems + groupAssignments + optionLinks. P2002 en nombre retorna error amigable. Usa revalidateProductSurfaces() EXISTENTE. Timeout: { maxWait: 10000, timeout: 20000 }."
+    },
+    {
+      "id": "T10",
+      "title": "Agregar updateConfigurableProduct()",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": false,
+      "depends_on": ["T01"],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["Función updateConfigurableProduct() con $transaction delete-recreate"],
+      "exit_criteria": "Transacción: update product, deleteMany+createMany para recipeItems, assignments, links. Usa revalidateProductSurfaces() EXISTENTE."
+    },
+    {
+      "id": "T11",
+      "title": "Verificar export de getSupplies() — CONFIRMADO NO-OP",
+      "owner_role": "backend",
+      "status": "done",
+      "parallelizable": true,
+      "depends_on": [],
+      "file": "src/app/admin/dashboard/productos/actions.ts",
+      "outputs": ["getSupplies() ya está exportada en línea 543 de actions.ts"],
+      "exit_criteria": "Confirmado: ya es importable. No se requiere cambio."
+    },
+    {
+      "id": "T12",
+      "title": "Crear página /opciones con gestión de grupos y opciones",
+      "owner_role": "frontend",
+      "status": "pending",
+      "parallelizable": false,
+      "depends_on": ["T02", "T03", "T04", "T05", "T06", "T07"],
+      "file": "src/app/admin/dashboard/productos/opciones/page.tsx (NEW)",
+      "outputs": [
+        "Página client component con layout master-detail (stacked en mobile)",
+        "Panel izq: lista grupos con badges (nombre, key, priceMode, required, count opciones)",
+        "Panel der: opciones del grupo seleccionado (toggle, label, slug, badge producto vinculado)",
+        "Sheet crear/editar grupo (key solo en create, nombre, priceMode select, switch required, input orden)",
+        "Sheet crear/editar opción (label, slug auto-generado solo en create, dropdown producto vinculado, recipeMultiplier disabled si hay producto, switch activo)",
+        "Empty states: sin grupos, sin opciones, sin selección",
+        "Slugify automático: label → slug (algoritmo de createCategory)"
+      ],
+      "data_refresh_pattern": "Después de cada mutación exitosa (create/update/delete), llamar a getProductOptionGroups() de nuevo para refrescar la UI. NO depender de revalidatePath porque es un client component con server actions.",
+      "exit_criteria": "Admin puede: crear grupo → agregar opciones → editar grupo/opción → soft-delete opción → eliminar grupo sin assignments. Todos los cambios persisten en DB y se reflejan en UI tras re-fetch."
+    },
+    {
+      "id": "T13",
+      "title": "Extender formulario /nuevo con selector de tipo y sección de opciones",
+      "owner_role": "frontend",
+      "status": "pending",
+      "parallelizable": false,
+      "depends_on": ["T02", "T09"],
+      "file": "src/app/admin/dashboard/productos/nuevo/page.tsx (MODIFY)",
+      "outputs": [
+        "Radio group tipo producto: Simple (STANDARD) / Configurable (CONFIGURABLE_BASE) / Opción (OPTION_PRODUCT)",
+        "Estado groupAssignments: GroupAssignmentState[] con OptionLinkState[] por grupo",
+        "Carga getProductOptionGroups() en useEffect inicial",
+        "Sección opciones (solo CONFIGURABLE_BASE): dropdown multi-select grupos, expandible con opciones (toggle, precio, orden)",
+        "OPTION_PRODUCT: badge informativo, sin sección opciones",
+        "Submit STANDARD → createProductWithRecipe (existente), CONFIGURABLE_BASE/OPTION_PRODUCT → createConfigurableProduct (nuevo)",
+        "Banner 'sin grupos' si no hay grupos en el sistema"
+      ],
+      "client_validations": {
+        "STANDARD": ["nombre required", "categoryId required", "precio > 0"],
+        "CONFIGURABLE_BASE": ["nombre required", "categoryId required", "precio >= 0", "Al menos 1 grupo asignado", "Cada grupo asignado debe tener al menos 1 opción con activo=true", "Cada opción activa debe tener price >= 0"],
+        "OPTION_PRODUCT": ["nombre required", "categoryId required", "precio >= 0"]
+      },
+      "regression_note": "CreateProductSheet.tsx (quick create) NO se modifica. Sigue creando STANDARD via createProductWithRecipe. Verificar que sigue funcionando.",
+      "exit_criteria": "Crear producto STANDARD funciona idéntico al actual (regresión). Crear CONFIGURABLE_BASE persiste product + assignments + links con validaciones. Crear OPTION_PRODUCT persiste product con catalogRole correcto. CreateProductSheet sigue funcionando sin cambios."
+    },
+    {
+      "id": "T14",
+      "title": "Extender página de edición existente /[id]/editar con soporte configurable",
+      "owner_role": "frontend",
+      "status": "pending",
+      "parallelizable": false,
+      "depends_on": ["T08", "T10", "T13"],
+      "file": "src/app/admin/dashboard/productos/[id]/editar/page.tsx (MODIFY — YA EXISTE, 621 líneas)",
+      "discovery_note": "HALLAZGO: Ya existe una página de edición completa en [id]/editar/page.tsx (621 líneas). Usa use(params) para obtener id, carga getProductById + getCategories + getSupplies, tiene formulario completo con receta. La ruta /[id]/editar ya está linkeada desde la lista (línea 1079). NO crear archivo nuevo, EXTENDER el existente.",
+      "current_page_pattern": {
+        "params": "use(params) — NO useParams()",
+        "data_loading": "getProductById(id) + getCategories() + getSupplies() en Promise.all",
+        "submit": "updateProductWithRecipe(id, formData, recipeItems)",
+        "imports_from": "../../actions (2 niveles arriba)"
+      },
+      "outputs": [
+        "Agregar import de getProductWithConfiguration, updateConfigurableProduct, getProductOptionGroups",
+        "Agregar estado catalogRole con radio group selector (mismo que T13)",
+        "Agregar estado groupAssignments: GroupAssignmentState[]",
+        "Cambiar loadData: usar getProductWithConfiguration(id) en vez de getProductById(id)",
+        "Agregar carga de getProductOptionGroups() al Promise.all",
+        "Pre-poblar catalogRole, groupAssignments y optionLinks desde los datos cargados",
+        "Sección opciones condicionalmente visible (solo CONFIGURABLE_BASE)",
+        "Submit: STANDARD → updateProductWithRecipe (existente), CONFIGURABLE_BASE/OPTION_PRODUCT → updateConfigurableProduct (nuevo)",
+        "Cambio de tipo CONFIGURABLE_BASE → STANDARD con window.confirm si hay assignments"
+      ],
+      "pre_populate_algorithm": [
+        "1. Reemplazar getProductById(id) con getProductWithConfiguration(id) en loadData",
+        "2. Agregar getProductOptionGroups() al Promise.all",
+        "3. Setear catalogRole = product.catalogRole (default STANDARD para backward compat)",
+        "4. Setear recipeItems como ya lo hace (sin cambios)",
+        "5. Para cada product.optionGroupAssignments: crear GroupAssignmentState con group data del include",
+        "6. Para cada grupo asignado, cruzar sus options con product.optionLinksAsBase: si hay link → activo=true + price del link. Si no hay link → activo=false + price=0",
+        "7. allGroups (de getProductOptionGroups) que NO están en assignments quedan disponibles en el multi-select"
+      ],
+      "exit_criteria": "Editar producto STANDARD funciona idéntico al actual (regresión). Editar CONFIGURABLE_BASE pre-popula todo. Cambiar precio de opción persiste. Quitar grupo elimina assignments. Cambios reflejados en catálogo público."
+    },
+    {
+      "id": "T15",
+      "title": "Agregar catalogRole a API route y tipo MenuItem",
+      "owner_role": "backend",
+      "status": "pending",
+      "parallelizable": true,
+      "depends_on": [],
+      "files": [
+        "src/app/api/admin/dashboard/productos/route.ts (MODIFY: agregar catalogRole: p.catalogRole en normalizedProducts línea 90)",
+        "src/app/admin/dashboard/productos/page.tsx (MODIFY: agregar catalogRole?: string en interface MenuItem línea 47-63)"
+      ],
+      "outputs": ["API devuelve catalogRole por producto", "MenuItem type incluye catalogRole"],
+      "exit_criteria": "fetch(/api/admin/dashboard/productos) retorna catalogRole para cada producto."
+    },
+    {
+      "id": "T16",
+      "title": "Agregar badges de catalogRole y botón Opciones en lista",
+      "owner_role": "frontend",
+      "status": "pending",
+      "parallelizable": false,
+      "depends_on": ["T15"],
+      "file": "src/app/admin/dashboard/productos/page.tsx (MODIFY)",
+      "outputs": [
+        "Badge por producto: CONFIGURABLE_BASE → 'Configurable' teal, OPTION_PRODUCT → 'Opción' amber, STANDARD → sin badge",
+        "DropdownMenu 'Opciones' en header (mismo patrón que Categorías línea 431-457) con link a /opciones"
+      ],
+      "exit_criteria": "Lista muestra badges correctos. Botón 'Opciones' navega a /opciones."
+    }
+  ],
+
+  "ac_traceability": {
+    "AC-01": ["T03", "T12"],
+    "AC-02": ["T04", "T12"],
+    "AC-03": ["T05", "T12"],
+    "AC-04": ["T09", "T13"],
+    "AC-05": ["T13 (catalogRole=OPTION_PRODUCT)"],
+    "AC-06": ["T12 (recipeMultiplier disabled)"],
+    "AC-07": ["Out of scope — order processing, no admin change needed"],
+    "AC-08": ["T13 (regression: STANDARD unchanged)"],
+    "AC-09": ["T14 (pre-populate edit form)"],
+    "AC-10": ["T10", "T14"],
+    "AC-11": ["Out of scope — already implemented in ProductCard"],
+    "AC-12": ["T15", "T16"],
+    "AC-13": ["T16"]
+  }
+}

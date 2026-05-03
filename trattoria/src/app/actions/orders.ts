@@ -130,7 +130,7 @@ export async function createPublicOrder(data: {
                             cantidad: item.cantidad,
                             precioUnitario: item.precioUnitario,
                             subtotal: item.subtotal,
-                            configSnapshot: item.options.length > 0 ? (item.options as any) : null,
+                            ...(item.options.length > 0 ? { configSnapshot: item.options as any } : {}),
                             orden: index
                         }))
                     }

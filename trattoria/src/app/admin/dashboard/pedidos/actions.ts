@@ -371,6 +371,7 @@ export async function createOrder(data: {
         cantidad: number;
         precioUnitario: number;
         nombreProduct: string;
+        options?: { groupId: string; groupLabel: string; optionId: string; optionLabel: string; priceDelta: number }[];
     }[];
     notas?: string;
 }) {
@@ -448,6 +449,7 @@ export async function createOrder(data: {
                             cantidad: item.cantidad,
                             precioUnitario: item.precioUnitario,
                             subtotal: item.cantidad * item.precioUnitario,
+                            ...(item.options && item.options.length > 0 ? { configSnapshot: item.options } : {}),
                         };
                     }),
                 },
@@ -589,5 +591,91 @@ export async function getOrderSuppliesAndCost(orderId: string) {
     } catch (error) {
         console.error("Error getting order supplies:", error);
         return { success: false, error: "Error al obtener detalles de insumos" };
+    }
+}
+
+export async function getAdminCatalog() {
+    try {
+        const { publicCatalogProductInclude, mapPublicCatalogProduct } = await import("@/lib/catalog-config");
+        const [categories, productsRecord, promotions] = await Promise.all([
+            prisma.category.findMany({
+                where: { deletedAt: null },
+                orderBy: { orden: 'asc' }
+            }),
+            prisma.product.findMany({
+                where: { deletedAt: null, activo: true },
+                include: {
+                    ...publicCatalogProductInclude,
+                    category: true
+                },
+                orderBy: { createdAt: 'desc' }
+            }),
+            prisma.promotion.findMany({
+                where: { deletedAt: null, isActive: true },
+                include: { 
+                    categories: true,
+                    items: {
+                        include: {
+                            product: true
+                        }
+                    }
+                },
+                orderBy: { createdAt: 'desc' }
+            })
+        ]);
+
+        const products = productsRecord.map(p => ({
+            ...mapPublicCatalogProduct(p),
+            type: 'PRODUCTO' as const,
+            categoriaId: p.categoryId,
+            categoriaNombre: p.category.nombre,
+            categoriaSlug: p.category.slug
+        }));
+
+        const promos = promotions.map(p => {
+            const totalOriginal = p.items.reduce((sum, item) => 
+                sum + (Number(item.product.precio) * item.quantity), 0);
+            
+            const finalPrice = p.discountType === 'PERCENTAGE'
+                ? totalOriginal * (1 - p.discountValue / 100)
+                : totalOriginal - p.discountValue;
+
+            const categoryIds = p.categories.map((category) => category.id);
+            const categoryNames = p.categories.map((category) => category.nombre);
+            const categorySlugs = p.categories.map((category) => category.slug);
+            const primaryCategoryId = categoryIds[0] || 'promo';
+            const primaryCategoryName = categoryNames[0] || 'Promociones';
+            const primaryCategorySlug = categorySlugs[0] || 'promociones';
+
+            return {
+                id: p.id,
+                nombre: p.name,
+                descripcion: p.description,
+                imagen: p.imagen,
+                precio: finalPrice,
+                stockActual: 999,
+                catalogRole: 'STANDARD' as const,
+                optionGroups: [],
+                minSelectablePrice: finalPrice,
+                maxSelectablePrice: finalPrice,
+                type: 'PROMOCION' as const,
+                categoriaId: primaryCategoryId,
+                categoriaNombre: primaryCategoryName,
+                categoriaSlug: primaryCategorySlug,
+                categoryIds
+            };
+        });
+
+        return {
+            success: true,
+            data: {
+                categories: serializePrisma(categories),
+                products: serializePrisma(products),
+                promotions: serializePrisma(promos)
+            }
+        };
+    } catch (error) {
+        console.error("Error fetching catalog:", error);
+        return { success: false, error: "Error al cargar el catálogo" };
     }
 }

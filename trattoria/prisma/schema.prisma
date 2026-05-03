@@ -333,8 +333,8 @@ model Product {
   recipeItems            ProductRecipeItem[] // Receta (insumos requeridos)
   promotions             PromotionProduct[]
   optionGroupAssignments ProductOptionGroupAssignment[]
-  optionLinksAsBase      ProductOptionLink[] @relation("BaseProductOptionLinks")
-  optionVariants         ProductOption[]     @relation("OptionProduct")
+  optionLinksAsBase      ProductOptionLink[]            @relation("BaseProductOptionLinks")
+  optionVariants         ProductOption[]                @relation("OptionProduct")
 
   @@index([categoryId, activo])
   @@index([activo, disponible])
@@ -349,8 +349,8 @@ model ProductOptionGroup {
   key       String
   nombre    String
   priceMode ProductOptionPriceMode
-  required  Boolean @default(true)
-  orden     Int     @default(0)
+  required  Boolean                @default(true)
+  orden     Int                    @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -368,7 +368,7 @@ model ProductOptionGroupAssignment {
 
   productId String
   groupId   String
-  orden     Int @default(0)
+  orden     Int    @default(0)
 
   createdAt DateTime @default(now())
 
@@ -397,8 +397,8 @@ model ProductOption {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  group         ProductOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  optionProduct Product?           @relation("OptionProduct", fields: [optionProductId], references: [id], onDelete: SetNull)
+  group         ProductOptionGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  optionProduct Product?            @relation("OptionProduct", fields: [optionProductId], references: [id], onDelete: SetNull)
   links         ProductOptionLink[]
 
   @@unique([groupId, slug])
@@ -460,13 +460,13 @@ model Order {
   total     Decimal @default(0) @db.Decimal(10, 2)
 
   // Pago
-  cobrado    Boolean   @default(false)
-  cobradoEn  DateTime?
-  canalVenta String?
-  deliveryFee Decimal  @default(0) @db.Decimal(10, 2)
-  costoCanal  Decimal  @default(0) @db.Decimal(10, 2)
-  promisedAt  DateTime?
-  deliveredAt DateTime?
+  cobrado             Boolean   @default(false)
+  cobradoEn           DateTime?
+  canalVenta          String?
+  deliveryFee         Decimal   @default(0) @db.Decimal(10, 2)
+  costoCanal          Decimal   @default(0) @db.Decimal(10, 2)
+  promisedAt          DateTime?
+  deliveredAt         DateTime?
   metodoPago          String? // Snapshot del metodo real con el que se cobro
   metodoPagoPreferido String? // Preferencia previa al cobro
 
@@ -489,8 +489,8 @@ model Order {
   deletedAt     DateTime? // Soft-delete (solo para cancelados)
 
   // Relaciones
-  items  OrderItem[]
-  events OrderEvent[]
+  items      OrderItem[]
+  events     OrderEvent[]
   cobrosCaja CobroCaja[]
 
   @@index([estado, updatedAt(sort: Desc)])
@@ -783,7 +783,7 @@ model Egreso {
   caja   Caja?   @relation(fields: [cajaId], references: [id], onDelete: SetNull)
 
   // Pago
-  metodoPago  String  @default("EFECTIVO")
+  metodoPago  String           @default("EFECTIVO")
   comprobante String? // URL o path de comprobante
   estadoPago  EstadoPagoEgreso @default(PAGADO)
 
@@ -796,9 +796,9 @@ model Egreso {
   fechaVencimiento  DateTime?
   periodoDesde      DateTime?
   periodoHasta      DateTime?
-  neto              Decimal? @db.Decimal(10, 2)
-  impuestos         Decimal? @db.Decimal(10, 2)
-  percepciones      Decimal? @db.Decimal(10, 2)
+  neto              Decimal?  @db.Decimal(10, 2)
+  impuestos         Decimal?  @db.Decimal(10, 2)
+  percepciones      Decimal?  @db.Decimal(10, 2)
 
   // Auditoría
   createdAt DateTime  @default(now())
@@ -829,8 +829,8 @@ model Caja {
   fechaApertura DateTime  @default(now())
   fechaCierre   DateTime?
 
-  montoInicialSugerido Decimal @default(0) @db.Decimal(10, 2)
-  montoInicialReal     Decimal @default(0) @db.Decimal(10, 2)
+  montoInicialSugerido Decimal  @default(0) @db.Decimal(10, 2)
+  montoInicialReal     Decimal  @default(0) @db.Decimal(10, 2)
   efectivoContado      Decimal? @db.Decimal(10, 2)
   diferenciaEfectivo   Decimal? @db.Decimal(10, 2)
 
@@ -861,13 +861,13 @@ model CobroCaja {
   usuarioId String
   usuario   User   @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
 
-  monto      Decimal @db.Decimal(10, 2)
+  monto      Decimal         @db.Decimal(10, 2)
   metodoPago String
   estado     EstadoCobroCaja @default(VIGENTE)
 
-  fechaCobro     DateTime  @default(now())
-  fechaAnulacion DateTime?
-  motivoAnulacion String? @db.Text
+  fechaCobro      DateTime  @default(now())
+  fechaAnulacion  DateTime?
+  motivoAnulacion String?   @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

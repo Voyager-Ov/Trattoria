@@ -29,23 +29,71 @@ async function loadCategoryPageData(slug: string): Promise<CategoryPageData> {
             return { status: "not-found" };
         }
 
-        const products = await prisma.product.findMany({
-            where: {
-                categoryId: category.id,
-                activo: true,
-                disponible: true,
-                deletedAt: null,
-                catalogRole: {
-                    not: "OPTION_PRODUCT",
+        const [products, promotions] = await Promise.all([
+            prisma.product.findMany({
+                where: {
+                    categoryId: category.id,
+                    activo: true,
+                    disponible: true,
+                    deletedAt: null,
+                    catalogRole: {
+                        not: "OPTION_PRODUCT",
+                    },
                 },
-            },
-            include: publicCatalogProductInclude,
-            orderBy: {
-                orden: "asc",
-            },
+                include: publicCatalogProductInclude,
+                orderBy: {
+                    orden: "asc",
+                },
+            }),
+            prisma.promotion.findMany({
+                where: {
+                    deletedAt: null,
+                    isActive: true,
+                    categories: {
+                        some: { id: category.id },
+                    },
+                },
+                include: {
+                    categories: true,
+                    items: {
+                        include: {
+                            product: true,
+                        },
+                    },
+                },
+                orderBy: {
+                    createdAt: "desc",
+                },
+            }),
+        ]);
+
+        const normalizedProducts = products.map(mapPublicCatalogProduct);
+        const normalizedPromotions: PublicCatalogProduct[] = promotions.map((promotion) => {
+            const totalOriginal = promotion.items.reduce(
+                (sum, item) => sum + Number(item.product.precio) * item.quantity,
+                0
+            );
+
+            const finalPrice =
+                promotion.discountType === "PERCENTAGE"
+                    ? totalOriginal * (1 - Number(promotion.discountValue) / 100)
+                    : totalOriginal - Number(promotion.discountValue);
+
+            return {
+                id: promotion.id,
+                nombre: promotion.name,
+                descripcion: promotion.description,
+                imagen: promotion.imagen,
+                precio: finalPrice,
+                stockActual: 999,
+                catalogRole: "STANDARD",
+                optionGroups: [],
+                minSelectablePrice: finalPrice,
+                maxSelectablePrice: finalPrice,
+            };
         });
 
-        return { status: "ok", category, products: products.map(mapPublicCatalogProduct) };
+        return { status: "ok", category, products: [...normalizedProducts, ...normalizedPromotions] };
     } catch (error) {
         console.error(`Error fetching category page for slug "${slug}":`, error);
         return { status: "error" };

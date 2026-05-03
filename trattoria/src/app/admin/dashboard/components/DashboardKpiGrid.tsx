@@ -15,46 +15,46 @@ export function DashboardKpiGrid({ loading, metrics }: DashboardKpiGridProps) {
             <DashboardMetricCard
                 title="Ingresos de Hoy"
                 value={loading ? "..." : formatCurrency(metrics?.todayRevenue ?? 0)}
-                description="Pedidos cobrados hoy"
+                description="Total de ventas cobradas y registradas en caja el día de hoy"
                 headerColor="bg-zinc-900"
                 icon={<SpectrumIcon variant="diamond" className="h-5 w-5" />}
             />
             <DashboardMetricCard
                 title="Pedidos de Hoy"
                 value={loading ? "..." : metrics?.todayOrders ?? 0}
-                description="Ingresados en el dia"
+                description="Cantidad total de pedidos nuevos ingresados al sistema"
                 headerColor="bg-orange-500"
                 icon={<SpectrumIcon variant="cube" className="h-5 w-5" />}
             />
             <DashboardMetricCard
                 title="Ticket Promedio"
                 value={loading ? "..." : formatCurrency(metrics?.todayAverageTicket ?? 0)}
-                description="Sobre ventas cobradas hoy"
+                description="Promedio de gasto por cada venta cobrada hoy"
                 headerColor="bg-emerald-600"
                 icon={<SpectrumIcon variant="wave" className="h-5 w-5" />}
             />
             <DashboardMetricCard
                 title="En Cocina"
                 value={loading ? "..." : metrics?.ordersInKitchen ?? 0}
-                description="Pedidos en preparacion"
+                description="Pedidos que se encuentran actualmente en preparación"
                 headerColor="bg-indigo-600"
                 icon={<SpectrumIcon variant="nodes" className="h-5 w-5" />}
             />
             <DashboardMetricCard
                 title="Sin Disponibilidad"
                 value={loading ? "..." : metrics?.unavailableProductsCount ?? 0}
-                description="Productos no visibles para venta"
+                description="Productos que han sido pausados o no tienen stock para la venta"
                 headerColor="bg-rose-600"
                 icon={<SpectrumIcon variant="starburst" className="h-5 w-5" />}
                 tone={loading ? "default" : (metrics?.unavailableProductsCount ?? 0) > 0 ? "alert" : "default"}
             />
             <DashboardMetricCard
-                title="Insumos Criticos"
+                title="Insumos Críticos"
                 value={loading ? "..." : metrics?.criticalSuppliesCount ?? 0}
                 description={
                     loading
                         ? undefined
-                        : `${metrics?.suppliesBelowMinimumCount ?? 0} insumos requieren seguimiento`
+                        : `${metrics?.suppliesBelowMinimumCount ?? 0} insumos por debajo del stock mínimo configurado`
                 }
                 headerColor="bg-amber-500"
                 icon={<SpectrumIcon variant="organic" className="h-5 w-5" />}
