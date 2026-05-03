@@ -29,9 +29,12 @@ import {
     getSupplies,
     createProductWithRecipe,
     createCategory,
+    createConfigurableProduct,
+    getProductOptionGroups,
+    ProductOptionGroupWithOptions,
 } from "../actions";
 import { toast } from "sonner";
-import { Prisma, UnidadMedida } from "@prisma/client";
+import { Prisma, ProductCatalogRole, ProductOptionPriceMode, UnidadMedida } from "@prisma/client";
 import {
     Sheet,
     SheetContent,
@@ -50,6 +53,25 @@ interface RecipeItem {
     unidad: UnidadMedida;
     supplyName?: string;
     costoUnitarioIndividual?: number;
+}
+
+interface OptionLinkState {
+    optionId: string;
+    label: string;
+    slug: string;
+    price: string;
+    activo: boolean;
+    orden: number;
+}
+
+interface GroupAssignmentState {
+    groupId: string;
+    groupKey: string;
+    groupNombre: string;
+    priceMode: ProductOptionPriceMode;
+    required: boolean;
+    orden: number;
+    options: OptionLinkState[];
 }
 
 export default function NuevoProductoPage() {
@@ -76,6 +98,9 @@ export default function NuevoProductoPage() {
     // Recipe State
     const [recipeItems, setRecipeItems] = useState<RecipeItem[]>([]);
     const [searchSupply, setSearchSupply] = useState("");
+    const [catalogRole, setCatalogRole] = useState<ProductCatalogRole>("STANDARD");
+    const [optionGroups, setOptionGroups] = useState<ProductOptionGroupWithOptions[]>([]);
+    const [groupAssignments, setGroupAssignments] = useState<GroupAssignmentState[]>([]);
 
     // Automatically calculate suggested unit cost
     useEffect(() => {
@@ -92,9 +117,10 @@ export default function NuevoProductoPage() {
 
     useEffect(() => {
         async function loadData() {
-            const [catRes, supRes] = await Promise.all([
+            const [catRes, supRes, groupsRes] = await Promise.all([
                 getCategories(),
-                getSupplies()
+                getSupplies(),
+                getProductOptionGroups(),
             ]);
 
             if (catRes.success && catRes.data) {
@@ -104,6 +130,10 @@ export default function NuevoProductoPage() {
 
             if (supRes.success && supRes.data) {
                 setSupplies(supRes.data as Supply[]);
+            }
+
+            if (groupsRes.success && groupsRes.data) {
+                setOptionGroups(groupsRes.data as ProductOptionGroupWithOptions[]);
             }
         }
         loadData();
@@ -150,23 +180,143 @@ export default function NuevoProductoPage() {
         ));
     };
 
+    const toggleGroupAssignment = (group: ProductOptionGroupWithOptions) => {
+        setGroupAssignments((current) => {
+            const exists = current.find((assignment) => assignment.groupId === group.id);
+            if (exists) {
+                return current.filter((assignment) => assignment.groupId !== group.id);
+            }
+
+            const options: OptionLinkState[] = group.options.map((option) => ({
+                optionId: option.id,
+                label: option.label,
+                slug: option.slug,
+                price: "0",
+                activo: false,
+                orden: option.orden,
+            }));
+
+            return [
+                ...current,
+                {
+                    groupId: group.id,
+                    groupKey: group.key,
+                    groupNombre: group.nombre,
+                    priceMode: group.priceMode,
+                    required: group.required,
+                    orden: group.orden,
+                    options,
+                },
+            ];
+        });
+    };
+
+    const updateGroupOrden = (groupId: string, orden: number) => {
+        setGroupAssignments((current) =>
+            current.map((assignment) =>
+                assignment.groupId === groupId ? { ...assignment, orden } : assignment
+            )
+        );
+    };
+
+    const updateOptionState = (groupId: string, optionId: string, updater: (option: OptionLinkState) => OptionLinkState) => {
+        setGroupAssignments((current) =>
+            current.map((assignment) => {
+                if (assignment.groupId !== groupId) return assignment;
+                return {
+                    ...assignment,
+                    options: assignment.options.map((option) =>
+                        option.optionId === optionId ? updater(option) : option
+                    ),
+                };
+            })
+        );
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!formData.nombre.trim()) {
+            toast.error("El nombre es obligatorio");
+            return;
+        }
         if (!formData.categoryId) {
             toast.error("Selecciona una categoría");
             return;
         }
+        const priceValue = Number(formData.precio);
+        if (Number.isNaN(priceValue) || priceValue < (catalogRole === "STANDARD" ? 1 : 0)) {
+            toast.error("El precio es obligatorio");
+            return;
+        }
+
+        if (catalogRole === "CONFIGURABLE_BASE") {
+            if (groupAssignments.length === 0) {
+                toast.error("Asigna al menos un grupo de opciones");
+                return;
+            }
+
+            for (const assignment of groupAssignments) {
+                const activeOptions = assignment.options.filter((option) => option.activo);
+                if (activeOptions.length === 0) {
+                    toast.error(`El grupo '${assignment.groupNombre}' debe tener al menos una opcion activa`);
+                    return;
+                }
+
+                const invalidPrice = activeOptions.find((option) => Number(option.price) < 0 || Number.isNaN(Number(option.price)));
+                if (invalidPrice) {
+                    toast.error(`La opcion '${invalidPrice.label}' debe tener un precio valido`);
+                    return;
+                }
+            }
+        }
 
         setIsLoading(true);
         try {
-            const res = await createProductWithRecipe(
-                { ...formData, unidad: "UNIDAD" },
-                recipeItems.map(({ supplyId, qtyPerUnit, unidad }) => ({
-                    supplyId,
-                    qtyPerUnit,
-                    unidad
-                }))
-            );
+            let res;
+            if (catalogRole === "STANDARD") {
+                res = await createProductWithRecipe(
+                    { ...formData, unidad: "UNIDAD" },
+                    recipeItems.map(({ supplyId, qtyPerUnit, unidad }) => ({
+                        supplyId,
+                        qtyPerUnit,
+                        unidad
+                    }))
+                );
+            } else {
+                const groupAssignmentsPayload = groupAssignments.map((assignment) => ({
+                    groupId: assignment.groupId,
+                    orden: assignment.orden,
+                }));
+
+                const optionLinksPayload = groupAssignments.flatMap((assignment) =>
+                    assignment.options
+                        .filter((option) => option.activo)
+                        .map((option) => ({
+                            optionId: option.optionId,
+                            price: Number(option.price) || 0,
+                            activo: option.activo,
+                            orden: option.orden,
+                        }))
+                );
+
+                res = await createConfigurableProduct({
+                    nombre: formData.nombre,
+                    descripcion: formData.descripcion || undefined,
+                    precio: formData.precio,
+                    costoUnitario: formData.costoUnitario || null,
+                    categoryId: formData.categoryId,
+                    imagen: formData.imagen,
+                    unidad: "UNIDAD",
+                    catalogRole,
+                    recipeItems: recipeItems.map(({ supplyId, qtyPerUnit, unidad }) => ({
+                        supplyId,
+                        qtyPerUnit,
+                        unidad,
+                    })),
+                    groupAssignments: groupAssignmentsPayload,
+                    optionLinks: optionLinksPayload,
+                });
+            }
 
             if (res.success) {
                 toast.success("Producto creado exitosamente");
@@ -218,11 +368,13 @@ export default function NuevoProductoPage() {
         !recipeItems.find(ri => ri.supplyId === s.id)
     );
 
+    const assignedGroupIds = new Set(groupAssignments.map((assignment) => assignment.groupId));
+
     return (
-        <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen">
+        <div className="flex min-h-screen flex-col gap-6 bg-zinc-50 px-4 py-4 md:gap-8 md:p-8">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-4">
                     <Link href="/admin/dashboard/productos">
                         <Button variant="ghost" size="icon" className="rounded-full">
                             <ChevronLeft className="h-6 w-6" />
@@ -236,17 +388,17 @@ export default function NuevoProductoPage() {
                 <Button
                     onClick={handleSubmit}
                     disabled={isLoading}
-                    className="bg-zinc-900 text-white hover:bg-zinc-800 rounded-full px-6"
+                    className="w-full rounded-full bg-zinc-900 px-6 text-white hover:bg-zinc-800 sm:w-auto"
                 >
                     {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                     Guardar Producto
                 </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-8">
                 {/* Left Column: Visual Information */}
                 <div className="md:col-span-1 space-y-6">
-                    <div className="bg-white p-6 rounded-[2rem] border border-zinc-200 shadow-sm space-y-4">
+                    <div className="space-y-4 rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
                         <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">Imagen del Producto</Label>
                         <div className="aspect-square w-full bg-zinc-50 rounded-3xl border-2 border-dashed border-zinc-200 flex flex-col items-center justify-center overflow-hidden group relative transition-all hover:border-zinc-300">
                             {formData.imagen ? (
@@ -280,7 +432,7 @@ export default function NuevoProductoPage() {
                         <p className="text-[0.7rem] text-zinc-400 text-center">Recomendado: 800x800px. Máx 1MB.</p>
                     </div>
 
-                    <div className="bg-white p-6 rounded-[2rem] border border-zinc-200 shadow-sm space-y-4">
+                    <div className="space-y-4 rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
                         <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">Precios y Márgenes</Label>
                         <div className="space-y-4">
                             <div className="space-y-2">
@@ -321,9 +473,38 @@ export default function NuevoProductoPage() {
                 {/* Right Column: Details and Recipe */}
                 <div className="md:col-span-2 space-y-8">
                     {/* General Details */}
-                    <div className="bg-white p-8 rounded-[2rem] border border-zinc-200 shadow-sm space-y-6">
+                    <div className="space-y-6 rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-8">
                         <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">Detalles Generales</Label>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
+                            <div className="space-y-2 md:col-span-2">
+                                <Label className="text-xs font-medium text-zinc-600">Tipo de producto</Label>
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                    {[
+                                        { value: "STANDARD", label: "Simple", hint: "Producto vendible" },
+                                        { value: "CONFIGURABLE_BASE", label: "Configurable", hint: "Con opciones" },
+                                        { value: "OPTION_PRODUCT", label: "Opcion", hint: "Vinculable" },
+                                    ].map((option) => (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => setCatalogRole(option.value as ProductCatalogRole)}
+                                            className={`rounded-[1.25rem] border px-4 py-3 text-left transition ${
+                                                catalogRole === option.value
+                                                    ? "border-sky-200 bg-sky-50"
+                                                    : "border-zinc-200 bg-white hover:border-zinc-300"
+                                            }`}
+                                        >
+                                            <p className="text-sm font-semibold text-zinc-900">{option.label}</p>
+                                            <p className="text-xs text-zinc-500">{option.hint}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                                {catalogRole === "OPTION_PRODUCT" ? (
+                                    <div className="mt-3 rounded-[1.5rem] border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                                        Este producto puede vincularse como opcion desde el catalogo de opciones.
+                                    </div>
+                                ) : null}
+                            </div>
                             <div className="space-y-2 md:col-span-2">
                                 <Label htmlFor="nombre" className="text-xs font-medium text-zinc-600">Nombre del Producto</Label>
                                 <Input
@@ -336,7 +517,7 @@ export default function NuevoProductoPage() {
                             </div>
                             <div className="space-y-2 md:col-span-2">
                                 <Label className="text-xs font-medium text-zinc-600">Categoría</Label>
-                                <div className="flex gap-2">
+                                <div className="flex flex-col gap-2 sm:flex-row">
                                     <div className="flex-grow">
                                         <Select
                                             value={formData.categoryId}
@@ -365,8 +546,8 @@ export default function NuevoProductoPage() {
                                                 <Plus className="h-5 w-5 text-zinc-600" />
                                             </Button>
                                         </SheetTrigger>
-                                        <SheetContent side="right" className="sm:max-w-md border-l border-zinc-200 p-0 overflow-hidden flex flex-col">
-                                            <div className="p-8 space-y-8 flex-grow">
+                                        <SheetContent side="right" className="flex max-h-[100svh] flex-col overflow-hidden border-l border-zinc-200 p-0 sm:max-w-md">
+                                            <div className="flex-grow space-y-8 p-5 md:p-8">
                                                 <SheetHeader className="text-left space-y-2">
                                                     <SheetTitle className="text-2xl font-bold text-zinc-900 tracking-tight">Nueva Categoría</SheetTitle>
                                                     <SheetDescription className="text-zinc-500">
@@ -399,11 +580,11 @@ export default function NuevoProductoPage() {
                                                 </form>
                                             </div>
 
-                                            <div className="p-8 border-t border-zinc-100 bg-white shadow-[0_-4px_24px_rgba(0,0,0,0.02)] flex gap-4">
+                                            <div className="flex flex-col gap-3 border-t border-zinc-100 bg-white p-5 shadow-[0_-4px_24px_rgba(0,0,0,0.02)] sm:flex-row md:p-8">
                                                 <Button
                                                     type="button"
                                                     variant="ghost"
-                                                    className="flex-grow h-14 rounded-2xl font-semibold text-zinc-500"
+                                                    className="h-14 flex-1 rounded-2xl font-semibold text-zinc-500"
                                                     onClick={() => setIsSheetOpen(false)}
                                                 >
                                                     Cancelar
@@ -412,7 +593,7 @@ export default function NuevoProductoPage() {
                                                     form="category-form"
                                                     type="submit"
                                                     disabled={isCreatingCategory}
-                                                    className="flex-[2] h-14 bg-zinc-900 text-white hover:bg-zinc-800 rounded-2xl font-semibold shadow-lg shadow-zinc-200 transition-all active:scale-95"
+                                                    className="h-14 flex-[2] rounded-2xl bg-zinc-900 font-semibold text-white shadow-lg shadow-zinc-200 transition-all active:scale-95 hover:bg-zinc-800"
                                                 >
                                                     {isCreatingCategory ? (
                                                         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -439,9 +620,149 @@ export default function NuevoProductoPage() {
                         </div>
                     </div>
 
+                    {catalogRole === "CONFIGURABLE_BASE" ? (
+                        <div className="space-y-6 rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-8">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <div>
+                                    <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">Opciones del producto</Label>
+                                    <p className="text-sm text-zinc-500">
+                                        Selecciona los grupos y activa las opciones necesarias.
+                                    </p>
+                                </div>
+                                <Link href="/admin/dashboard/productos/opciones" className="text-sm font-semibold text-sky-700 hover:text-sky-800">
+                                    Gestionar catalogo de opciones →
+                                </Link>
+                            </div>
+
+                            {optionGroups.length === 0 ? (
+                                <div className="rounded-[1.5rem] border border-dashed border-zinc-200 p-6 text-center text-sm text-zinc-500">
+                                    No hay grupos de opciones disponibles. Crea uno primero en el catalogo de opciones.
+                                </div>
+                            ) : (
+                                <div className="space-y-5">
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        {optionGroups.map((group) => {
+                                            const isAssigned = assignedGroupIds.has(group.id);
+                                            return (
+                                                <button
+                                                    key={group.id}
+                                                    type="button"
+                                                    onClick={() => toggleGroupAssignment(group)}
+                                                    className={`rounded-[1.25rem] border px-4 py-3 text-left transition ${
+                                                        isAssigned
+                                                            ? "border-sky-200 bg-sky-50"
+                                                            : "border-zinc-200 bg-white hover:border-zinc-300"
+                                                    }`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-semibold text-zinc-900">{group.nombre}</p>
+                                                            <p className="text-xs text-zinc-400 uppercase tracking-widest">{group.key}</p>
+                                                        </div>
+                                                        <Badge variant="secondary" className="shrink-0 bg-zinc-100 text-zinc-600">
+                                                            {group.options.length} opciones
+                                                        </Badge>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {groupAssignments.length > 0 ? (
+                                        <div className="space-y-4">
+                                            {groupAssignments.map((assignment) => (
+                                                <div key={assignment.groupId} className="rounded-[1.5rem] border border-zinc-200 p-4">
+                                                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-semibold text-zinc-900">{assignment.groupNombre}</p>
+                                                            <p className="text-xs text-zinc-400 uppercase tracking-widest">
+                                                                {assignment.priceMode} · {assignment.required ? "Requerido" : "Opcional"}
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <Label className="text-xs text-zinc-500">Orden</Label>
+                                                            <Input
+                                                                type="number"
+                                                                min={1}
+                                                                value={assignment.orden}
+                                                                onChange={(e) => updateGroupOrden(assignment.groupId, Number(e.target.value))}
+                                                                className="h-9 w-20 rounded-xl border-zinc-200 bg-zinc-50 text-xs"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-4 space-y-3">
+                                                        {assignment.options.map((option) => (
+                                                            <div key={option.optionId} className="flex flex-col gap-3 rounded-2xl border border-zinc-100 bg-zinc-50 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                                                                <div className="min-w-0">
+                                                                    <p className="text-sm font-semibold text-zinc-900">{option.label}</p>
+                                                                    <p className="text-xs text-zinc-400 uppercase tracking-widest">{option.slug}</p>
+                                                                </div>
+                                                                <div className="flex flex-wrap items-center gap-3 md:justify-end">
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant={option.activo ? "default" : "outline"}
+                                                                        className={`h-9 rounded-full px-4 text-xs ${
+                                                                            option.activo
+                                                                                ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                                                                                : "border-zinc-200 text-zinc-600"
+                                                                        }`}
+                                                                        onClick={() =>
+                                                                            updateOptionState(assignment.groupId, option.optionId, (current) => ({
+                                                                                ...current,
+                                                                                activo: !current.activo,
+                                                                            }))
+                                                                        }
+                                                                    >
+                                                                        {option.activo ? "Activa" : "Inactiva"}
+                                                                    </Button>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Label className="text-xs text-zinc-500">Precio</Label>
+                                                                        <Input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            min={0}
+                                                                            value={option.price}
+                                                                            onChange={(e) =>
+                                                                                updateOptionState(assignment.groupId, option.optionId, (current) => ({
+                                                                                    ...current,
+                                                                                    price: e.target.value,
+                                                                                }))
+                                                                            }
+                                                                            className="h-9 w-24 rounded-xl border-zinc-200 bg-white text-xs"
+                                                                        />
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Label className="text-xs text-zinc-500">Orden</Label>
+                                                                        <Input
+                                                                            type="number"
+                                                                            min={1}
+                                                                            value={option.orden}
+                                                                            onChange={(e) =>
+                                                                                updateOptionState(assignment.groupId, option.optionId, (current) => ({
+                                                                                    ...current,
+                                                                                    orden: Number(e.target.value),
+                                                                                }))
+                                                                            }
+                                                                            className="h-9 w-20 rounded-xl border-zinc-200 bg-white text-xs"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            )}
+                        </div>
+                    ) : null}
+
                     {/* Recipe Builder */}
-                    <div className="bg-white p-8 rounded-[2rem] border border-zinc-200 shadow-sm space-y-6">
-                        <div className="flex items-center justify-between">
+                    <div className="space-y-6 rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-8">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">Receta (Insumos)</Label>
                             <Badge variant="outline" className="rounded-full border-zinc-200 text-zinc-500">
                                 {recipeItems.length} Insumos
@@ -497,7 +818,7 @@ export default function NuevoProductoPage() {
                                         </Button>
                                     )}
                                 </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                                     {filteredSupplies.length > 0 ? (
                                         filteredSupplies.slice(0, 12).map(supply => (
                                             <button
@@ -524,13 +845,13 @@ export default function NuevoProductoPage() {
                             {recipeItems.map(item => (
                                 <div
                                     key={item.supplyId}
-                                    className="flex items-center gap-4 bg-zinc-50/50 p-4 rounded-2xl border border-zinc-100 group hover:bg-zinc-50 transition-colors"
+                                    className="flex flex-col gap-4 rounded-2xl border border-zinc-100 bg-zinc-50/50 p-4 transition-colors group hover:bg-zinc-50 sm:flex-row sm:items-center"
                                 >
-                                    <div className="flex-grow">
+                                    <div className="min-w-0 flex-grow">
                                         <p className="font-semibold text-zinc-900 text-sm">{item.supplyName}</p>
                                         <p className="text-[0.65rem] text-zinc-400 font-bold uppercase tracking-tighter">Por UNIDAD</p>
                                     </div>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex flex-wrap items-center gap-3 sm:justify-end">
                                         <Input
                                             type="number"
                                             step="any"

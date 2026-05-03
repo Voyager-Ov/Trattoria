@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Category, Product } from "@prisma/client";
+import { Category } from "@prisma/client";
 import { CatalogHeader } from "@/components/catalog/Header";
 import { ProductCard } from "@/components/catalog/ProductCard";
 import { CartDrawer } from "@/components/cart/CartDrawer";
@@ -46,7 +46,7 @@ function buildDisplayItems(categorySlug: string, items: PublicCatalogProduct[]):
     return items.map((product) => ({ id: product.id, kind: "single", product }));
   }
 
-  const groups = new Map<string, Product[]>();
+  const groups = new Map<string, PublicCatalogProduct[]>();
 
   for (const product of items) {
     const normalizedName = product.nombre.toLowerCase();

@@ -32,13 +32,13 @@ export function DashboardMetricCard({
             </div>
 
             <div className="flex flex-grow flex-col justify-between gap-4 p-4 md:p-6">
-                <span className="text-2xl font-bold tracking-tight text-zinc-900 md:text-3xl">{value}</span>
+                <span className="text-3xl font-black tracking-tight text-zinc-900 md:text-4xl">{value}</span>
 
                 {description ? (
                     <p
                         className={cn(
-                            "mt-1 text-[0.68rem] font-medium uppercase tracking-[0.18em] md:mt-2 md:text-[0.7rem]",
-                            tone === "alert" ? "text-rose-500" : "text-zinc-400"
+                            "mt-1 text-[0.7rem] font-bold uppercase tracking-[0.12em] leading-relaxed md:mt-2 md:text-[0.75rem]",
+                            tone === "alert" ? "text-rose-500" : "text-zinc-500"
                         )}
                     >
                         {description}

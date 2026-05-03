@@ -28,36 +28,34 @@
     --popover: 0 0% 100%;
     --popover-foreground: 20 14.3% 4.1%;
 
-    /* Primary - Vibrant Bordo */
-    --primary: 24 9.8% 10%;
-    /* Rich Burgundy */
-    --primary-foreground: 60 9.1% 97.8%;
+    /* Primary - Vibrant Trattoria Red */
+    --primary: 348 83% 47%;
+    --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Soft Pinkish/Beige for contrast */
-    --secondary: 60 4.8% 95.9%;
-    --secondary-foreground: 24 9.8% 10%;
+    /* Secondary - Soft warm contrast */
+    --secondary: 32 20% 96%;
+    --secondary-foreground: 348 83% 47%;
 
     /* Muted */
-    --muted: 60 4.8% 95.9%;
-    --muted-foreground: 25 5.3% 44.7%;
+    --muted: 32 10% 95%;
+    --muted-foreground: 30 5% 45%;
 
     /* Accent */
-    --accent: 60 4.8% 95.9%;
-    --accent-foreground: 24 9.8% 10%;
+    --accent: 348 10% 96%;
+    --accent-foreground: 348 83% 47%;
 
     /* Destructive */
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 60 9.1% 97.8%;
+    --destructive-foreground: 0 0% 100%;
 
     /* Borders & Inputs */
-    --border: 20 5.9% 90%;
-    --input: 20 5.9% 90%;
-    --ring: 20 14.3% 4.1%;
+    --border: 30 5% 90%;
+    --input: 30 5% 90%;
+    --ring: 348 83% 47%;
 
-    /* Radius */
-    --radius: 0.5rem;
-    /* Rounded-2xl default */
-    --chart-1: 12 76% 61%;
+    /* Radius - More rounded for premium feel */
+    --radius: 1rem;
+    --chart-1: 348 83% 47%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
@@ -240,4 +238,42 @@ input[type=number] {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Gastronomic Editorial Utilities */
+.text-gastronomic {
+  @apply font-display tracking-tighter uppercase leading-[0.85];
+}
+
+.bg-paper {
+  background-color: #F9F7F2;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  background-blend-mode: overlay;
+  opacity: 0.98;
+}
+
+.bg-grain {
+  position: relative;
+}
+
+.bg-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.05;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  z-index: 1;
+}
+
+.border-stamp {
+  border-width: 3px;
+  @apply border-zinc-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)];
+}
+
+.border-stamp-red {
+  border-width: 3px;
+  @apply border-primary shadow-[8px_8px_0px_0px_rgba(221,36,68,0.2)];
 }

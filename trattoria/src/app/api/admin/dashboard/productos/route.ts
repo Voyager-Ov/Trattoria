@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
             disponible: p.disponible,
             unidad: p.unidad,
             costoUnitario: p.costoUnitario,
+            catalogRole: p.catalogRole,
             createdAt: p.createdAt
         }));
 

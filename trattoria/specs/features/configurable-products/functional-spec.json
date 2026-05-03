@@ -1,0 +1,366 @@
+{
+  "meta": {
+    "feature_id": "configurable-products",
+    "document_type": "functional_specification",
+    "status": "approved",
+    "created": "2026-05-02",
+    "version": "1.1"
+  },
+
+  "scope": {
+    "in_scope": [
+      "Admin UI: gestión de grupos de opciones reutilizables y sus opciones (nueva sub-página /opciones)",
+      "Admin UI: selector de tipo de producto (STANDARD / CONFIGURABLE_BASE / OPTION_PRODUCT) en formulario Nuevo Producto",
+      "Admin UI: sección de opciones dentro del formulario de Nuevo/Editar Producto (solo visible si CONFIGURABLE_BASE)",
+      "Admin UI: página de edición de producto (/[id]/page.tsx, actualmente vacía)",
+      "Admin UI: card de navegación a /opciones en la página principal de productos",
+      "Admin UI: badges visuales en la lista de productos indicando catalogRole (CONFIGURABLE_BASE / OPTION_PRODUCT)",
+      "Backend: server actions para CRUD de grupos, opciones, asignaciones y links de opciones de producto",
+      "Backend: queries con include completo para edición y precarga de productos configurables"
+    ],
+    "out_of_scope": [
+      "Cambios en el catálogo público — ProductCard, CartProvider, catalog-config ya soportan opciones configurables",
+      "Cambios en la lógica de pedidos / configSnapshot — ya persisten opciones seleccionadas",
+      "Cambios en el flujo 'Nuevo Pedido' del admin — funciona pero se revisa en iteración posterior",
+      "Integración de productos configurables con el módulo de Promociones",
+      "Eliminación del mecanismo legacy VARIANT_GROUP_CATEGORIES — coexiste con el nuevo sistema, migración gradual",
+      "Creación de OPTION_PRODUCT inline desde la UI de opciones (se vincula a uno existente, no se crea ahí)",
+      "Drag-and-drop para reordenar grupos/opciones (el orden se define con campo numérico)"
+    ]
+  },
+
+  "existing_system_context": {
+    "description": "El sistema ya tiene implementada la cadena completa catálogo → carrito → pedido para productos configurables. Lo que falta es SOLAMENTE la UI admin para crear y gestionar la configuración. Este documento describe lo que existe para no duplicar ni romper nada.",
+    "already_working": [
+      {
+        "component": "catalog-config.ts",
+        "what_it_does": "mapPublicCatalogProduct() transforma productos con optionGroupAssignments y optionLinksAsBase en un PublicCatalogProduct con optionGroups. calculateConfiguredUnitPrice() calcula el precio final según selecciones (ADD/OVERRIDE). buildConfiguredDisplayName() genera nombre display con opciones.",
+        "touched": false
+      },
+      {
+        "component": "categoria/[slug]/page.tsx",
+        "what_it_does": "Query filtra catalogRole != OPTION_PRODUCT. Incluye publicCatalogProductInclude que trae grupos, asignaciones y links. Mapea con mapPublicCatalogProduct().",
+        "touched": false
+      },
+      {
+        "component": "ProductCard.tsx",
+        "what_it_does": "Si product.optionGroups tiene items, muestra expansión con pill-style selection (GSAP animated). Para cada grupo muestra opciones como botones seleccionables. Marca obligatorios con badge rojo. Muestra precio con '+$X' (ADD) o '$X' (OVERRIDE). Botón 'Agregar al pedido' valida que grupos requeridos tengan selección.",
+        "touched": false
+      },
+      {
+        "component": "CartProvider.tsx",
+        "what_it_does": "addItem acepta selectedOptions (groupId, groupLabel, optionId, optionLabel, priceDelta). buildLineKey genera key única por combinación producto+opciones. totalPrice suma priceDelta de cada opción.",
+        "touched": false
+      },
+      {
+        "component": "actions/orders.ts + pedidos/actions.ts",
+        "what_it_does": "Al crear pedido, guarda configSnapshot: item.options (array de selecciones) en OrderItem.configSnapshot (JSON field).",
+        "touched": false
+      },
+      {
+        "component": "PedidoDetailClient.tsx + empleado/pedidos/[id]",
+        "what_it_does": "Renderiza configSnapshot como texto: 'groupLabel: optionLabel' separados por ' · '.",
+        "touched": false
+      }
+    ],
+    "legacy_variant_system": {
+      "description": "CategoryClientPage.tsx tiene un mecanismo hardcodeado (VARIANT_GROUP_CATEGORIES = ['pizzas', 'tartas', 'empanadas']) que agrupa productos por nombre con sufijos (ej: 'Empanada de Carne x1', 'x6', 'x12'). Esto crea un DisplayItem de tipo 'group' con variants. Este sistema COEXISTE con CONFIGURABLE_BASE: si un producto tiene optionGroups, ProductCard muestra el selector de opciones; si no, muestra las variants como botones directos.",
+      "migration_path": "En esta iteración NO se elimina. Los admins podrán migrar productos gradualmente: crear un CONFIGURABLE_BASE con opciones en vez de múltiples productos individuales. Ambos sistemas funcionan en paralelo sin conflicto."
+    }
+  },
+
+  "use_cases": [
+    {
+      "id": "UC-01",
+      "actor": "Admin",
+      "title": "Crear un grupo de opciones reutilizable",
+      "steps": [
+        "Admin navega a /admin/dashboard/productos",
+        "Admin hace click en el card 'Opciones' (nuevo card de navegación junto a Categorías y Promociones)",
+        "Llega a /admin/dashboard/productos/opciones con layout de dos paneles",
+        "Admin hace click en '+ Nuevo Grupo' (botón en panel izquierdo)",
+        "Se abre sheet lateral con campos: key (identificador inmutable, texto snake_case), nombre (label visible), priceMode (select: ADD/OVERRIDE), switch 'Obligatorio', campo orden (número)",
+        "Admin completa y guarda",
+        "El grupo aparece en la lista del panel izquierdo con badges: nombre, key, ADD/OVERRIDE, Requerido/Opcional, count de opciones"
+      ]
+    },
+    {
+      "id": "UC-02",
+      "actor": "Admin",
+      "title": "Agregar opciones a un grupo",
+      "steps": [
+        "Admin está en /opciones y selecciona un grupo en el panel izquierdo",
+        "El panel derecho muestra las opciones del grupo seleccionado",
+        "Admin hace click en '+ Nueva Opción'",
+        "Se abre sheet con campos: label (nombre visible), slug (auto-generado desde label, inmutable una vez creado), select 'Producto vinculado' (dropdown de productos OPTION_PRODUCT, nullable), campo recipeMultiplier (número, deshabilitado si hay producto vinculado, con hint 'El stock viene del producto vinculado'), switch activo",
+        "Admin guarda",
+        "La opción aparece en la lista del panel derecho con: label, slug, toggle activo, badge de producto vinculado si aplica"
+      ]
+    },
+    {
+      "id": "UC-03",
+      "actor": "Admin",
+      "title": "Crear un producto simple (STANDARD)",
+      "steps": [
+        "Admin navega a /admin/dashboard/productos/nuevo",
+        "En el formulario, el tipo de producto por defecto es 'Producto simple' (STANDARD)",
+        "Admin completa: nombre, precio, categoría, imagen, descripción, receta de insumos",
+        "NO se muestra sección de opciones",
+        "Admin guarda. Llama a createProductWithRecipe() — mismo flujo que hoy, sin regresión",
+        "El producto aparece en catálogo como producto comprable directo"
+      ]
+    },
+    {
+      "id": "UC-04",
+      "actor": "Admin",
+      "title": "Crear un producto configurable (CONFIGURABLE_BASE)",
+      "steps": [
+        "Admin navega a /admin/dashboard/productos/nuevo",
+        "Admin selecciona tipo 'Producto configurable' (CONFIGURABLE_BASE) en el selector de tipo",
+        "Admin completa datos básicos: nombre (ej: 'Pasta'), precio (precio base), categoría, imagen, descripción",
+        "Admin completa receta base (insumos por unidad base del producto)",
+        "Aparece sección 'Opciones del Producto':",
+        "  - Admin selecciona grupos del catálogo con multiselect (dropdown con checkbox por grupo)",
+        "  - Por cada grupo asignado se despliega una lista de sus opciones",
+        "  - Cada opción muestra: nombre, toggle habilitado/deshabilitado, campo precio (número), campo orden",
+        "  - El precio de la opción es ESPECÍFICO a esta combinación producto-opción",
+        "  - Hay un link 'Gestionar catálogo de opciones →' que lleva a /opciones",
+        "Admin guarda. Se persiste: product con catalogRole=CONFIGURABLE_BASE, ProductOptionGroupAssignment por cada grupo, ProductOptionLink por cada opción habilitada con su precio",
+        "El producto aparece en catálogo público con selector de opciones expandible en el ProductCard"
+      ]
+    },
+    {
+      "id": "UC-05",
+      "actor": "Admin",
+      "title": "Crear un producto como OPTION_PRODUCT",
+      "steps": [
+        "Admin navega a /admin/dashboard/productos/nuevo",
+        "Admin selecciona tipo 'Opción de producto' (OPTION_PRODUCT)",
+        "Admin completa datos básicos: nombre (ej: 'Salsa Fileto'), precio (costo referencia), categoría, imagen",
+        "Admin completa receta propia del producto (insumos que usa la salsa)",
+        "Se muestra un badge informativo: 'Este producto puede vincularse como opción de otro producto configurable desde el catálogo de opciones'",
+        "NO se muestra sección de opciones",
+        "Admin guarda. Producto queda con catalogRole=OPTION_PRODUCT",
+        "El producto NO aparece en catálogo público como vendible directo",
+        "El producto SÍ aparece como candidato para vincular en opciones de grupo"
+      ]
+    },
+    {
+      "id": "UC-06",
+      "actor": "Admin",
+      "title": "Editar un producto configurable existente",
+      "steps": [
+        "Admin navega a /admin/dashboard/productos/[id] (desde click en la lista o botón editar)",
+        "El formulario carga pre-poblado: tipo CONFIGURABLE_BASE seleccionado, datos básicos, receta, grupos asignados con opciones habilitadas y precios",
+        "Admin puede: cambiar datos básicos, agregar/quitar insumos de receta, agregar/quitar grupos asignados, habilitar/deshabilitar opciones, cambiar precios por opción",
+        "Admin NO puede: cambiar key de grupo, cambiar slug de opción, cambiar tipo si ya tiene assignments",
+        "Admin guarda. Transacción: actualiza producto, borra y recrea recipeItems, borra y recrea assignments, borra y recrea optionLinks",
+        "Catálogo público refleja los cambios inmediatamente"
+      ]
+    },
+    {
+      "id": "UC-07",
+      "actor": "Admin",
+      "title": "Vincular un OPTION_PRODUCT a una opción de grupo",
+      "steps": [
+        "Admin está en /opciones, editando una opción de un grupo",
+        "En el campo 'Producto vinculado', selecciona un producto con catalogRole=OPTION_PRODUCT del dropdown",
+        "El campo recipeMultiplier se deshabilita automáticamente con mensaje 'El stock viene del producto vinculado'",
+        "Admin guarda",
+        "Cuando esa opción se seleccione en un pedido, el descuento de stock e impacto en costo viene del OPTION_PRODUCT vinculado (no de la receta del producto base)"
+      ]
+    },
+    {
+      "id": "UC-08",
+      "actor": "Admin",
+      "title": "Definir multiplicador de receta en una opción (sin OPTION_PRODUCT)",
+      "steps": [
+        "Admin está editando una opción que NO tiene producto vinculado",
+        "Define recipeMultiplier = 6 (ejemplo: 'Media docena' de empanadas)",
+        "Guarda",
+        "Cuando esa opción se seleccione: la receta del producto base se multiplica × 6 para calcular consumo de insumos",
+        "Ejemplo: Empanada (CONFIGURABLE_BASE) tiene receta: 200g masa, 100g relleno. Opción 'x6' con multiplier 6 → consumo: 1200g masa, 600g relleno"
+      ]
+    },
+    {
+      "id": "UC-09",
+      "actor": "Admin",
+      "title": "Excluir un producto de un grupo de opciones de su categoría",
+      "steps": [
+        "Admin edita un producto CONFIGURABLE_BASE de la categoría 'Pastas'",
+        "La categoría tiene otros productos configurables que usan el grupo 'Salsa'",
+        "Este producto específico no debería ofrecer selección de salsa",
+        "Admin simplemente NO asigna el grupo 'Salsa' a este producto",
+        "Guarda. El producto no muestra selector de salsa, los demás sí"
+      ]
+    },
+    {
+      "id": "UC-10",
+      "actor": "Admin",
+      "title": "Ver productos con badges de tipo en la lista admin",
+      "steps": [
+        "Admin navega a /admin/dashboard/productos",
+        "La tabla/lista de productos muestra un badge por cada producto según su catalogRole:",
+        "  - STANDARD: sin badge (o badge gris sutil 'Simple')",
+        "  - CONFIGURABLE_BASE: badge 'Configurable' en color",
+        "  - OPTION_PRODUCT: badge 'Opción' en color distinto",
+        "Los badges ayudan al admin a identificar rápidamente qué productos son configurables"
+      ]
+    },
+    {
+      "id": "UC-E2E",
+      "actor": "Admin → Cliente",
+      "title": "Flujo end-to-end: Admin configura, cliente compra",
+      "steps": [
+        "ADMIN: Crea grupo 'Salsa' (ADD, requerido) con opciones: Napolitana, Fileto, Bolognesa",
+        "ADMIN: Crea OPTION_PRODUCT 'Salsa Fileto' con receta propia",
+        "ADMIN: Vincula opción 'Fileto' al OPTION_PRODUCT 'Salsa Fileto'",
+        "ADMIN: Crea producto 'Pasta' como CONFIGURABLE_BASE, asigna grupo 'Salsa', habilita las 3 opciones con precios ($0, $200, $100)",
+        "CATÁLOGO: Cliente navega a la categoría de pastas. Ve producto 'Pasta'.",
+        "CATÁLOGO: Cliente hace click en 'Pasta' → se expande ProductCard con selector de salsa",
+        "CATÁLOGO: Opciones aparecen como pills: Napolitana ($0), Fileto (+$200), Bolognesa (+$100)",
+        "CATÁLOGO: Cliente selecciona 'Fileto'. La pill se activa (roja). El badge de precio muestra +$200",
+        "CATÁLOGO: Cliente hace click 'Agregar al pedido'. Validación pasa (grupo requerido tiene selección)",
+        "CARRITO: Item aparece como 'Pasta' con opciones: 'Salsa: Fileto'. Precio: base + $200",
+        "PEDIDO: Al confirmar, se crea OrderItem con configSnapshot: [{groupLabel:'Salsa', optionLabel:'Fileto', priceDelta:200, ...}]",
+        "DETALLE: En vista admin/empleado del pedido, se muestra: 'Pasta' + 'Salsa: Fileto' como texto"
+      ]
+    }
+  ],
+
+  "acceptance_criteria": [
+    {
+      "id": "AC-01",
+      "given": "El admin está en /opciones",
+      "when": "Crea un grupo con key='salsa', nombre='Salsa', priceMode=ADD, required=true",
+      "then": "El grupo aparece en la lista. La DB tiene un registro en product_option_groups con key único"
+    },
+    {
+      "id": "AC-02",
+      "given": "El admin intenta eliminar un grupo que tiene productos asignados (ProductOptionGroupAssignment)",
+      "when": "Hace click en Eliminar",
+      "then": "Recibe un error claro: 'No se puede eliminar: el grupo tiene X productos asignados'. El grupo no se elimina"
+    },
+    {
+      "id": "AC-03",
+      "given": "El admin crea una opción con slug='napolitana' en el grupo 'salsa'",
+      "when": "Intenta crear otra opción con el mismo slug en el mismo grupo",
+      "then": "Recibe error de slug duplicado. No se crea la segunda opción"
+    },
+    {
+      "id": "AC-04",
+      "given": "El admin crea un producto con catalogRole=CONFIGURABLE_BASE, asigna grupo 'Salsa' con opciones Napolitana ($0) y Fileto ($200)",
+      "when": "El cliente navega al catálogo público de la categoría del producto",
+      "then": "El producto aparece con botón de expansión. Al expandir, muestra grupo 'Salsa' con opciones seleccionables y precios"
+    },
+    {
+      "id": "AC-05",
+      "given": "Un producto tiene catalogRole=OPTION_PRODUCT",
+      "when": "El cliente navega al catálogo público de la categoría de ese producto",
+      "then": "El producto NO aparece como ítem comprable directo (ya implementado en query con catalogRole != OPTION_PRODUCT)"
+    },
+    {
+      "id": "AC-06",
+      "given": "Una opción tiene optionProductId vinculado a un OPTION_PRODUCT",
+      "when": "El admin ve/edita esa opción en /opciones",
+      "then": "El campo recipeMultiplier aparece deshabilitado con texto 'El stock viene del producto vinculado'"
+    },
+    {
+      "id": "AC-07",
+      "given": "Una opción tiene recipeMultiplier=6 y NO tiene optionProductId",
+      "when": "Se selecciona esa opción en un pedido",
+      "then": "El consumo de insumos del producto base se multiplica por 6"
+    },
+    {
+      "id": "AC-08",
+      "given": "El admin crea un producto STANDARD (formulario por defecto)",
+      "when": "Guarda el formulario",
+      "then": "El producto se guarda idéntico al comportamiento actual sin sección de opciones visible. Llama createProductWithRecipe(). Sin regresión"
+    },
+    {
+      "id": "AC-09",
+      "given": "El admin navega a /admin/dashboard/productos/[id] de un producto CONFIGURABLE_BASE",
+      "when": "La página carga",
+      "then": "El formulario pre-popula: tipo 'Configurable' seleccionado, datos básicos, receta, grupos asignados con sus opciones habilitadas y precios"
+    },
+    {
+      "id": "AC-10",
+      "given": "El admin edita un producto configurable y cambia el precio de una opción de $200 a $300",
+      "when": "Guarda",
+      "then": "El ProductOptionLink correspondiente tiene price=300. El catálogo público muestra +$300"
+    },
+    {
+      "id": "AC-11",
+      "given": "Un producto CONFIGURABLE_BASE tiene grupo 'Salsa' con required=true asignado",
+      "when": "Un cliente intenta agregar al carrito sin seleccionar salsa",
+      "then": "Toast de error: 'Por favor seleccioná una opción para Salsa'. El item NO se agrega (ya implementado en ProductCard)"
+    },
+    {
+      "id": "AC-12",
+      "given": "La lista de productos en /admin/dashboard/productos",
+      "when": "Hay productos con distintos catalogRole",
+      "then": "Cada producto muestra un badge: 'Configurable' (CONFIGURABLE_BASE), 'Opción' (OPTION_PRODUCT), o sin badge (STANDARD)"
+    },
+    {
+      "id": "AC-13",
+      "given": "El admin navega a /admin/dashboard/productos",
+      "when": "Mira los cards de navegación rápida",
+      "then": "Hay un card 'Opciones' junto a 'Categorías' y 'Promociones' que lleva a /opciones"
+    }
+  ],
+
+  "business_rules": [
+    {
+      "id": "BR-01",
+      "rule": "El key de un grupo y el slug de una opción son inmutables una vez creados. Son los identificadores del catálogo y configSnapshot, no deben cambiar para no romper snapshots de pedidos existentes"
+    },
+    {
+      "id": "BR-02",
+      "rule": "Un producto tiene exactamente UN catalogRole: STANDARD, CONFIGURABLE_BASE o OPTION_PRODUCT. No puede combinarlos"
+    },
+    {
+      "id": "BR-03",
+      "rule": "OPTION_PRODUCT no aparece en el catálogo público como producto vendible directo"
+    },
+    {
+      "id": "BR-04",
+      "rule": "La receta de un producto CONFIGURABLE_BASE es la receta BASE por unidad. Si una opción tiene recipeMultiplier, esa receta se multiplica por ese factor al procesar el pedido"
+    },
+    {
+      "id": "BR-05",
+      "rule": "Si una opción tiene optionProductId vinculado, el recipeMultiplier se ignora. El consumo de insumos viene del OPTION_PRODUCT"
+    },
+    {
+      "id": "BR-06",
+      "rule": "Un producto CONFIGURABLE_BASE muestra opciones en el catálogo SOLO si tiene al menos un grupo asignado con al menos una opción activa habilitada"
+    },
+    {
+      "id": "BR-07",
+      "rule": "El precio de una opción (en ProductOptionLink.price) es específico a la combinación producto-opción. La misma opción puede tener precio $0 para un producto y $200 para otro"
+    },
+    {
+      "id": "BR-08",
+      "rule": "El priceMode del grupo determina cómo se aplica el precio de la opción: ADD suma al precio base del producto, OVERRIDE reemplaza el precio base"
+    },
+    {
+      "id": "BR-09",
+      "rule": "El admin gestiona grupos y opciones desde /opciones. Desde el formulario de producto solo se asignan y configuran (precio, orden, habilitado), no se crean grupos ni opciones nuevas"
+    },
+    {
+      "id": "BR-10",
+      "rule": "La exclusión de un producto de un grupo se logra simplemente no asignando ese grupo al producto. No hay lista de exclusiones explícita"
+    },
+    {
+      "id": "BR-11",
+      "rule": "El sistema legacy de VARIANT_GROUP_CATEGORIES (agrupamiento por nombre en pizzas/tartas/empanadas) coexiste con CONFIGURABLE_BASE. No se elimina en esta iteración. Los admins pueden migrar productos gradualmente"
+    },
+    {
+      "id": "BR-12",
+      "rule": "Si un producto CONFIGURABLE_BASE se cambia a STANDARD, se pierden sus assignments y option links. El admin recibe confirmación antes de este cambio"
+    },
+    {
+      "id": "BR-13",
+      "rule": "STANDARD es el valor por defecto. Los productos existentes sin configuración explícita siguen siendo STANDARD sin regresión"
+    }
+  ]
+}

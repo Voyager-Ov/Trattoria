@@ -1,0 +1,421 @@
+{
+  "meta": {
+    "feature_id": "configurable-products",
+    "document_type": "technical_specification",
+    "status": "approved",
+    "created": "2026-05-02",
+    "version": "2.0"
+  },
+
+  "architecture": {
+    "overview": "Extensión del módulo admin de productos existente. Sin nuevos modelos Prisma (ya existen). Sin cambios en catálogo público ni lógica de pedidos. Todo se resuelve con nuevas server actions + nuevas páginas React dentro del routing existente.",
+    "module_boundaries": {
+      "backend_actions": {
+        "file": "src/app/admin/dashboard/productos/actions.ts",
+        "role": "Centraliza TODA la persistencia. Se agregan funciones al final sin modificar las existentes.",
+        "pattern": "Retorna { success: boolean, data?: T, error?: string }. Usa serializePrisma() para Decimal/DateTime. Usa prisma.$transaction(async (tx) => ..., { maxWait: 10000, timeout: 20000 }) para operaciones multi-tabla.",
+        "existing_helper": "revalidateProductSurfaces(id?) ya existe en línea 125-136. Se REUTILIZA, NO se crea de nuevo."
+      },
+      "opciones_page": {
+        "directory": "src/app/admin/dashboard/productos/opciones/",
+        "role": "Página de gestión de grupos y opciones. Client component.",
+        "files": ["page.tsx"],
+        "layout": {
+          "desktop": "Master-detail: panel izq (grupos) 1/3 ancho, panel der (opciones del grupo seleccionado) 2/3 ancho",
+          "mobile": "Stacked: lista de grupos arriba, opciones del seleccionado abajo (scroll vertical)"
+        }
+      },
+      "nuevo_page": {
+        "file": "src/app/admin/dashboard/productos/nuevo/page.tsx",
+        "role": "MODIFICACIÓN del formulario existente. Se agrega selector de tipo y sección de opciones condicionalmente visible.",
+        "risk": "Alto — 567 líneas con lógica de receta. Preservar 100% del flujo STANDARD."
+      },
+      "edit_page": {
+        "directory": "src/app/admin/dashboard/productos/[id]/",
+        "role": "NUEVA página de edición con precarga.",
+        "files": ["page.tsx — Client component, usa useParams() para obtener id"],
+        "routing_pattern": "Ya existe navegación desde la lista: línea 1068 del page.tsx apunta a /admin/dashboard/productos/${id}"
+      },
+      "products_list": {
+        "file": "src/app/admin/dashboard/productos/page.tsx",
+        "role": "Modificación mínima: badge catalogRole en tabla + botón 'Opciones' en nav superior."
+      },
+      "products_api": {
+        "file": "src/app/api/admin/dashboard/productos/route.ts",
+        "role": "Modificación mínima: agregar catalogRole al normalizedProducts map (línea 74-91)."
+      }
+    }
+  },
+
+  "data_dependencies_per_page": {
+    "opciones_page": {
+      "on_mount": ["getProductOptionGroups()", "getOptionProductCandidates()"],
+      "on_group_select": "Local state — no refetch, options already loaded via include"
+    },
+    "nuevo_page": {
+      "on_mount": ["getCategories() (existing)", "getSupplies() (existing)", "getProductOptionGroups() (NEW)"],
+      "on_submit_STANDARD": "createProductWithRecipe() (existing, sin cambios)",
+      "on_submit_CONFIGURABLE_or_OPTION": "createConfigurableProduct() (NEW)"
+    },
+    "edit_page": {
+      "on_mount": ["getProductWithConfiguration(id) (NEW)", "getCategories() (existing)", "getSupplies() (existing)", "getProductOptionGroups() (NEW)"],
+      "note": "getProductOptionGroups es necesario para mostrar grupos NO asignados que podrían agregarse",
+      "on_submit": "updateConfigurableProduct(id) (NEW)"
+    },
+    "products_list": {
+      "on_mount": "fetch(/api/admin/dashboard/productos) (existing, se agrega catalogRole al response)"
+    }
+  },
+
+  "interfaces": {
+    "new_types": {
+      "ConfigurableProductPayload": {
+        "description": "Input para createConfigurableProduct y updateConfigurableProduct",
+        "shape": {
+          "nombre": "string",
+          "descripcion": "string | undefined",
+          "precio": "string | number",
+          "costoUnitario": "string | number | null | undefined",
+          "categoryId": "string",
+          "imagen": "string | null | undefined",
+          "unidad": "UnidadMedida (default UNIDAD)",
+          "catalogRole": "ProductCatalogRole",
+          "recipeItems": "Array<{ supplyId: string, qtyPerUnit: number, unidad: UnidadMedida }>",
+          "groupAssignments": "Array<{ groupId: string, orden: number }>",
+          "optionLinks": "Array<{ optionId: string, price: number, activo: boolean, orden: number }>"
+        }
+      },
+      "ProductOptionGroupWithOptions": {
+        "description": "Output de getProductOptionGroups. Extiende ProductOptionGroup de Prisma.",
+        "shape": {
+          "...ProductOptionGroup": "todos los campos del modelo",
+          "options": "ProductOption[] (where deletedAt is null, orderBy orden asc)",
+          "_count": "{ assignments: number }"
+        }
+      },
+      "OptionLinkState": {
+        "description": "Estado UI de una opción dentro de una asignación en el formulario de producto",
+        "shape": {
+          "optionId": "string",
+          "label": "string (read-only, viene del grupo)",
+          "slug": "string (read-only)",
+          "price": "string (editable, input numérico)",
+          "activo": "boolean (toggle on/off)",
+          "orden": "number"
+        }
+      },
+      "GroupAssignmentState": {
+        "description": "Estado UI de un grupo asignado al producto en el formulario",
+        "shape": {
+          "groupId": "string",
+          "groupKey": "string (read-only)",
+          "groupNombre": "string (read-only)",
+          "priceMode": "ProductOptionPriceMode (read-only, viene del grupo)",
+          "required": "boolean (read-only, viene del grupo)",
+          "orden": "number (editable)",
+          "options": "OptionLinkState[] (pre-pobladas del grupo)"
+        }
+      }
+    },
+
+    "form_options_section_flow": {
+      "description": "Flujo de interacción de la sección 'Opciones del Producto' en /nuevo y /[id]",
+      "visibility": "Solo visible cuando catalogRole === CONFIGURABLE_BASE",
+      "state": "useState<GroupAssignmentState[]>([])",
+      "steps": [
+        "1. Al montar, cargar todos los grupos via getProductOptionGroups()",
+        "2. Mostrar dropdown con checkbox por grupo (multi-select)",
+        "3. Al activar un grupo → agregar GroupAssignmentState con TODAS sus opciones (activo=false, price='0' por defecto)",
+        "4. Al desactivar un grupo → quitarlo del array de state",
+        "5. Por cada grupo asignado, renderizar sección expandible con sus opciones",
+        "6. Cada opción muestra: label (read-only), toggle activo, input precio, input orden",
+        "7. Al submit → filtrar solo opciones con activo=true → construir arrays groupAssignments y optionLinks"
+      ],
+      "pre_populate_edit": "Para /[id]: cruzar getProductWithConfiguration().optionGroupAssignments con getProductOptionGroups() para marcar qué grupos están asignados y pre-llenar precios desde optionLinksAsBase"
+    },
+
+    "server_actions": [
+      {
+        "name": "getProductOptionGroups",
+        "what": "Lista todos los grupos con sus opciones activas",
+        "input": "void",
+        "output": "{ success: boolean, data?: ProductOptionGroupWithOptions[] }",
+        "prisma": "findMany({ include: { options: { where: { deletedAt: null }, orderBy: { orden: 'asc' } }, _count: { select: { assignments: true } } }, orderBy: { orden: 'asc' } })"
+      },
+      {
+        "name": "createProductOptionGroup",
+        "what": "Crea un grupo de opciones reutilizable",
+        "input": "{ key: string, nombre: string, priceMode: ProductOptionPriceMode, required: boolean, orden: number }",
+        "output": "{ success: boolean, data?: ProductOptionGroup, error?: string }",
+        "validation": "key único (catch P2002 → 'Ya existe un grupo con el key X'). key solo lowercase + underscores.",
+        "revalidates": "/admin/dashboard/productos/opciones"
+      },
+      {
+        "name": "updateProductOptionGroup",
+        "what": "Actualiza nombre, priceMode, required, orden de un grupo. key es INMUTABLE.",
+        "input": "id: string, { nombre: string, priceMode: ProductOptionPriceMode, required: boolean, orden: number }",
+        "output": "{ success: boolean, data?: ProductOptionGroup, error?: string }",
+        "revalidates": "/admin/dashboard/productos/opciones"
+      },
+      {
+        "name": "deleteProductOptionGroup",
+        "what": "Elimina un grupo si no tiene productos asignados",
+        "input": "id: string",
+        "output": "{ success: boolean, error?: string }",
+        "validation": "Query _count.assignments. Si > 0 → error 'No se puede eliminar: el grupo tiene X productos asignados'. Si 0 → hard delete (cascade borra options).",
+        "revalidates": "/admin/dashboard/productos/opciones"
+      },
+      {
+        "name": "createProductOption",
+        "what": "Crea una opción dentro de un grupo",
+        "input": "groupId: string, { label: string, slug: string, optionProductId?: string | null, recipeMultiplier?: number | null, activo: boolean, orden: number }",
+        "output": "{ success: boolean, data?: ProductOption, error?: string }",
+        "validation": "[groupId, slug] unique (catch P2002 → 'Ya existe una opción con el slug X en este grupo').",
+        "revalidates": "/admin/dashboard/productos/opciones"
+      },
+      {
+        "name": "updateProductOption",
+        "what": "Actualiza label, optionProductId, recipeMultiplier, activo, orden. slug es INMUTABLE.",
+        "input": "id: string, { label: string, optionProductId?: string | null, recipeMultiplier?: number | null, activo: boolean, orden: number }",
+        "output": "{ success: boolean, data?: ProductOption, error?: string }",
+        "revalidates": "/admin/dashboard/productos/opciones"
+      },
+      {
+        "name": "softDeleteProductOption",
+        "what": "Soft-delete: sets deletedAt = new Date(). No hard delete.",
+        "input": "id: string",
+        "output": "{ success: boolean, error?: string }",
+        "revalidates": "/admin/dashboard/productos/opciones"
+      },
+      {
+        "name": "getOptionProductCandidates",
+        "what": "Lista productos vinculables como opciones (para dropdown)",
+        "input": "void",
+        "output": "{ success: boolean, data?: Array<{ id: string, nombre: string }> }",
+        "prisma": "findMany({ where: { catalogRole: 'OPTION_PRODUCT', activo: true, deletedAt: null }, select: { id: true, nombre: true }, orderBy: { nombre: 'asc' } })"
+      },
+      {
+        "name": "getProductWithConfiguration",
+        "what": "Carga un producto con toda su configuración para edición",
+        "input": "id: string",
+        "output": "{ success: boolean, data?: ProductWithConfiguration, error?: string }",
+        "prisma_include": {
+          "category": true,
+          "recipeItems": { "include": { "supply": true } },
+          "optionGroupAssignments": {
+            "include": { "group": { "include": { "options": { "where": { "deletedAt": null } } } } },
+            "orderBy": { "orden": "asc" }
+          },
+          "optionLinksAsBase": {
+            "include": { "option": true },
+            "orderBy": { "orden": "asc" }
+          }
+        }
+      },
+      {
+        "name": "createConfigurableProduct",
+        "what": "Crea producto + recipeItems + groupAssignments + optionLinks en transacción",
+        "input": "data: ConfigurableProductPayload",
+        "output": "{ success: boolean, data?: { id: string }, error?: string }",
+        "transaction_steps": [
+          "1. tx.product.create({ data: { nombre, descripcion, imagen, precio, costoUnitario, categoryId, unidad, catalogRole } })",
+          "2. if recipeItems.length > 0: tx.productRecipeItem.createMany({ data: recipeItems.map(i => ({ productId, ...i })) })",
+          "3. if groupAssignments.length > 0: tx.productOptionGroupAssignment.createMany({ data: groupAssignments.map(a => ({ productId, ...a })) })",
+          "4. if optionLinks.length > 0: tx.productOptionLink.createMany({ data: optionLinks.map(l => ({ baseProductId: productId, ...l })) })"
+        ],
+        "transaction_options": "{ maxWait: 10000, timeout: 20000 }",
+        "error_handling": "Catch P2002 → 'Ya existe un producto con ese nombre'. Generic error otherwise.",
+        "revalidates": "revalidateProductSurfaces(product.id) — EXISTING helper"
+      },
+      {
+        "name": "updateConfigurableProduct",
+        "what": "Actualiza producto + delete-recreate recipeItems, assignments, links en transacción",
+        "input": "id: string, data: ConfigurableProductPayload",
+        "output": "{ success: boolean, error?: string }",
+        "transaction_steps": [
+          "1. tx.product.update({ where: { id }, data: { nombre, descripcion, imagen, precio, costoUnitario, categoryId, unidad, catalogRole } })",
+          "2. tx.productRecipeItem.deleteMany({ where: { productId: id } })",
+          "3. if recipeItems.length > 0: tx.productRecipeItem.createMany(...)",
+          "4. tx.productOptionGroupAssignment.deleteMany({ where: { productId: id } })",
+          "5. if groupAssignments.length > 0: tx.productOptionGroupAssignment.createMany(...)",
+          "6. tx.productOptionLink.deleteMany({ where: { baseProductId: id } })",
+          "7. if optionLinks.length > 0: tx.productOptionLink.createMany(...)"
+        ],
+        "transaction_options": "{ maxWait: 10000, timeout: 20000 }",
+        "revalidates": "revalidateProductSurfaces(id) — EXISTING helper"
+      }
+    ]
+  },
+
+  "existing_code_modifications": {
+    "api_route_productos": {
+      "file": "src/app/api/admin/dashboard/productos/route.ts",
+      "what": "Agregar catalogRole al normalizedProducts map",
+      "exact_change": "En línea 90 (después de 'createdAt: p.createdAt'), agregar: catalogRole: p.catalogRole"
+    },
+    "menuitem_type": {
+      "file": "src/app/admin/dashboard/productos/page.tsx",
+      "what": "Agregar catalogRole al type MenuItem",
+      "exact_change": "En la interface MenuItem (línea 47-63), agregar: catalogRole?: string"
+    },
+    "slugify_helper": {
+      "pattern": "Reutilizar el algoritmo de createCategory() (actions.ts línea 208-213)",
+      "code": "label.toLowerCase().trim().replace(/[^\\w\\s-]/g, '').replace(/[\\s_-]+/g, '-').replace(/^-+|-+$/g, '')"
+    }
+  },
+
+  "empty_states": {
+    "opciones_no_groups": "Icono Layers + 'No hay grupos de opciones creados' + 'Creá el primer grupo para organizar las opciones de tus productos.' + botón '+ Nuevo grupo'",
+    "opciones_no_options": "Icono Settings2 + 'Este grupo no tiene opciones' + 'Agregá opciones que los clientes podrán elegir.' + botón '+ Nueva opción'",
+    "opciones_no_selection": "Icono de flecha + 'Seleccioná un grupo para ver sus opciones'",
+    "nuevo_no_groups_available": "Banner informativo: 'No hay grupos de opciones. Creá grupos primero en el catálogo de opciones.' + link a /opciones"
+  },
+
+  "navigation": {
+    "from_list_to_edit": {
+      "current_behavior": "Click en producto → setSelectedItem → ResponsivePanel lateral. Panel tiene botón 'Ver detalle completo' → /[id] (línea 1064-1074)",
+      "change_needed": "Ninguno. La ruta /[id] ya está linkeada. Solo falta crear la página que reciba esa ruta."
+    },
+    "from_list_to_opciones": {
+      "what": "Agregar botón 'Opciones' en el header de page.tsx, mismo patrón que el DropdownMenu de 'Categorías' (línea 431-457)",
+      "items": [
+        "Link 'Ver todas' → /admin/dashboard/productos/opciones",
+        "MenuItem '+ Nuevo grupo' → /admin/dashboard/productos/opciones (con query ?create=true o simplemente navega)"
+      ]
+    }
+  },
+
+  "failure_modes": [
+    {
+      "scenario": "Duplicate group key",
+      "handling": "Catch P2002 → 'Ya existe un grupo con el key [X]'",
+      "AC_ref": "AC-01"
+    },
+    {
+      "scenario": "Duplicate option slug within group",
+      "handling": "Catch P2002 → 'Ya existe una opción con el slug [X] en este grupo'",
+      "AC_ref": "AC-03"
+    },
+    {
+      "scenario": "Delete group with assignments",
+      "handling": "Pre-check _count.assignments > 0 → error sin borrar",
+      "AC_ref": "AC-02"
+    },
+    {
+      "scenario": "Transaction failure",
+      "handling": "prisma.$transaction rollback automático. Return error genérico. Log server-side.",
+      "AC_ref": "AC-04"
+    },
+    {
+      "scenario": "OPTION_PRODUCT vinculado eliminado",
+      "handling": "Prisma onDelete: SetNull → optionProductId = null. Catálogo filtra opciones sin producto disponible. UI /opciones muestra warning 'Producto desvinculado'.",
+      "AC_ref": "AC-06"
+    },
+    {
+      "scenario": "Cambio de CONFIGURABLE_BASE a STANDARD",
+      "handling": "Client-side: si el producto tiene assignments/links, window.confirm('Cambiar a simple eliminará X grupos y Y opciones. ¿Continuar?'). Si confirma, updateConfigurableProduct envía groupAssignments: [] y optionLinks: [], el delete-recreate en transacción limpia todo.",
+      "AC_ref": "BR-12"
+    }
+  ],
+
+  "libraries": {
+    "all_existing": true,
+    "list": ["prisma", "shadcn/ui (Sheet, Button, Input, Select, Badge, DropdownMenu, Label, Textarea, Switch)", "sonner (toast)", "lucide-react (Settings2, Layers, Plus, Pencil, Trash2, ChevronLeft, Link2, Save, Loader2, Search, ChevronDown)"],
+    "new_installs": "Ninguno"
+  },
+
+  "test_strategy": {
+    "approach": "Manual testing via admin UI contra dev server (npm run dev).",
+    "checkpoints": [
+      "T1: actions.ts — llamar cada action desde consola o página temporal",
+      "T2: opciones/page.tsx — CRUD completo: crear grupo → agregar opciones → editar → borrar",
+      "T3: nuevo/page.tsx — crear STANDARD (regresión), crear CONFIGURABLE_BASE con opciones, crear OPTION_PRODUCT",
+      "T4: [id]/page.tsx — editar CONFIGURABLE_BASE, verificar pre-población, guardar cambios",
+      "T5: End-to-end — crear configuración en admin → verificar catálogo público → agregar al carrito → crear pedido → verificar configSnapshot"
+    ],
+    "regression": [
+      "Crear producto STANDARD via /nuevo funciona idéntico",
+      "CreateProductSheet (quick create) sigue funcionando",
+      "Catálogo público no muestra OPTION_PRODUCT",
+      "Pedidos existentes con configSnapshot se muestran correctamente"
+    ]
+  },
+
+  "implementation_phases": [
+    {
+      "phase": 1,
+      "goal": "Backend: todas las server actions",
+      "tasks": [
+        "Agregar types ConfigurableProductPayload, ProductOptionGroupWithOptions al final de actions.ts",
+        "Agregar getProductOptionGroups()",
+        "Agregar createProductOptionGroup() con P2002",
+        "Agregar updateProductOptionGroup()",
+        "Agregar deleteProductOptionGroup() con guard de assignments",
+        "Agregar createProductOption() con P2002",
+        "Agregar updateProductOption()",
+        "Agregar softDeleteProductOption()",
+        "Agregar getOptionProductCandidates()",
+        "Agregar getProductWithConfiguration() con full include",
+        "Agregar createConfigurableProduct() con $transaction",
+        "Agregar updateConfigurableProduct() con $transaction"
+      ],
+      "files_touched": ["actions.ts"],
+      "dod": "Todas las actions son invocables y retornan los shapes correctos."
+    },
+    {
+      "phase": 2,
+      "goal": "UI: Gestión de grupos y opciones (/opciones)",
+      "tasks": [
+        "Crear opciones/page.tsx con layout master-detail (stacked en mobile)",
+        "Panel izq: lista de grupos con badges (nombre, key, ADD/OVERRIDE, Requerido/Opcional, count opciones)",
+        "Panel der: opciones del grupo seleccionado con toggle activo, label, slug, badge producto vinculado",
+        "Sheet crear/editar grupo: campos key (solo create), nombre, priceMode (select), switch required, input orden",
+        "Sheet crear/editar opción: campos label, slug (auto-generado, solo create), dropdown producto vinculado, input recipeMultiplier (disabled si hay producto vinculado), switch activo, input orden",
+        "Empty states para: sin grupos, sin opciones, sin selección",
+        "Slugify automático: label → slug usando algoritmo de createCategory (lowercase, trim, replace especiales)"
+      ],
+      "files_touched": ["opciones/page.tsx (NEW)"],
+      "dod": "Admin puede hacer CRUD completo de grupos y opciones."
+    },
+    {
+      "phase": 3,
+      "goal": "Extender formulario de Nuevo Producto con tipo y opciones",
+      "tasks": [
+        "Agregar estado catalogRole (default STANDARD) con radio group visual: Simple / Configurable / Opción",
+        "Agregar estado groupAssignments: GroupAssignmentState[]",
+        "Cargar getProductOptionGroups() en el useEffect inicial",
+        "Sección opciones (visible solo si CONFIGURABLE_BASE): dropdown multi-select de grupos, por cada grupo expandible con opciones (toggle, precio, orden)",
+        "OPTION_PRODUCT: badge informativo, sin sección opciones",
+        "Submit: STANDARD → createProductWithRecipe (existente), CONFIGURABLE_BASE/OPTION_PRODUCT → createConfigurableProduct (nuevo)",
+        "Regresión: crear producto simple funciona idéntico al flujo actual"
+      ],
+      "files_touched": ["nuevo/page.tsx (MODIFY)"],
+      "dod": "Admin puede crear los 3 tipos de producto."
+    },
+    {
+      "phase": 4,
+      "goal": "Página de edición de producto (/[id])",
+      "tasks": [
+        "Crear [id]/page.tsx como client component con useParams<{ id: string }>()",
+        "Cargar datos con getProductWithConfiguration(id) + getCategories() + getSupplies() + getProductOptionGroups()",
+        "Pre-poblar: catalogRole, datos básicos, recipeItems, groupAssignments (cruzar assignments con groups disponibles), optionLinks (precios desde optionLinksAsBase)",
+        "Submit → updateConfigurableProduct(id)",
+        "Manejo de cambio de tipo con confirmación (BR-12)"
+      ],
+      "files_touched": ["[id]/page.tsx (NEW)"],
+      "dod": "Admin puede editar cualquier producto con toda su configuración."
+    },
+    {
+      "phase": 5,
+      "goal": "Badges y navegación en lista de productos",
+      "tasks": [
+        "API route: agregar catalogRole: p.catalogRole al normalizedProducts en route.ts",
+        "MenuItem type: agregar catalogRole?: string",
+        "Tabla desktop + cards mobile: mostrar badge catalogRole (Configurable=teal, Opción=amber, Simple=sin badge)",
+        "Header: agregar DropdownMenu 'Opciones' con link a /opciones (mismo patrón que Categorías)"
+      ],
+      "files_touched": ["route.ts (MODIFY)", "page.tsx (MODIFY)"],
+      "dod": "Lista muestra badges, navegación a /opciones funciona."
+    }
+  ]
+}

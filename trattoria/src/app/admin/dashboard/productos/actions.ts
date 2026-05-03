@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { UnidadMedida, Prisma, DiscountType } from "@prisma/client";
+import { UnidadMedida, Prisma, DiscountType, ProductCatalogRole, ProductOptionPriceMode } from "@prisma/client";
 import { serializePrisma } from "@/lib/utils";
 
 type ProductActionData = {
@@ -648,3 +648,442 @@ export async function updateProductWithRecipe(id: string, productData: ProductAc
         return { success: false, error: "Error al actualizar the producto" };
     }
 }
+
+// =============================================================================
+// CONFIGURABLE PRODUCTS — Types (T01)
+// =============================================================================
+
+export type ConfigurableProductPayload = {
+    nombre: string;
+    descripcion?: string;
+    precio: string | number;
+    costoUnitario?: string | number | null;
+    categoryId: string;
+    imagen?: string | null;
+    unidad?: UnidadMedida;
+    catalogRole: ProductCatalogRole;
+    recipeItems: { supplyId: string; qtyPerUnit: number; unidad: UnidadMedida }[];
+    groupAssignments: { groupId: string; orden: number }[];
+    optionLinks: { optionId: string; price: number; activo: boolean; orden: number }[];
+};
+
+export type ProductOptionGroupWithOptions = Prisma.ProductOptionGroupGetPayload<{
+    include: {
+        options: true;
+        _count: { select: { assignments: true } };
+    };
+}>;
+
+// =============================================================================
+// CONFIGURABLE PRODUCTS — Option Group CRUD (T02, T03, T04)
+// =============================================================================
+
+export async function getProductOptionGroups() {
+    try {
+        const groups = await prisma.productOptionGroup.findMany({
+            include: {
+                options: {
+                    where: { deletedAt: null },
+                    orderBy: { orden: "asc" },
+                },
+                _count: {
+                    select: { assignments: true },
+                },
+            },
+            orderBy: { orden: "asc" },
+        });
+        return { success: true, data: serializePrisma(groups) };
+    } catch (error) {
+        console.error("Error fetching product option groups:", error);
+        return { success: false, error: "Error al obtener los grupos de opciones" };
+    }
+}
+
+export async function createProductOptionGroup(data: {
+    key: string;
+    nombre: string;
+    priceMode: ProductOptionPriceMode;
+    required: boolean;
+    orden: number;
+}) {
+    try {
+        const normalizedKey = data.key.trim();
+        if (!/^[a-z0-9_]+$/.test(normalizedKey)) {
+            return {
+                success: false,
+                error: "El key debe estar en lowercase y usar solo letras, numeros o '_'",
+            };
+        }
+        const group = await prisma.productOptionGroup.create({
+            data: {
+                key: normalizedKey,
+                nombre: data.nombre,
+                priceMode: data.priceMode,
+                required: data.required,
+                orden: data.orden,
+            },
+        });
+        revalidatePath("/admin/dashboard/productos/opciones");
+        return { success: true, data: serializePrisma(group) };
+    } catch (error) {
+        console.error("Error creating product option group:", error);
+        if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+            return { success: false, error: `Ya existe un grupo con el key '${data.key}'` };
+        }
+        return { success: false, error: "Error al crear el grupo de opciones" };
+    }
+}
+
+export async function updateProductOptionGroup(
+    id: string,
+    data: {
+        nombre: string;
+        priceMode: ProductOptionPriceMode;
+        required: boolean;
+        orden: number;
+    }
+) {
+    try {
+        // key is immutable — not included in update
+        const group = await prisma.productOptionGroup.update({
+            where: { id },
+            data: {
+                nombre: data.nombre,
+                priceMode: data.priceMode,
+                required: data.required,
+                orden: data.orden,
+            },
+        });
+        revalidatePath("/admin/dashboard/productos/opciones");
+        return { success: true, data: serializePrisma(group) };
+    } catch (error) {
+        console.error("Error updating product option group:", error);
+        return { success: false, error: "Error al actualizar el grupo de opciones" };
+    }
+}
+
+export async function deleteProductOptionGroup(id: string) {
+    try {
+        // Guard: check if group has product assignments
+        const group = await prisma.productOptionGroup.findUnique({
+            where: { id },
+            include: { _count: { select: { assignments: true } } },
+        });
+
+        if (!group) {
+            return { success: false, error: "Grupo no encontrado" };
+        }
+
+        if (group._count.assignments > 0) {
+            return {
+                success: false,
+                error: `No se puede eliminar: el grupo tiene ${group._count.assignments} producto${group._count.assignments === 1 ? "" : "s"} asignado${group._count.assignments === 1 ? "" : "s"}`,
+            };
+        }
+
+        // Safe to hard delete — cascade will delete options
+        await prisma.productOptionGroup.delete({ where: { id } });
+        revalidatePath("/admin/dashboard/productos/opciones");
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting product option group:", error);
+        return { success: false, error: "Error al eliminar el grupo de opciones" };
+    }
+}
+
+// =============================================================================
+// CONFIGURABLE PRODUCTS — Option CRUD (T05, T06)
+// =============================================================================
+
+export async function createProductOption(
+    groupId: string,
+    data: {
+        label: string;
+        slug: string;
+        optionProductId?: string | null;
+        recipeMultiplier?: number | null;
+        activo: boolean;
+        orden: number;
+    }
+) {
+    try {
+        const option = await prisma.productOption.create({
+            data: {
+                groupId,
+                label: data.label,
+                slug: data.slug,
+                optionProductId: data.optionProductId || null,
+                recipeMultiplier: data.recipeMultiplier ?? null,
+                activo: data.activo,
+                orden: data.orden,
+            },
+        });
+        revalidatePath("/admin/dashboard/productos/opciones");
+        return { success: true, data: serializePrisma(option) };
+    } catch (error) {
+        console.error("Error creating product option:", error);
+        if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+            return { success: false, error: `Ya existe una opción con el slug '${data.slug}' en este grupo` };
+        }
+        return { success: false, error: "Error al crear la opción" };
+    }
+}
+
+export async function updateProductOption(
+    id: string,
+    data: {
+        label: string;
+        optionProductId?: string | null;
+        recipeMultiplier?: number | null;
+        activo: boolean;
+        orden: number;
+    }
+) {
+    try {
+        // slug is immutable — not included in update
+        const option = await prisma.productOption.update({
+            where: { id },
+            data: {
+                label: data.label,
+                optionProductId: data.optionProductId || null,
+                recipeMultiplier: data.recipeMultiplier ?? null,
+                activo: data.activo,
+                orden: data.orden,
+            },
+        });
+        revalidatePath("/admin/dashboard/productos/opciones");
+        return { success: true, data: serializePrisma(option) };
+    } catch (error) {
+        console.error("Error updating product option:", error);
+        return { success: false, error: "Error al actualizar la opción" };
+    }
+}
+
+export async function softDeleteProductOption(id: string) {
+    try {
+        await prisma.productOption.update({
+            where: { id },
+            data: { deletedAt: new Date() },
+        });
+        revalidatePath("/admin/dashboard/productos/opciones");
+        return { success: true };
+    } catch (error) {
+        console.error("Error soft-deleting product option:", error);
+        return { success: false, error: "Error al eliminar la opción" };
+    }
+}
+
+// =============================================================================
+// CONFIGURABLE PRODUCTS — Query Functions (T07, T08)
+// =============================================================================
+
+export async function getOptionProductCandidates() {
+    try {
+        const products = await prisma.product.findMany({
+            where: {
+                catalogRole: "OPTION_PRODUCT",
+                activo: true,
+                deletedAt: null,
+            },
+            select: {
+                id: true,
+                nombre: true,
+            },
+            orderBy: { nombre: "asc" },
+        });
+        return { success: true, data: serializePrisma(products) };
+    } catch (error) {
+        console.error("Error fetching option product candidates:", error);
+        return { success: false, error: "Error al obtener productos vinculables" };
+    }
+}
+
+export async function getProductWithConfiguration(id: string) {
+    try {
+        const product = await prisma.product.findUnique({
+            where: { id },
+            include: {
+                category: true,
+                recipeItems: {
+                    include: {
+                        supply: true,
+                    },
+                },
+                optionGroupAssignments: {
+                    include: {
+                        group: {
+                            include: {
+                                options: {
+                                    where: { deletedAt: null },
+                                },
+                            },
+                        },
+                    },
+                    orderBy: { orden: "asc" },
+                },
+                optionLinksAsBase: {
+                    include: {
+                        option: true,
+                    },
+                    orderBy: { orden: "asc" },
+                },
+            },
+        });
+
+        if (!product) {
+            return { success: false, error: "Producto no encontrado" };
+        }
+
+        return { success: true, data: serializePrisma(product) };
+    } catch (error) {
+        console.error("Error fetching product with configuration:", error);
+        return { success: false, error: "Error al obtener el producto con configuración" };
+    }
+}
+
+// =============================================================================
+// CONFIGURABLE PRODUCTS — Create & Update with Transaction (T09, T10)
+// =============================================================================
+
+export async function createConfigurableProduct(data: ConfigurableProductPayload) {
+    try {
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Create product
+            const product = await tx.product.create({
+                data: {
+                    nombre: data.nombre,
+                    descripcion: data.descripcion,
+                    imagen: data.imagen,
+                    precio: Number(data.precio),
+                    costoUnitario: data.costoUnitario ? Number(data.costoUnitario) : null,
+                    categoryId: data.categoryId,
+                    unidad: data.unidad || "UNIDAD",
+                    catalogRole: data.catalogRole,
+                },
+            });
+
+            // 2. Create recipe items
+            if (data.recipeItems.length > 0) {
+                await tx.productRecipeItem.createMany({
+                    data: data.recipeItems.map(item => ({
+                        productId: product.id,
+                        supplyId: item.supplyId,
+                        qtyPerUnit: item.qtyPerUnit,
+                        unidad: item.unidad,
+                    })),
+                });
+            }
+
+            // 3. Create group assignments
+            if (data.groupAssignments.length > 0) {
+                await tx.productOptionGroupAssignment.createMany({
+                    data: data.groupAssignments.map(a => ({
+                        productId: product.id,
+                        groupId: a.groupId,
+                        orden: a.orden,
+                    })),
+                });
+            }
+
+            // 4. Create option links
+            if (data.optionLinks.length > 0) {
+                await tx.productOptionLink.createMany({
+                    data: data.optionLinks.map(l => ({
+                        baseProductId: product.id,
+                        optionId: l.optionId,
+                        price: l.price,
+                        activo: l.activo,
+                        orden: l.orden,
+                    })),
+                });
+            }
+
+            return product;
+        }, {
+            maxWait: 10000,
+            timeout: 20000,
+        });
+
+        revalidateProductSurfaces(result.id);
+        return { success: true, data: { id: result.id } };
+    } catch (error) {
+        console.error("Error creating configurable product:", error);
+        if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+            return { success: false, error: "Ya existe un producto con ese nombre" };
+        }
+        return { success: false, error: "Error al crear el producto" };
+    }
+}
+
+export async function updateConfigurableProduct(id: string, data: ConfigurableProductPayload) {
+    try {
+        await prisma.$transaction(async (tx) => {
+            // 1. Update product
+            await tx.product.update({
+                where: { id },
+                data: {
+                    nombre: data.nombre,
+                    descripcion: data.descripcion,
+                    imagen: data.imagen,
+                    precio: Number(data.precio),
+                    costoUnitario: data.costoUnitario ? Number(data.costoUnitario) : null,
+                    categoryId: data.categoryId,
+                    unidad: data.unidad || "UNIDAD",
+                    catalogRole: data.catalogRole,
+                },
+            });
+
+            // 2. Delete & recreate recipe items
+            await tx.productRecipeItem.deleteMany({ where: { productId: id } });
+            if (data.recipeItems.length > 0) {
+                await tx.productRecipeItem.createMany({
+                    data: data.recipeItems.map(item => ({
+                        productId: id,
+                        supplyId: item.supplyId,
+                        qtyPerUnit: item.qtyPerUnit,
+                        unidad: item.unidad,
+                    })),
+                });
+            }
+
+            // 3. Delete & recreate group assignments
+            await tx.productOptionGroupAssignment.deleteMany({ where: { productId: id } });
+            if (data.groupAssignments.length > 0) {
+                await tx.productOptionGroupAssignment.createMany({
+                    data: data.groupAssignments.map(a => ({
+                        productId: id,
+                        groupId: a.groupId,
+                        orden: a.orden,
+                    })),
+                });
+            }
+
+            // 4. Delete & recreate option links
+            await tx.productOptionLink.deleteMany({ where: { baseProductId: id } });
+            if (data.optionLinks.length > 0) {
+                await tx.productOptionLink.createMany({
+                    data: data.optionLinks.map(l => ({
+                        baseProductId: id,
+                        optionId: l.optionId,
+                        price: l.price,
+                        activo: l.activo,
+                        orden: l.orden,
+                    })),
+                });
+            }
+        }, {
+            maxWait: 10000,
+            timeout: 20000,
+        });
+
+        revalidateProductSurfaces(id);
+        return { success: true };
+    } catch (error) {
+        console.error("Error updating configurable product:", error);
+        if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+            return { success: false, error: "Ya existe un producto con ese nombre" };
+        }
+        return { success: false, error: "Error al actualizar el producto" };
+    }
+}
+

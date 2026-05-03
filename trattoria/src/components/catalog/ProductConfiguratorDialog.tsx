@@ -77,18 +77,7 @@ export function ProductConfiguratorDialog({ product, open, onOpenChange }: Produ
       return;
     }
 
-    const cartKey = [product.id, ...selectedOptions.map((option) => option.optionId)].join(":");
-
-    addItem({
-      cartKey,
-      baseProductId: product.id,
-      baseProductName: product.nombre,
-      displayName,
-      description: product.descripcion,
-      image: product.imagen,
-      unitPrice,
-      selectedOptions,
-    });
+    addItem(product as any, selectedOptions as any);
 
     window.dispatchEvent(new Event("cartChanged"));
     toast.success(`${displayName} agregado al carrito`, {

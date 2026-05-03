@@ -67,6 +67,7 @@ export type PublicCatalogProduct = {
   nombre: string;
   descripcion: string | null;
   imagen: string | null;
+  orden?: number;
   precio: number;
   stockActual: number;
   catalogRole: ProductCatalogRole;
@@ -173,6 +174,7 @@ export function mapPublicCatalogProduct(product: PublicCatalogProductRecord): Pu
     nombre: product.nombre,
     descripcion: product.descripcion,
     imagen: product.imagen,
+    orden: product.orden,
     precio: Number(product.precio),
     stockActual: product.stockActual,
     catalogRole: product.catalogRole,
