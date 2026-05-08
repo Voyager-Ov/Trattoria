@@ -1,9 +1,0 @@
-<svg style="width:100%;height:100%;"><use href="#svg-1806061389_6628"/></svg>
-
-<svg style="width:100%;height:100%;"><use href="#svg-1806061389_6628"/></svg>
-
-<svg style="width:100%;height:100%;" viewBox="0 0 32 32"><use href="#svg778397461_571"/></svg>
-
-<svg style="width:100%;height:100%;" viewBox="0 0 32 32"><use href="#svg778397461_571"/></svg>
-
-<svg class="framer-1yzq5bs" style="outline:none;display:flex;flex-direction:column;justify-content:flex-start;flex-shrink:0;--extracted-r6o4lv:var(--token-2a96f48f-e58d-41a4-a6bd-816546c882bd, rgb(0, 0, 0));--framer-link-text-color:rgb(0, 153, 255);--framer-link-text-decoration:underline;transform:none" data-framer-component-type="RichTextContainer" viewBox="0 0 431 45"><foreignObject width="100%" height="100%" class="framer-fit-text" transform="scale(1)" style="overflow:visible;transform-origin:center center"><p style="--font-selector:Q1VTVE9NO05CIEludGVybmF0aW9uYWwgUHJvIFJlZ3VsYXI=;--framer-font-family:&quot;NB International Pro Regular&quot;, &quot;NB International Pro Regular Placeholder&quot;, sans-serif;--framer-font-size:32px;--framer-line-height:1.4em;--framer-text-color:var(--extracted-r6o4lv, var(--token-2a96f48f-e58d-41a4-a6bd-816546c882bd, rgb(0, 0, 0)))" class="framer-text">Spectrumshapes@gmail.com</p></foreignObject></svg>

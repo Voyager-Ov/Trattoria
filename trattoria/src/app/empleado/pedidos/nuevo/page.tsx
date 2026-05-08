@@ -253,7 +253,7 @@ export default function NuevoPedidoPage() {
             return [
                 ...prev,
                 {
-                    productId: item.id, // item is MenuItem here, but logic needs careful name mapping
+                    productId: product.id, // product is MenuItem here, but logic needs careful name mapping
                     id: cartItemId,
                     nombre: configuredName,
                     cantidad: 1,
