@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { Prisma, UnidadMedida, TipoMovimientoStock, CategoriaEgreso } from "@prisma/client";
+import { requireAdmin } from "@/lib/serverAuth";
 
 // Helper to serialize Prisma Decimal objects
 function serializePrisma(obj: unknown): unknown {
@@ -104,6 +105,7 @@ export async function createSupply(data: {
     activo?: boolean;
 }) {
     try {
+        await requireAdmin();
         const supply = await prisma.supply.create({
             data: {
                 nombre: data.nombre,
@@ -135,6 +137,7 @@ export async function registerStockEntry(data: {
     proveedor?: string;
 }) {
     try {
+        await requireAdmin();
         const result = await prisma.$transaction(async (tx) => {
             // 1. Get current supply
             const supply = await tx.supply.findUnique({
@@ -256,6 +259,7 @@ export async function registerStockMovement(data: {
     motivo: string;
 }) {
     try {
+        await requireAdmin();
         const result = await prisma.$transaction(async (tx) => {
             const supply = await tx.supply.findUnique({
                 where: { id: data.supplyId }
@@ -300,6 +304,7 @@ export async function registerStockMovement(data: {
 
 export async function softDeleteSupply(id: string) {
     try {
+        await requireAdmin();
         await prisma.supply.update({
             where: { id },
             data: { deletedAt: new Date() },
@@ -314,6 +319,7 @@ export async function softDeleteSupply(id: string) {
 
 export async function archiveSupply(id: string) {
     try {
+        await requireAdmin();
         await prisma.supply.update({
             where: { id },
             data: { activo: false },
@@ -328,6 +334,7 @@ export async function archiveSupply(id: string) {
 
 export async function unarchiveSupply(id: string) {
     try {
+        await requireAdmin();
         await prisma.supply.update({
             where: { id },
             data: { activo: true },
@@ -404,6 +411,7 @@ export async function updateSupply(id: string, data: {
     activo?: boolean;
 }) {
     try {
+        await requireAdmin();
         const supply = await prisma.supply.update({
             where: { id },
             data: {
@@ -445,6 +453,7 @@ export async function getSupplyCategories() {
 
 export async function createSupplyCategory(nombre: string) {
     try {
+        await requireAdmin();
         const category = await prisma.supplyCategory.create({
             data: { nombre }
         });

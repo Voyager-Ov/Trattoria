@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getConfigs } from "./configActions";
 import { getStoreStatus } from "@/lib/openingHours";
 import { z } from "zod";
+import { triggerOrderSignal } from "@/lib/trigger-signal";
 
 const PublicOrderSchema = z.object({
     clienteNombre: z.string().min(1, "Nombre requerido").max(100),
@@ -111,12 +112,10 @@ export async function createPublicOrder(data: {
         });
         const verifiedTotal = verifiedItems.reduce((sum, item) => sum + item.subtotal, 0);
 
-        const seq = await prisma.appSequence.upsert({
-            where: { tipo: "order" },
-            update: { ultimo: { increment: 1 } },
-            create: { tipo: "order", prefijo: "ORD-", ultimo: 1 }
-        });
-        const numeroOrden = `${seq.prefijo}${seq.ultimo.toString().padStart(4, "0")}`;
+        // Get or generate order number using Postgres native sequence
+        const seqResult = await prisma.$queryRaw<{next_val: bigint}[]>`SELECT nextval('order_numero_seq') as next_val`;
+        const nextVal = Number(seqResult[0].next_val);
+        const numeroOrden = `ORD-${nextVal.toString().padStart(4, "0")}`;
 
         const newOrder = await prisma.$transaction(async (tx) => {
             const order = await tx.order.create({
@@ -163,6 +162,9 @@ export async function createPublicOrder(data: {
 
             return order;
         });
+
+        // Trigger real-time update instead of waiting for interval
+        triggerOrderSignal().catch(console.error);
 
         revalidatePath("/admin/dashboard/pedidos");
         return { success: true, orderNumber: numeroOrden, data: JSON.parse(JSON.stringify(newOrder)) };

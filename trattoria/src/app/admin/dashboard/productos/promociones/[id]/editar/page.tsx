@@ -235,9 +235,12 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
         try {
             const res = await updatePromotion(id, {
                 ...formData,
+                // Convert empty date strings to null so existing dates can be cleared
+                startDate: formData.startDate || null,
+                endDate: formData.endDate || null,
                 discountType: "FIXED_AMOUNT",
                 discountValue: calculatedDiscount,
-                daysOfWeek: selectedDays.join(","),
+                daysOfWeek: selectedDays.length > 0 ? selectedDays.join(",") : null,
                 items: selectedProducts.map(p => ({ productId: p.id, quantity: p.quantity })),
                 categoryIds: selectedCategories,
             });

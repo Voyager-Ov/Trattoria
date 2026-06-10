@@ -1,0 +1,5 @@
+⚠ Attempted to load @next/swc-win32-x64-msvc, but an error occurred: \\?\D:\github desktop\Trattoria\Trattoria\trattoria\node_modules\@next\swc-win32-x64-msvc\next-swc.win32-x64-msvc.node is not a valid Win32 application.
+\\?\D:\github desktop\Trattoria\Trattoria\trattoria\node_modules\@next\swc-win32-x64-msvc\next-swc.win32-x64-msvc.node
+
+[1m[33mwarn[39m[22m - The class `ease-[cubic-bezier(0.34,1.56,0.64,1)]` is ambiguous and matches multiple utilities.
+[1m[33mwarn[39m[22m - If this is content and not a class, replace it with `ease-&lsqb;cubic-bezier(0.34,1.56,0.64,1)&rsqb;` to silence this warning.

@@ -1,0 +1,18 @@
+
+> trattoria@0.1.0 dev
+> npm run check:cashbox-schema && next dev --webpack
+
+
+> trattoria@0.1.0 check:cashbox-schema
+> tsx scripts/maintenance/check-cashbox-schema.ts
+
+Checking cashbox schema...
+Cashbox schema ready.
+▲ Next.js 16.1.5 (webpack)
+- Local:         http://localhost:3006
+- Network:       http://192.168.100.14:3006
+- Environments: .env.local, .env
+
+✓ Starting...
+  Skipping creating a lockfile at D:\github desktop\Trattoria\Trattoria\trattoria\.next\dev\lock because we're using WASM bindings
+✓ Ready in 3.4s

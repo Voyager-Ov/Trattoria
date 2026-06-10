@@ -1,0 +1,1 @@
+export * from "@/app/admin/dashboard/pedidos/components/pedido-shared";

@@ -1,5 +1,6 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getAuth, Auth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
 /**
  * Firebase Admin SDK for server-side operations
@@ -8,6 +9,7 @@ import { getAuth, Auth } from 'firebase-admin/auth';
  * - Creating session cookies
  * - Verifying session cookies
  * - Managing user claims
+ * - Real-time signaling via Firestore
  */
 
 let app: App | undefined;
@@ -35,3 +37,4 @@ if (!getApps().length) {
 
 export const adminAuth = auth as Auth;
 export const adminApp = app as App;
+export const adminDb = getFirestore(app);

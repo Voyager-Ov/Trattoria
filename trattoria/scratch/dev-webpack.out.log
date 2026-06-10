@@ -1,0 +1,16 @@
+
+> trattoria@0.1.0 dev
+> npm run check:cashbox-schema && next dev --webpack
+
+
+> trattoria@0.1.0 check:cashbox-schema
+> tsx scripts/maintenance/check-cashbox-schema.ts
+
+Checking cashbox schema...
+prisma:error 
+Invalid `prisma.$queryRaw()` invocation:
+
+
+Can't reach database server at `ep-twilight-art-ac6rgmk2-pooler.sa-east-1.aws.neon.tech:5432`
+
+Please make sure your database server is running at `ep-twilight-art-ac6rgmk2-pooler.sa-east-1.aws.neon.tech:5432`.

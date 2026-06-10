@@ -15,6 +15,7 @@ export interface OrderItem {
     id: string;
     nombreProduct: string;
     cantidad: number;
+    configSnapshot?: any;
 }
 
 export interface OrderDetailItem extends OrderItem {

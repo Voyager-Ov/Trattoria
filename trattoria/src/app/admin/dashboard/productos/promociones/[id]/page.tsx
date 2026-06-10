@@ -151,7 +151,9 @@ export default function DetallePromocionPage({ params }: { params: Promise<{ id:
                     </Button>
                     <div>
                         <div className="flex items-center gap-3 mb-1">
-                            <Badge className="bg-emerald-50 text-emerald-600 border-none font-bold text-[0.6rem] px-2 py-0.5 rounded-full">PROMOCIÓN ACTIVA</Badge>
+                            <Badge className={`border-none font-bold text-[0.6rem] px-2 py-0.5 rounded-full ${promotion.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-zinc-100 text-zinc-500'}`}>
+                                {promotion.isActive ? 'PROMOCIÓN ACTIVA' : 'BORRADOR'}
+                            </Badge>
                             <span className="text-zinc-300 text-xs font-bold uppercase tracking-widest">ID: {promotion.id.slice(-8)}</span>
                         </div>
                         <h1 className="text-4xl font-black text-zinc-900 tracking-tight">{promotion.name}</h1>

@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSessionState } from "@/hooks/useSessionState";
 import Link from "next/link";
 import { Prisma, UnidadMedida, ProductCatalogRole } from "@prisma/client";
 import {
@@ -200,12 +201,12 @@ export default function ProductosPage() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-    const [administrativeFilter, setAdministrativeFilter] = useState<AdministrativeStatusFilter>("todos");
-    const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("todas");
-    const [sortField, setSortField] = useState<SortField>("nombre");
-    const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+    const [searchQuery, setSearchQuery] = useSessionState("admin_productos_search", "");
+    const [selectedCategories, setSelectedCategories] = useSessionState<string[]>("admin_productos_categories", []);
+    const [administrativeFilter, setAdministrativeFilter] = useSessionState<AdministrativeStatusFilter>("admin_productos_adminFilter", "todos");
+    const [availabilityFilter, setAvailabilityFilter] = useSessionState<AvailabilityFilter>("admin_productos_availFilter", "todas");
+    const [sortField, setSortField] = useSessionState<SortField>("admin_productos_sortField", "nombre");
+    const [sortDirection, setSortDirection] = useSessionState<SortDirection>("admin_productos_sortDir", "asc");
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
     const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);

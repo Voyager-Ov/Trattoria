@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { PedidoMobileCard } from "./PedidoMobileCard";
-import type { Order } from "./pedido-shared";
+import type { OrderListItem as Order } from "@/app/admin/dashboard/pedidos/components/pedido-shared";
 
 interface PedidosMobileListProps {
     orders: Order[];

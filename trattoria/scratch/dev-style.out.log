@@ -1,0 +1,41 @@
+
+> trattoria@0.1.0 dev
+> npm run check:cashbox-schema && next dev --webpack
+
+
+> trattoria@0.1.0 check:cashbox-schema
+> tsx scripts/maintenance/check-cashbox-schema.ts
+
+Checking cashbox schema...
+Cashbox schema ready.
+▲ Next.js 16.1.5 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.14:3000
+- Environments: .env.local, .env
+
+✓ Starting...
+  Skipping creating a lockfile at D:\github desktop\Trattoria\Trattoria\trattoria\.next\dev\lock because we're using WASM bindings
+✓ Ready in 2.5s
+○ Compiling /categoria/[slug] ...
+prisma:query SELECT "public"."categories"."id", "public"."categories"."nombre", "public"."categories"."descripcion", "public"."categories"."slug", "public"."categories"."imagen", "public"."categories"."orden", "public"."categories"."activo", "public"."categories"."esPromocion", "public"."categories"."createdAt", "public"."categories"."updatedAt", "public"."categories"."deletedAt" FROM "public"."categories" WHERE ("public"."categories"."slug" = $1 AND "public"."categories"."deletedAt" IS NULL) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."promotions"."id", "public"."promotions"."name", "public"."promotions"."description", "public"."promotions"."code", "public"."promotions"."discountType"::text, "public"."promotions"."discountValue", "public"."promotions"."startDate", "public"."promotions"."endDate", "public"."promotions"."daysOfWeek", "public"."promotions"."isActive", "public"."promotions"."imagen", "public"."promotions"."createdAt", "public"."promotions"."updatedAt", "public"."promotions"."deletedAt" FROM "public"."promotions" WHERE ("public"."promotions"."deletedAt" IS NULL AND "public"."promotions"."isActive" = $1 AND EXISTS(SELECT "t0"."B" FROM "public"."_CategoryToPromotion" AS "t0" INNER JOIN "public"."categories" AS "j0" ON ("j0"."id") = ("t0"."A") WHERE ("j0"."id" = $2 AND ("public"."promotions"."id") = ("t0"."B") AND "t0"."B" IS NOT NULL))) ORDER BY "public"."promotions"."createdAt" DESC OFFSET $3
+prisma:query SELECT "public"."_CategoryToPromotion"."B", "public"."_CategoryToPromotion"."A" FROM "public"."_CategoryToPromotion" WHERE "public"."_CategoryToPromotion"."B" IN ($1)
+prisma:query SELECT "public"."categories"."id", "public"."categories"."nombre", "public"."categories"."descripcion", "public"."categories"."slug", "public"."categories"."imagen", "public"."categories"."orden", "public"."categories"."activo", "public"."categories"."esPromocion", "public"."categories"."createdAt", "public"."categories"."updatedAt", "public"."categories"."deletedAt" FROM "public"."categories" WHERE "public"."categories"."id" IN ($1,$2,$3) OFFSET $4
+prisma:query SELECT "public"."promotion_products"."id", "public"."promotion_products"."promotionId", "public"."promotion_products"."productId", "public"."promotion_products"."quantity" FROM "public"."promotion_products" WHERE "public"."promotion_products"."promotionId" IN ($1) OFFSET $2
+prisma:query SELECT "public"."products"."id", "public"."products"."categoryId", "public"."products"."nombre", "public"."products"."descripcion", "public"."products"."imagen", "public"."products"."precio", "public"."products"."catalogRole"::text, "public"."products"."costoUnitario", "public"."products"."unidad"::text, "public"."products"."activo", "public"."products"."disponible", "public"."products"."stockActual", "public"."products"."stockMinimo", "public"."products"."stockMaximo", "public"."products"."orden", "public"."products"."createdAt", "public"."products"."updatedAt", "public"."products"."deletedAt" FROM "public"."products" WHERE ("public"."products"."categoryId" = $1 AND "public"."products"."activo" = $2 AND "public"."products"."disponible" = $3 AND "public"."products"."deletedAt" IS NULL AND "public"."products"."catalogRole" <> CAST($4::text AS "public"."ProductCatalogRole")) ORDER BY "public"."products"."orden" ASC OFFSET $5
+prisma:query SELECT "public"."products"."id", "public"."products"."categoryId", "public"."products"."nombre", "public"."products"."descripcion", "public"."products"."imagen", "public"."products"."precio", "public"."products"."catalogRole"::text, "public"."products"."costoUnitario", "public"."products"."unidad"::text, "public"."products"."activo", "public"."products"."disponible", "public"."products"."stockActual", "public"."products"."stockMinimo", "public"."products"."stockMaximo", "public"."products"."orden", "public"."products"."createdAt", "public"."products"."updatedAt", "public"."products"."deletedAt" FROM "public"."products" WHERE "public"."products"."id" IN ($1,$2) OFFSET $3
+ GET /categoria/promo-milas 200 in 18.2s (compile: 11.3s, render: 6.8s)
+✅ Firebase Admin initialized
+prisma:query SELECT "public"."app_configs"."id", "public"."app_configs"."key", "public"."app_configs"."value", "public"."app_configs"."updatedAt" FROM "public"."app_configs" WHERE "public"."app_configs"."key" IN ($1,$2,$3,$4,$5) OFFSET $6
+ POST /categoria/promo-milas 200 in 2.7s (compile: 16ms, render: 2.7s)
+prisma:query SELECT 1
+prisma:query SELECT "public"."products"."id", "public"."products"."nombre", "public"."products"."descripcion", "public"."products"."imagen", "public"."products"."precio", "public"."products"."categoryId" FROM "public"."products" LEFT JOIN "public"."categories" AS "j0" ON ("j0"."id") = ("public"."products"."categoryId") WHERE ("public"."products"."activo" = $1 AND "public"."products"."disponible" = $2 AND "public"."products"."deletedAt" IS NULL AND "public"."products"."catalogRole" <> CAST($3::text AS "public"."ProductCatalogRole") AND ("j0"."activo" = $4 AND "j0"."deletedAt" IS NULL AND ("j0"."id" IS NOT NULL))) ORDER BY "public"."products"."nombre" ASC OFFSET $5
+prisma:query SELECT "public"."categories"."id", "public"."categories"."nombre", "public"."categories"."slug", "public"."categories"."descripcion", "public"."categories"."imagen", "public"."categories"."orden" FROM "public"."categories" WHERE ("public"."categories"."activo" = $1 AND "public"."categories"."deletedAt" IS NULL) ORDER BY "public"."categories"."orden" ASC OFFSET $2
+prisma:query SELECT "public"."categories"."id", "public"."categories"."slug", "public"."categories"."nombre" FROM "public"."categories" WHERE "public"."categories"."id" IN ($1,$2,$3,$4,$5,$6,$7,$8) OFFSET $9
+ GET / 200 in 833ms (compile: 544ms, render: 290ms)
+prisma:query SELECT 1
+prisma:query SELECT 1
+prisma:query SELECT "public"."categories"."id", "public"."categories"."nombre", "public"."categories"."slug", "public"."categories"."descripcion", "public"."categories"."imagen", "public"."categories"."orden" FROM "public"."categories" WHERE ("public"."categories"."activo" = $1 AND "public"."categories"."deletedAt" IS NULL) ORDER BY "public"."categories"."orden" ASC OFFSET $2
+prisma:query SELECT "public"."products"."id", "public"."products"."nombre", "public"."products"."descripcion", "public"."products"."imagen", "public"."products"."precio", "public"."products"."categoryId" FROM "public"."products" LEFT JOIN "public"."categories" AS "j0" ON ("j0"."id") = ("public"."products"."categoryId") WHERE ("public"."products"."activo" = $1 AND "public"."products"."disponible" = $2 AND "public"."products"."deletedAt" IS NULL AND "public"."products"."catalogRole" <> CAST($3::text AS "public"."ProductCatalogRole") AND ("j0"."activo" = $4 AND "j0"."deletedAt" IS NULL AND ("j0"."id" IS NOT NULL))) ORDER BY "public"."products"."nombre" ASC OFFSET $5
+prisma:query SELECT "public"."categories"."id", "public"."categories"."slug", "public"."categories"."nombre" FROM "public"."categories" WHERE "public"."categories"."id" IN ($1,$2,$3,$4,$5,$6,$7,$8) OFFSET $9
+ GET / 200 in 326ms (compile: 5ms, render: 321ms)

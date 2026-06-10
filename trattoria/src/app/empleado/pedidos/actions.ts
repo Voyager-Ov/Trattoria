@@ -40,3 +40,9 @@ export async function updateOrderStatus(
     await requireEmployee();
     return adminUpdateOrderStatus(id, status, motive, deductStock);
 }
+
+export async function getOperationalCatalog() {
+    await requireEmployee();
+    const { getAdminCatalog } = await import("@/app/admin/dashboard/pedidos/actions");
+    return getAdminCatalog();
+}

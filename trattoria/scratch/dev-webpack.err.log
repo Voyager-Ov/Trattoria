@@ -1,0 +1,1 @@
+No se pudo conectar a la base de datos para verificar Caja. Revisa la conexion y vuelve a ejecutar `npm run db:migrate` o `npm run dev`.

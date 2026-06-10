@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { Prisma, UnidadMedida, TipoMovimientoStock, CategoriaEgreso } from "@prisma/client";
 import { getSystemNow } from "@/lib/system-time";
+import { requireEmployee } from "@/lib/serverAuth";
 
 // Helper to serialize Prisma Decimal objects
 function serializePrisma(obj: unknown): unknown {
@@ -105,6 +106,7 @@ export async function createSupply(data: {
     activo?: boolean;
 }) {
     try {
+        await requireEmployee();
         const supply = await prisma.supply.create({
             data: {
                 nombre: data.nombre,
@@ -136,6 +138,7 @@ export async function registerStockEntry(data: {
     proveedor?: string;
 }) {
     try {
+        await requireEmployee();
         const result = await prisma.$transaction(async (tx) => {
             // 1. Get current supply
             const supply = await tx.supply.findUnique({
@@ -257,6 +260,7 @@ export async function registerStockMovement(data: {
     motivo: string;
 }) {
     try {
+        await requireEmployee();
         const result = await prisma.$transaction(async (tx) => {
             const supply = await tx.supply.findUnique({
                 where: { id: data.supplyId }
@@ -308,6 +312,7 @@ export async function registerStockMovement(data: {
 
 export async function softDeleteSupply(id: string) {
     try {
+        await requireEmployee();
         await prisma.supply.update({
             where: { id },
             data: { deletedAt: getSystemNow() },

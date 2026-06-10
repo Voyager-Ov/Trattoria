@@ -170,7 +170,6 @@ export function ProductCard({
       ref={(node) => {
         // Combinamos el ref del contenedor interno (GSAP) con el del padre (click-outside)
         if (registerExpandedRef) registerExpandedRef(node);
-        // @ts-ignore
         containerRef.current = node;
       }}
       onClick={handleCardClick}

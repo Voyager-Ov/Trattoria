@@ -101,6 +101,20 @@ export interface ProfitabilityByCategoryData {
     margenPorcentaje: number;
 }
 
+type ConfigSnapshotOption = {
+    recipeMultiplier?: number | null;
+};
+
+function getItemRecipeMultiplier(item: any): number {
+    if (!item.configSnapshot || !Array.isArray(item.configSnapshot)) return 1;
+
+    const options = item.configSnapshot as ConfigSnapshotOption[];
+    return options.reduce((acc, opt) => {
+        const m = typeof opt?.recipeMultiplier === "number" ? opt.recipeMultiplier : null;
+        return m !== null && m > 0 ? acc * m : acc;
+    }, 1);
+}
+
 function buildOrderWhere(start: Date, end: Date, basis: ReportBasis = "caja"): Prisma.OrderWhereInput {
     if (basis === "operativo") {
         return {
@@ -482,6 +496,8 @@ export async function getProductMarginsData(startDate: Date, endDate: Date, basi
                     },
                     select: {
                         cantidad: true,
+                        subtotal: true,
+                        configSnapshot: true,
                     },
                 },
             },
@@ -490,16 +506,21 @@ export async function getProductMarginsData(startDate: Date, endDate: Date, basi
         const data: ProductMarginData[] = products
             .map((product) => {
                 const precio = Number(product.precio);
-                const costo =
-                    Number(product.costoUnitario || 0) > 0
-                        ? Number(product.costoUnitario)
-                        : product.recipeItems.reduce((sum, item) => {
-                              return sum + Number(item.qtyPerUnit) * Number(item.supply.costoUnitario || 0);
-                          }, 0);
+                const baseRecipeCost = product.recipeItems.reduce((sum, item) => sum + Number(item.qtyPerUnit) * Number(item.supply.costoUnitario || 0), 0);
+                const costo = Number(product.costoUnitario || 0) > 0 ? Number(product.costoUnitario) : baseRecipeCost;
 
                 const margen = precio - costo;
                 const margenPorcentaje = precio > 0 ? (margen / precio) * 100 : 0;
-                const vecesVendido = product.orderItems.reduce((sum, item) => sum + Number(item.cantidad), 0);
+                
+                let vecesVendido = 0;
+                let margenTotal = 0;
+
+                for (const item of product.orderItems) {
+                    vecesVendido += Number(item.cantidad);
+                    const realCost = costo * Number(item.cantidad) * getItemRecipeMultiplier(item);
+                    const realRevenue = Number(item.subtotal);
+                    margenTotal += realRevenue - realCost;
+                }
 
                 return {
                     id: product.id,
@@ -509,7 +530,7 @@ export async function getProductMarginsData(startDate: Date, endDate: Date, basi
                     margen,
                     margenPorcentaje,
                     vecesVendido,
-                    margenTotal: margen * vecesVendido,
+                    margenTotal,
                 };
             })
             .filter((product) => product.vecesVendido > 0)
@@ -1054,6 +1075,7 @@ export async function getProfitabilityByCategoryData(startDate: Date, endDate: D
                             select: {
                                 subtotal: true,
                                 cantidad: true,
+                                configSnapshot: true,
                             },
                         },
                         recipeItems: {
@@ -1076,17 +1098,14 @@ export async function getProfitabilityByCategoryData(startDate: Date, endDate: D
                 let costos = 0;
 
                 for (const product of category.products) {
-                    const ingresosProducto = product.orderItems.reduce((sum, item) => sum + Number(item.subtotal), 0);
-                    const cantidadVendida = product.orderItems.reduce((sum, item) => sum + Number(item.cantidad), 0);
-                    const costoUnitario =
-                        Number(product.costoUnitario || 0) > 0
-                            ? Number(product.costoUnitario)
-                            : product.recipeItems.reduce((sum, item) => {
-                                  return sum + Number(item.qtyPerUnit) * Number(item.supply.costoUnitario || 0);
-                              }, 0);
+                    const baseRecipeCost = product.recipeItems.reduce((sum, item) => sum + Number(item.qtyPerUnit) * Number(item.supply.costoUnitario || 0), 0);
+                    const baseCost = Number(product.costoUnitario || 0) > 0 ? Number(product.costoUnitario) : baseRecipeCost;
 
-                    ingresos += ingresosProducto;
-                    costos += costoUnitario * cantidadVendida;
+                    for (const item of product.orderItems) {
+                        ingresos += Number(item.subtotal);
+                        const multiplier = getItemRecipeMultiplier(item);
+                        costos += baseCost * Number(item.cantidad) * multiplier;
+                    }
                 }
 
                 const beneficio = ingresos - costos;

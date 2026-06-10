@@ -106,6 +106,12 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        let userData = {
+            id: dbUser.id,
+            email: dbUser.email,
+            rol: dbUser.rol as 'ADMIN' | 'EMPLEADO',
+        };
+
         // 4. Update user data if needed (e.g. first login after invite)
         try {
             const updates: any = {};
@@ -139,7 +145,7 @@ export async function POST(request: NextRequest) {
             }
 
             // Use dbUser for response
-            var userData = {
+            userData = {
                 id: dbUser.id,
                 email: dbUser.email,
                 rol: dbUser.rol,

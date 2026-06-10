@@ -2,9 +2,12 @@
   "name": "trattoria",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
-    "dev": "npm run check:cashbox-schema && next dev",
-    "build": "prisma generate && next build",
+    "dev": "next dev",
+    "build": "prisma generate && node prisma/sync-client-types.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "prisma migrate dev",

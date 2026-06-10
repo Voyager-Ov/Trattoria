@@ -181,11 +181,18 @@ export function PedidosDesktopTable({
                                         <td className="px-8 py-6">
                                             <div className="flex flex-col gap-1">
                                                 {order.items.map((item: OrderItem) => (
-                                                    <div key={item.id} className="flex min-w-[150px] items-center gap-1.5">
-                                                        <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-[10px] font-black text-zinc-500">
-                                                            {Number(item.cantidad)}
+                                                    <div key={item.id} className="flex flex-col min-w-[150px] gap-0.5 mb-1">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-[10px] font-black text-zinc-500">
+                                                                {Number(item.cantidad)}
+                                                            </div>
+                                                            <span className="line-clamp-1 text-[11px] font-bold text-zinc-600">{item.nombreProduct}</span>
                                                         </div>
-                                                        <span className="line-clamp-1 text-[11px] font-bold text-zinc-600">{item.nombreProduct}</span>
+                                                        {Array.isArray(item.configSnapshot) && item.configSnapshot.length > 0 && (
+                                                            <span className="line-clamp-1 text-[9px] text-zinc-400 pl-6">
+                                                                {item.configSnapshot.map((o: any) => o.optionLabel).join(", ")}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>

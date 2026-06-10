@@ -1,9 +1,17 @@
 import { expect, Page } from '@playwright/test';
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'octavio.velo2022@gmail.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'seguridad';
+function requireTestEnv(name: 'ADMIN_EMAIL' | 'ADMIN_PASSWORD'): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is required to run authenticated E2E tests`);
+  }
+  return value;
+}
 
 export async function loginAsAdmin(page: Page): Promise<void> {
+  const adminEmail = requireTestEnv('ADMIN_EMAIL');
+  const adminPassword = requireTestEnv('ADMIN_PASSWORD');
+
   await page.goto('/login');
 
   const emailInput = page.getByLabel(/email/i);
@@ -14,8 +22,8 @@ export async function loginAsAdmin(page: Page): Promise<void> {
   await expect(passwordInput).toBeVisible();
   await expect(submitButton).toBeVisible();
 
-  await emailInput.fill(ADMIN_EMAIL);
-  await passwordInput.fill(ADMIN_PASSWORD);
+  await emailInput.fill(adminEmail);
+  await passwordInput.fill(adminPassword);
 
   const loginResponsePromise = page.waitForResponse(
     (response) =>

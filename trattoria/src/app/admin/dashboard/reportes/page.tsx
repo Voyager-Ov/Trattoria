@@ -128,7 +128,7 @@ function RevenueChart({
                                 borderRadius: "12px",
                                 padding: "12px",
                             }}
-                            formatter={(value: number | string | undefined) => [formatCurrency(Number(value || 0)), "Ingresos"]}
+                            formatter={(value: any) => [formatCurrency(Number(value || 0)), "Ingresos"]}
                             labelFormatter={(label) => `Periodo ${label}`}
                         />
                         <Bar dataKey="amount" fill="#10b981" radius={[8, 8, 0, 0]} />

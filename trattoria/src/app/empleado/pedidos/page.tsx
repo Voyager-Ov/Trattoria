@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useOptimistic } from "react";
+import { useSessionState } from "@/hooks/useSessionState";
 import { useRouter } from "next/navigation";
 import {
     Clock,
@@ -36,9 +37,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { updateOrderStatus, toggleOrderPayment } from "@/app/admin/dashboard/pedidos/actions";
 import { getCurrentCashbox } from "@/app/actions/cashboxActions";
 import { toast } from "sonner";
+import { db } from "@/lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 import {
     Sheet,
     SheetContent,
@@ -48,7 +52,7 @@ import {
     SheetFooter,
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { EstadoPedido } from "@prisma/client";
@@ -57,6 +61,7 @@ import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
 import { getOrderDeliveryLabel, getOrderDisplayAddress } from "@/lib/orderDelivery";
 import { formatSystemDateTime } from "@/lib/system-time";
 import { CashboxBlockedDialog } from "@/components/dashboard/cashbox/CashboxBlockedDialog";
+import { PedidosMobileList } from "./components/PedidosMobileList";
 import type { OrderListItem } from "@/app/admin/dashboard/pedidos/components/pedido-shared";
 
 type Order = OrderListItem;
@@ -132,20 +137,35 @@ const STATUS_CONFIG: Record<string, { label: string, color: string, icon: Lucide
 export default function EmpleadoPedidosPage() {
     const router = useRouter();
     const [orders, setOrders] = useState<Order[]>([]);
+    const [optimisticOrders, addOptimisticUpdate] = useOptimistic(
+        orders,
+        (state, update: { id: string, estado?: EstadoPedido, payment?: boolean }) => {
+            return state.map(o => {
+                if (o.id === update.id) {
+                    return { 
+                        ...o, 
+                        ...(update.estado ? {estado: update.estado} : {}), 
+                        ...(update.payment ? {payment: {...o.payment, isPaid: true}} : {})
+                    };
+                }
+                return o;
+            });
+        }
+    );
     const [isLoading, setIsLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useSessionState("empleado_pedidos_search", "");
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-    const [statusFilter, setStatusFilter] = useState("TODOS");
+    const [statusFilter, setStatusFilter] = useSessionState("empleado_pedidos_status", "TODOS");
 
     // Pagination state
-    const [page, setPage] = useState(1);
+    const [page, setPage] = useSessionState("empleado_pedidos_page", 1);
     const [limit] = useState(10);
     const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
 
     // Sorting state
-    const [orderBy, setOrderBy] = useState("recibidoEn");
-    const [orderDir, setOrderDir] = useState<'asc' | 'desc'>("desc");
+    const [orderBy, setOrderBy] = useSessionState("empleado_pedidos_orderBy", "recibidoEn");
+    const [orderDir, setOrderDir] = useSessionState<'asc' | 'desc'>("empleado_pedidos_orderDir", "desc");
 
     // Cancellation Sheet State
     const [isCancelSheetOpen, setIsCancelSheetOpen] = useState(false);
@@ -252,7 +272,11 @@ export default function EmpleadoPedidosPage() {
         void loadConfigs();
         void syncCashboxState();
         void fetchOrders();
-        const interval = setInterval(() => void fetchOrders(true), 30000);
+        
+        const unsubSignals = onSnapshot(doc(db, "system", "signals"), () => {
+            void fetchOrders(true);
+        });
+
         const handleWindowFocus = () => void fetchOrders(true);
         const handleVisibilityChange = () => {
             if (document.visibilityState === "visible") {
@@ -264,7 +288,7 @@ export default function EmpleadoPedidosPage() {
         document.addEventListener("visibilitychange", handleVisibilityChange);
 
         return () => {
-            clearInterval(interval);
+            unsubSignals();
             window.removeEventListener("focus", handleWindowFocus);
             document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
@@ -279,12 +303,14 @@ export default function EmpleadoPedidosPage() {
             return;
         }
 
+        addOptimisticUpdate({ id, estado: newStatus });
+
         const result = await updateOrderStatus(id, newStatus);
         if (result.success) {
             toast.success("Estado actualizado");
-            void fetchOrders(true);
         } else {
             toast.error(result.error || "Error al actualizar");
+            void fetchOrders(true);
         }
     };
 
@@ -299,7 +325,6 @@ export default function EmpleadoPedidosPage() {
         if (result.success) {
             toast.success("Pedido cancelado");
             setIsCancelSheetOpen(false);
-            void fetchOrders();
         } else {
             toast.error(result.error || "Error al cancelar");
         }
@@ -328,18 +353,20 @@ export default function EmpleadoPedidosPage() {
         if (!paymentOrderId) return;
 
         setIsSavingPayment(true);
+        addOptimisticUpdate({ id: paymentOrderId, payment: true });
+
         const result = await toggleOrderPayment(paymentOrderId, true, paymentMethod);
         if (result.success) {
             toast.success("Pedido cobrado");
             setIsPaymentSheetOpen(false);
             await syncCashboxState();
-            void fetchOrders();
         } else {
             if ((result.error || "").toLowerCase().includes("abrir una caja")) {
                 setIsPaymentSheetOpen(false);
                 setIsCashboxGateOpen(true);
             }
             toast.error(result.error || "Error al registrar pago");
+            void fetchOrders(true);
         }
         setIsSavingPayment(false);
     };
@@ -352,6 +379,18 @@ export default function EmpleadoPedidosPage() {
             setOrderDir('desc');
         }
         setPage(1);
+    };
+
+    const handleClearFilters = () => {
+        setSearchQuery("");
+        setStatusFilter("TODOS");
+        setOrderBy("recibidoEn");
+        setOrderDir("desc");
+        setPage(1);
+    };
+
+    const handleViewOrder = (orderId: string) => {
+        router.push(`/empleado/pedidos/${orderId}`);
     };
 
     return (
@@ -410,8 +449,9 @@ export default function EmpleadoPedidosPage() {
 
             {/* Main Content Areas */}
             <div className="px-8 pb-12 flex-1">
-                <Card className="rounded-[2.5rem] border-zinc-200 shadow-xl shadow-zinc-200/50 overflow-hidden bg-white">
-                    <div className="overflow-x-auto">
+                <div className="hidden md:block">
+                    <Card className="rounded-[2.5rem] border-zinc-200 shadow-xl shadow-zinc-200/50 overflow-hidden bg-white">
+                        <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-zinc-100 bg-zinc-50/30">
@@ -482,7 +522,7 @@ export default function EmpleadoPedidosPage() {
                                         </td>
                                     </tr>
                                 ) : (
-                                    orders.map((order) => {
+                                    optimisticOrders.map((order) => {
                                         const config = STATUS_CONFIG[order.estado];
                                         const Icon = config.icon;
 
@@ -691,6 +731,18 @@ export default function EmpleadoPedidosPage() {
                         </div>
                     )}
                 </Card>
+                </div>
+                
+                <PedidosMobileList
+                    orders={orders}
+                    isLoading={isLoading}
+                    total={total}
+                    page={page}
+                    totalPages={totalPages}
+                    onPageChange={setPage}
+                    onOpenOrder={handleViewOrder}
+                    onClearFilters={handleClearFilters}
+                />
             </div>
 
             {/* Cancellation Sheet */}
@@ -715,7 +767,7 @@ export default function EmpleadoPedidosPage() {
                                 onChange={(e) => setCancelMotive(e.target.value)}
                             />
                         </div>
-                        <div className="flex items-center justify-between p-4 rounded-2xl border border-zinc-200 bg-zinc-50/50">
+                        <div className="flex items-center justify-between p-4 bg-zinc-50/50 rounded-2xl border border-zinc-200">
                             <div className="space-y-0.5">
                                 <Label className="text-sm font-bold text-zinc-700">Descontar insumos (Merma)</Label>
                                 <p className="text-xs text-zinc-500">Registrar como pérdida en el inventario</p>

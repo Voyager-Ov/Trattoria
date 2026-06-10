@@ -225,6 +225,7 @@ export default function CategoriasPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSheetOpen, setIsSheetOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+    const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
 
     const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -473,7 +474,8 @@ export default function CategoriasPage() {
                                             value={formState.nombre}
                                             onChange={(e) => {
                                                 const nombre = e.target.value;
-                                                const slug = editingCategory ? formState.slug : nombre
+                                                // Auto-recalculate slug from nombre unless the user manually edited it
+                                                const slug = slugManuallyEdited ? formState.slug : nombre
                                                     .toLowerCase()
                                                     .trim()
                                                     .replace(/[^\w\s-]/g, '')
@@ -494,7 +496,10 @@ export default function CategoriasPage() {
                                             placeholder="pastas-artesanales"
                                             className="rounded-xl border-zinc-200 h-10 bg-zinc-50 font-mono text-xs"
                                             value={formState.slug}
-                                            onChange={(e) => setFormState({ ...formState, slug: e.target.value })}
+                                            onChange={(e) => {
+                                                setSlugManuallyEdited(true);
+                                                setFormState({ ...formState, slug: e.target.value });
+                                            }}
                                             required
                                         />
                                     </div>
@@ -617,6 +622,7 @@ export default function CategoriasPage() {
                                                 onToggleActive={handleToggleActive}
                                                 onEdit={(cat) => {
                                                     setEditingCategory(cat);
+                                                    setSlugManuallyEdited(false); // reset so nombre drives slug recalc
                                                     setFormState({
                                                         nombre: cat.nombre,
                                                         descripcion: cat.descripcion || "",

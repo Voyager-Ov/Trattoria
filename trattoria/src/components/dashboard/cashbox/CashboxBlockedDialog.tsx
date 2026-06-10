@@ -54,8 +54,8 @@ export function CashboxBlockedDialog({
                         <div className="flex items-start gap-3">
                             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
                             <div className="space-y-1 text-sm text-zinc-500">
-                                <p className="font-semibold text-zinc-700">QuÃ© puedes hacer ahora</p>
-                                <p>Abre una caja con monto inicial real. Cuando quede activa, podrÃ¡s volver a cobrar el pedido.</p>
+                                <p className="font-semibold text-zinc-700">Qué puedes hacer ahora</p>
+                                <p>Abre una caja con monto inicial real. Cuando quede activa, podrás volver a cobrar el pedido.</p>
                             </div>
                         </div>
                     </div>

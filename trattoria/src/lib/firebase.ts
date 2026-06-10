@@ -1,5 +1,6 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
 /**
  * Firebase Client SDK for browser-side operations
@@ -7,6 +8,7 @@ import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
  * - Email/password authentication
  * - Google OAuth
  * - Getting ID tokens to send to backend
+ * - Listening to Firestore signals
  */
 
 const firebaseConfig = {
@@ -20,14 +22,17 @@ const firebaseConfig = {
 
 let app: FirebaseApp;
 let auth: Auth;
+let db: Firestore;
 
 if (!getApps().length) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
+    db = getFirestore(app);
 } else {
     app = getApps()[0];
     auth = getAuth(app);
+    db = getFirestore(app);
 }
 
-export { auth };
+export { auth, db };
 export const googleProvider = new GoogleAuthProvider();

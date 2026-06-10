@@ -181,7 +181,14 @@ export function PedidosDesktopTable({
                                                         <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-[10px] font-black text-zinc-500">
                                                             {Number(item.cantidad)}
                                                         </div>
-                                                        <span className="line-clamp-1 text-[11px] font-bold text-zinc-600">{item.nombreProduct}</span>
+                                                        <div className="flex flex-col">
+                                                            <span className="line-clamp-1 text-[11px] font-bold text-zinc-600">{item.nombreProduct}</span>
+                                                            {Array.isArray(item.configSnapshot) && item.configSnapshot.length > 0 && (
+                                                                <span className="line-clamp-1 text-[9px] font-medium text-zinc-400">
+                                                                    {item.configSnapshot.map((o: any) => o.optionLabel).join(", ")}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>

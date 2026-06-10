@@ -1,0 +1,121 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "Trattoria" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - img "Trattoria" [ref=e7]
+        - link "Mi cuenta" [ref=e9] [cursor=pointer]:
+          - /url: /login
+          - button "Mi cuenta" [ref=e10]:
+            - img
+    - main [ref=e11]:
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - heading "Categorías" [level=1] [ref=e15]
+          - paragraph [ref=e16]:
+            - text: Explorá nuestro menú y encontrá lo que buscás
+            - generic [ref=e17]: 10 categorías
+        - generic [ref=e18]:
+          - img
+          - searchbox "Buscar en el menú..." [ref=e19]
+      - generic [ref=e20]:
+        - link "Pizzas Pizzas Pizzas de la carta actual." [active] [ref=e21] [cursor=pointer]:
+          - /url: /categoria/pizzas
+          - generic [ref=e22]:
+            - img "Pizzas" [ref=e25]
+            - generic [ref=e26]:
+              - heading "Pizzas" [level=3] [ref=e27]
+              - paragraph [ref=e28]: Pizzas de la carta actual.
+            - img [ref=e30]
+        - link "Pastas Pastas Pastas y salsas de la carta actual." [ref=e32] [cursor=pointer]:
+          - /url: /categoria/pastas
+          - generic [ref=e33]:
+            - img "Pastas" [ref=e36]
+            - generic [ref=e37]:
+              - heading "Pastas" [level=3] [ref=e38]
+              - paragraph [ref=e39]: Pastas y salsas de la carta actual.
+            - img [ref=e41]
+        - link "Tartas Tartas Tartas familiares e individuales." [ref=e43] [cursor=pointer]:
+          - /url: /categoria/tartas
+          - generic [ref=e44]:
+            - img "Tartas" [ref=e47]
+            - generic [ref=e48]:
+              - heading "Tartas" [level=3] [ref=e49]
+              - paragraph [ref=e50]: Tartas familiares e individuales.
+            - img [ref=e52]
+        - link "Empanadas Empanadas Empanadas por unidad, media docena y docena." [ref=e54] [cursor=pointer]:
+          - /url: /categoria/empanadas
+          - generic [ref=e55]:
+            - img "Empanadas" [ref=e58]
+            - generic [ref=e59]:
+              - heading "Empanadas" [level=3] [ref=e60]
+              - paragraph [ref=e61]: Empanadas por unidad, media docena y docena.
+            - img [ref=e63]
+        - link "Calzoni Calzoni Calzoni de la carta actual." [ref=e65] [cursor=pointer]:
+          - /url: /categoria/calzoni
+          - generic [ref=e66]:
+            - img "Calzoni" [ref=e69]
+            - generic [ref=e70]:
+              - heading "Calzoni" [level=3] [ref=e71]
+              - paragraph [ref=e72]: Calzoni de la carta actual.
+            - img [ref=e74]
+        - link "Milanesas Milanesas Milanesas y sandwich de mila." [ref=e76] [cursor=pointer]:
+          - /url: /categoria/milanesas
+          - generic [ref=e77]:
+            - img "Milanesas" [ref=e80]
+            - generic [ref=e81]:
+              - heading "Milanesas" [level=3] [ref=e82]
+              - paragraph [ref=e83]: Milanesas y sandwich de mila.
+            - img [ref=e85]
+        - link "Hamburguesas Hamburguesas Hamburguesas simples y dobles." [ref=e87] [cursor=pointer]:
+          - /url: /categoria/hamburguesas
+          - generic [ref=e88]:
+            - img "Hamburguesas" [ref=e91]
+            - generic [ref=e92]:
+              - heading "Hamburguesas" [level=3] [ref=e93]
+              - paragraph [ref=e94]: Hamburguesas simples y dobles.
+            - img [ref=e96]
+        - link "Postres Postres Postres de la carta actual." [ref=e98] [cursor=pointer]:
+          - /url: /categoria/postres
+          - generic [ref=e99]:
+            - img "Postres" [ref=e102]
+            - generic [ref=e103]:
+              - heading "Postres" [level=3] [ref=e104]
+              - paragraph [ref=e105]: Postres de la carta actual.
+            - img [ref=e107]
+        - link "Promociones Promociones Explora nuestros productos de esta categoría." [ref=e109] [cursor=pointer]:
+          - /url: /categoria/promociones
+          - generic [ref=e110]:
+            - img "Promociones" [ref=e113]
+            - generic [ref=e114]:
+              - heading "Promociones" [level=3] [ref=e115]
+              - paragraph [ref=e116]: Explora nuestros productos de esta categoría.
+            - img [ref=e118]
+        - link "Mil hoja Mil hoja Explora nuestros productos de esta categoría." [ref=e120] [cursor=pointer]:
+          - /url: /categoria/mil-hoja
+          - generic [ref=e121]:
+            - img "Mil hoja" [ref=e124]
+            - generic [ref=e125]:
+              - heading "Mil hoja" [level=3] [ref=e126]
+              - paragraph [ref=e127]: Explora nuestros productos de esta categoría.
+            - img [ref=e129]
+    - button "Tu Carrito $0" [ref=e132] [cursor=pointer]:
+      - generic [ref=e133]:
+        - img
+      - generic [ref=e134]:
+        - generic [ref=e135]: Tu Carrito
+        - generic [ref=e136]: $0
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e142] [cursor=pointer]:
+    - generic [ref=e145]:
+      - text: Rendering
+      - generic [ref=e146]:
+        - generic [ref=e147]: .
+        - generic [ref=e148]: .
+        - generic [ref=e149]: .
+  - alert [ref=e150]
+```

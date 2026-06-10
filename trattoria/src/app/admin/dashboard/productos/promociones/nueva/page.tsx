@@ -142,7 +142,7 @@ export default function NuevaPromocionPage() {
                 ...formData,
                 discountType: "FIXED_AMOUNT",
                 discountValue: calculatedDiscount,
-                daysOfWeek: selectedDays.join(","),
+                daysOfWeek: selectedDays.length > 0 ? selectedDays.join(",") : null,
                 items: selectedProducts.map(p => ({ productId: p.id, quantity: p.quantity })),
                 categoryIds: selectedCategories,
             });

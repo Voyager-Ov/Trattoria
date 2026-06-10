@@ -130,14 +130,26 @@ export function PedidoDetailPanel({
                     <h4 className="text-[11px] font-black uppercase tracking-[0.18em] text-zinc-400">Items del pedido</h4>
                     <div className="space-y-2">
                         {order.items.map((item) => (
-                            <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl bg-zinc-50 px-3 py-3">
-                                <div className="min-w-0">
-                                    <p className="truncate font-semibold text-zinc-800">{item.nombreProduct}</p>
-                                    <p className="text-xs text-zinc-400">{Number(item.cantidad)} unidad(es)</p>
+                            <div key={item.id} className="flex flex-col gap-2 rounded-2xl bg-zinc-50 px-3 py-3">
+                                <div className="flex items-center justify-between gap-3 min-w-0">
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate font-semibold text-zinc-800">{item.nombreProduct}</p>
+                                        <p className="text-xs text-zinc-400">{Number(item.cantidad)} unidad(es)</p>
+                                    </div>
+                                    <Badge variant="outline" className="shrink-0 rounded-full border-zinc-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
+                                        x{Number(item.cantidad)}
+                                    </Badge>
                                 </div>
-                                <Badge variant="outline" className="rounded-full border-zinc-200 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">
-                                    x{Number(item.cantidad)}
-                                </Badge>
+                                {Array.isArray(item.configSnapshot) && item.configSnapshot.length > 0 && (
+                                    <div className="flex flex-col gap-1 pl-2 border-l-2 border-zinc-200">
+                                        {item.configSnapshot.map((opt: any, idx: number) => (
+                                            <div key={idx} className="flex justify-between items-center text-xs text-zinc-500">
+                                                <span><span className="font-medium text-zinc-600">{opt.groupLabel}:</span> {opt.optionLabel}</span>
+                                                {opt.priceDelta > 0 && <span className="text-zinc-400 font-medium">+{formatOrderTotal(opt.priceDelta)}</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

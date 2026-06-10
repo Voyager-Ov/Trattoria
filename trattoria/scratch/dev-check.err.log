@@ -1,0 +1,3 @@
+⚠ Port 3000 is in use by process 10608, using available port 3006 instead.
+⚠ Attempted to load @next/swc-win32-x64-msvc, but an error occurred: \\?\D:\github desktop\Trattoria\Trattoria\trattoria\node_modules\@next\swc-win32-x64-msvc\next-swc.win32-x64-msvc.node is not a valid Win32 application.
+\\?\D:\github desktop\Trattoria\Trattoria\trattoria\node_modules\@next\swc-win32-x64-msvc\next-swc.win32-x64-msvc.node

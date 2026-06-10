@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { UnidadMedida, Prisma, DiscountType, ProductCatalogRole, ProductOptionPriceMode } from "@prisma/client";
 import { serializePrisma } from "@/lib/utils";
+import { requireAdmin } from "@/lib/serverAuth";
 
 type ProductActionData = {
     nombre: string;
@@ -29,6 +30,7 @@ type CategoryCreateData = {
 
 type CategoryUpdateData = {
     nombre?: string;
+    slug?: string;
     descripcion?: string;
     imagen?: string;
     activo?: boolean;
@@ -137,6 +139,7 @@ function revalidateProductSurfaces(id?: string) {
 
 export async function toggleProductAvailability(id: string, currentStatus: boolean) {
     try {
+        await requireAdmin();
         await prisma.product.update({
             where: { id },
             data: { disponible: !currentStatus },
@@ -151,6 +154,7 @@ export async function toggleProductAvailability(id: string, currentStatus: boole
 
 export async function toggleProductActive(id: string, currentStatus: boolean) {
     try {
+        await requireAdmin();
         await prisma.product.update({
             where: { id },
             data: { activo: !currentStatus },
@@ -165,9 +169,18 @@ export async function toggleProductActive(id: string, currentStatus: boolean) {
 
 export async function updateProductRole(id: string, role: ProductCatalogRole) {
     try {
-        await prisma.product.update({
-            where: { id },
-            data: { catalogRole: role },
+        await requireAdmin();
+        await prisma.$transaction(async (tx) => {
+            // When switching away from CONFIGURABLE_BASE, orphaned relations must be removed
+            // to avoid FK constraint violations and stale data.
+            if (role !== ProductCatalogRole.CONFIGURABLE_BASE) {
+                await tx.productOptionGroupAssignment.deleteMany({ where: { productId: id } });
+                await tx.productOptionLink.deleteMany({ where: { baseProductId: id } });
+            }
+            await tx.product.update({
+                where: { id },
+                data: { catalogRole: role },
+            });
         });
         revalidateProductSurfaces(id);
         return { success: true };
@@ -179,6 +192,7 @@ export async function updateProductRole(id: string, role: ProductCatalogRole) {
 
 export async function softDeleteProduct(id: string) {
     try {
+        await requireAdmin();
         await prisma.product.update({
             where: { id },
             data: { deletedAt: new Date() },
@@ -187,12 +201,13 @@ export async function softDeleteProduct(id: string) {
         return { success: true };
     } catch (error) {
         console.error("Error deleting product:", error);
-        return { success: false, error: "Error al eliminar the producto" };
+        return { success: false, error: "Error al eliminar el producto" };
     }
 }
 
 export async function createProduct(data: ProductActionData) {
     try {
+        await requireAdmin();
         const product = await prisma.product.create({
             data: {
                 nombre: data.nombre,
@@ -211,12 +226,13 @@ export async function createProduct(data: ProductActionData) {
         return { success: true, data: serializePrisma(product) };
     } catch (error) {
         console.error("Error creating product:", error);
-        return { success: false, error: "Error al crear the producto" };
+        return { success: false, error: "Error al crear el producto" };
     }
 }
 
 export async function createCategory(data: CategoryCreateData) {
     try {
+        await requireAdmin();
         const slug = data.nombre
             .toLowerCase()
             .trim()
@@ -240,11 +256,15 @@ export async function createCategory(data: CategoryCreateData) {
         return { success: true, data: serializePrisma(category) };
     } catch (error) {
         console.error("Error creating category:", error);
+        if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+            return { success: false, error: "Ya existe una categoría con ese nombre o slug" };
+        }
         return { success: false, error: "Error al crear la categoría" };
     }
 }
 export async function updateProduct(id: string, data: ProductActionData) {
     try {
+        await requireAdmin();
         const product = await prisma.product.update({
             where: { id },
             data: {
@@ -264,11 +284,12 @@ export async function updateProduct(id: string, data: ProductActionData) {
         return { success: true, data: serializePrisma(product) };
     } catch (error) {
         console.error("Error updating product:", error);
-        return { success: false, error: "Error al actualizar the producto" };
+        return { success: false, error: "Error al actualizar el producto" };
     }
 }
 export async function createPromotion(data: PromotionActionData) {
     try {
+        await requireAdmin();
         // Alíasing de campos del UI si es necesario
         const name = data.name || data.nombre || "";
         const description = data.description || data.descripcion || "";
@@ -395,6 +416,7 @@ export async function getPromotionById(id: string) {
 
 export async function updatePromotion(id: string, data: PromotionActionData) {
     try {
+        await requireAdmin();
         const name = data.name || data.nombre || "";
         const description = data.description || data.descripcion || "";
         const discountType = (data.discountType as DiscountType) || DiscountType.FIXED_AMOUNT;
@@ -410,8 +432,24 @@ export async function updatePromotion(id: string, data: PromotionActionData) {
             isActive: data.isActive !== undefined ? data.isActive : true,
         };
 
-        if (data.startDate) promotionUpdateData.startDate = new Date(data.startDate);
-        if (data.endDate) promotionUpdateData.endDate = new Date(data.endDate);
+        // Explicit null clears the date; a non-empty string sets it; undefined leaves it unchanged.
+        if (data.startDate === null) {
+            promotionUpdateData.startDate = null;
+        } else if (data.startDate && typeof data.startDate === "string" && data.startDate.trim() !== "") {
+            const parsedStart = new Date(data.startDate);
+            if (!isNaN(parsedStart.getTime())) promotionUpdateData.startDate = parsedStart;
+        } else if (data.startDate instanceof Date) {
+            promotionUpdateData.startDate = data.startDate;
+        }
+
+        if (data.endDate === null) {
+            promotionUpdateData.endDate = null;
+        } else if (data.endDate && typeof data.endDate === "string" && data.endDate.trim() !== "") {
+            const parsedEnd = new Date(data.endDate);
+            if (!isNaN(parsedEnd.getTime())) promotionUpdateData.endDate = parsedEnd;
+        } else if (data.endDate instanceof Date) {
+            promotionUpdateData.endDate = data.endDate;
+        }
 
         // Build relations from items and productIds
         const itemsToCreate = [...(data.items || [])];
@@ -469,6 +507,7 @@ export async function updatePromotion(id: string, data: PromotionActionData) {
 
 export async function deletePromotion(id: string) {
     try {
+        await requireAdmin();
         await prisma.promotion.update({
             where: { id },
             data: { deletedAt: new Date() }
@@ -483,10 +522,23 @@ export async function deletePromotion(id: string) {
 }
 export async function updateCategory(id: string, data: CategoryUpdateData) {
     try {
+        await requireAdmin();
+        // Recalculate slug when nombre changes but no explicit slug was provided
+        let slug = data.slug;
+        if (!slug && data.nombre) {
+            slug = data.nombre
+                .toLowerCase()
+                .trim()
+                .replace(/[^\w\s-]/g, "")
+                .replace(/[\s_-]+/g, "-")
+                .replace(/^-+|-+$/g, "");
+        }
+
         const category = await prisma.category.update({
             where: { id },
             data: {
                 nombre: data.nombre,
+                slug,
                 descripcion: data.descripcion,
                 imagen: data.imagen,
                 activo: data.activo,
@@ -496,15 +548,20 @@ export async function updateCategory(id: string, data: CategoryUpdateData) {
         });
         revalidatePath("/admin/dashboard/productos");
         revalidatePath("/admin/dashboard/productos/categorias");
+        revalidatePath("/categoria/[slug]", "page");
         return { success: true, data: serializePrisma(category) };
     } catch (error) {
         console.error("Error updating category:", error);
+        if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
+            return { success: false, error: "Ya existe una categoría con ese nombre o slug" };
+        }
         return { success: false, error: "Error al actualizar la categoría" };
     }
 }
 
 export async function softDeleteCategory(id: string) {
     try {
+        await requireAdmin();
         // Check if there are active products in this category
         const productsCount = await prisma.product.count({
             where: {
@@ -535,6 +592,7 @@ export async function softDeleteCategory(id: string) {
 
 export async function reorderCategories(orders: { id: string; orden: number }[]) {
     try {
+        await requireAdmin();
         await prisma.$transaction(
             orders.map((item) =>
                 prisma.category.update({
@@ -572,6 +630,7 @@ export async function getSupplies() {
 
 export async function createProductWithRecipe(productData: ProductActionData, recipeItems: { supplyId: string; qtyPerUnit: number; unidad: UnidadMedida }[]) {
     try {
+        await requireAdmin();
         const result = await prisma.$transaction(async (tx) => {
             // Create product
             const product = await tx.product.create({
@@ -609,12 +668,13 @@ export async function createProductWithRecipe(productData: ProductActionData, re
     } catch (error) {
         console.error("Error creating product with recipe:", error);
         if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') return { success: false, error: "Ya existe un producto con ese nombre" };
-        return { success: false, error: "Error al crear the producto" };
+        return { success: false, error: "Error al crear el producto" };
     }
 }
 
 export async function updateProductWithRecipe(id: string, productData: ProductActionData, recipeItems: { supplyId: string; qtyPerUnit: number; unidad: UnidadMedida }[]) {
     try {
+        await requireAdmin();
         const result = await prisma.$transaction(async (tx) => {
             // Update product
             const product = await tx.product.update({
@@ -657,7 +717,7 @@ export async function updateProductWithRecipe(id: string, productData: ProductAc
         return { success: true, data: serializePrisma(result) };
     } catch (error) {
         console.error("Error updating product with recipe:", error);
-        return { success: false, error: "Error al actualizar the producto" };
+        return { success: false, error: "Error al actualizar el producto" };
     }
 }
 
@@ -719,6 +779,7 @@ export async function createProductOptionGroup(data: {
     orden: number;
 }) {
     try {
+        await requireAdmin();
         const normalizedKey = data.key.trim();
         if (!/^[a-z0-9_]+$/.test(normalizedKey)) {
             return {
@@ -756,6 +817,7 @@ export async function updateProductOptionGroup(
     }
 ) {
     try {
+        await requireAdmin();
         // key is immutable — not included in update
         const group = await prisma.productOptionGroup.update({
             where: { id },
@@ -776,6 +838,7 @@ export async function updateProductOptionGroup(
 
 export async function deleteProductOptionGroup(id: string) {
     try {
+        await requireAdmin();
         // Guard: check if group has product assignments
         const group = await prisma.productOptionGroup.findUnique({
             where: { id },
@@ -819,6 +882,7 @@ export async function createProductOption(
     }
 ) {
     try {
+        await requireAdmin();
         const option = await prisma.productOption.create({
             data: {
                 groupId,
@@ -852,6 +916,7 @@ export async function updateProductOption(
     }
 ) {
     try {
+        await requireAdmin();
         // slug is immutable — not included in update
         const option = await prisma.productOption.update({
             where: { id },
@@ -873,6 +938,7 @@ export async function updateProductOption(
 
 export async function softDeleteProductOption(id: string) {
     try {
+        await requireAdmin();
         await prisma.productOption.update({
             where: { id },
             data: { deletedAt: new Date() },
@@ -959,6 +1025,7 @@ export async function getProductWithConfiguration(id: string) {
 
 export async function createConfigurableProduct(data: ConfigurableProductPayload) {
     try {
+        await requireAdmin();
         const result = await prisma.$transaction(async (tx) => {
             // 1. Create product
             const product = await tx.product.create({
@@ -1029,6 +1096,7 @@ export async function createConfigurableProduct(data: ConfigurableProductPayload
 
 export async function updateConfigurableProduct(id: string, data: ConfigurableProductPayload) {
     try {
+        await requireAdmin();
         await prisma.$transaction(async (tx) => {
             // 1. Update product
             await tx.product.update({

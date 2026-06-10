@@ -8,8 +8,8 @@ import {
     formatOrderDate,
     formatOrderTotal,
     getOrderItemsPreview,
-    type Order,
-} from "./pedido-shared";
+    type OrderListItem as Order,
+} from "@/app/admin/dashboard/pedidos/components/pedido-shared";
 
 interface PedidoMobileCardProps {
     order: Order;
@@ -62,7 +62,28 @@ export function PedidoMobileCard({ order, onOpen }: PedidoMobileCardProps) {
             </div>
 
             <div className="mt-4 space-y-2 text-sm text-zinc-500">
-                <p className="truncate font-semibold text-zinc-600">{getOrderItemsPreview(order.items)}</p>
+                <div className="flex flex-col gap-1.5 pb-2 border-b border-zinc-50">
+                    {order.items.slice(0, 3).map((item) => (
+                        <div key={item.id} className="flex min-w-0 items-start gap-1.5">
+                            <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-zinc-100 text-[9px] font-black text-zinc-500 mt-0.5">
+                                {Number(item.cantidad)}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                                <span className="line-clamp-1 text-xs font-bold text-zinc-600 leading-tight">{item.nombreProduct}</span>
+                                {Array.isArray(item.configSnapshot) && item.configSnapshot.length > 0 && (
+                                    <span className="line-clamp-1 text-[9px] font-medium text-zinc-400">
+                                        {item.configSnapshot.map((o: any) => o.optionLabel).join(", ")}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                    {order.items.length > 3 && (
+                        <div className="text-[10px] font-bold text-zinc-400 pl-5">
+                            + {order.items.length - 3} items más
+                        </div>
+                    )}
+                </div>
                 {order.clienteTelefono && (
                     <div className="flex items-center gap-2 text-xs">
                         <Phone className="h-3.5 w-3.5 text-zinc-300" />

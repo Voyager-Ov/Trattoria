@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useSessionState } from "@/hooks/useSessionState";
 import { useRouter } from "next/navigation";
 import { Banknote, CheckCircle2, CreditCard, RefreshCw, XCircle } from "lucide-react";
 import { EstadoPedido } from "@prisma/client";
@@ -17,6 +18,8 @@ import { getConfigs } from "@/app/actions/configActions";
 import { getCurrentCashbox } from "@/app/actions/cashboxActions";
 import { DEFAULT_PAYMENT_METHODS } from "@/lib/configDefaults";
 import { CashboxBlockedDialog } from "@/components/dashboard/cashbox/CashboxBlockedDialog";
+import { db } from "@/lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 
 import { updateOrderStatus, toggleOrderPayment } from "./actions";
 import { PedidosDesktopTable } from "./components/PedidosDesktopTable";
@@ -37,15 +40,15 @@ export default function PedidosPage() {
 
     const [orders, setOrders] = useState<OrderListItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useSessionState("admin_pedidos_search", "");
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-    const [statusFilter, setStatusFilter] = useState<"TODOS" | EstadoPedido>("TODOS");
-    const [page, setPage] = useState(1);
+    const [statusFilter, setStatusFilter] = useSessionState<"TODOS" | EstadoPedido>("admin_pedidos_status", "TODOS");
+    const [page, setPage] = useSessionState("admin_pedidos_page", 1);
     const [limit] = useState(10);
     const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
-    const [orderBy, setOrderBy] = useState<SortField>("recibidoEn");
-    const [orderDir, setOrderDir] = useState<SortDirection>("desc");
+    const [orderBy, setOrderBy] = useSessionState<SortField>("admin_pedidos_orderBy", "recibidoEn");
+    const [orderDir, setOrderDir] = useSessionState<SortDirection>("admin_pedidos_orderDir", "desc");
 
     const [isCancelSheetOpen, setIsCancelSheetOpen] = useState(false);
     const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
@@ -143,7 +146,10 @@ export default function PedidosPage() {
     useEffect(() => {
         void fetchOrders();
 
-        const interval = setInterval(() => void fetchOrders(true), 30000);
+        const unsubSignals = onSnapshot(doc(db, "system", "signals"), () => {
+            void fetchOrders(true);
+        });
+
         const handleWindowFocus = () => void fetchOrders(true);
         const handleVisibilityChange = () => {
             if (document.visibilityState === "visible") {
@@ -155,7 +161,7 @@ export default function PedidosPage() {
         document.addEventListener("visibilitychange", handleVisibilityChange);
 
         return () => {
-            clearInterval(interval);
+            unsubSignals();
             window.removeEventListener("focus", handleWindowFocus);
             document.removeEventListener("visibilitychange", handleVisibilityChange);
         };

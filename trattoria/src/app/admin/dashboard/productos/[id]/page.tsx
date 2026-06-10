@@ -13,7 +13,8 @@ import {
     Image as ImageIcon,
     Loader2,
     Trash2,
-    AlertCircle
+    AlertCircle,
+    ListTree
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,13 +29,13 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     const router = useRouter();
 
     const [loading, setLoading] = useState(true);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [product, setProduct] = useState<any>(null);
 
     const fetchData = useCallback(async () => {
         try {
             setLoading(true);
-            const response = await fetch(`/api/admin/dashboard/productos/${id}`);
-            const res = await response.json();
+            const res = await getProductById(id);
 
             if (res.success && res.data) {
                 setProduct(res.data);
@@ -56,12 +57,19 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
     const handleDelete = async () => {
         if (!confirm("¿Estás seguro de eliminar este producto?")) return;
-        const res = await softDeleteProduct(id);
-        if (res.success) {
-            toast.success("Producto eliminado");
-            router.push("/admin/dashboard/productos");
-        } else {
-            toast.error(res.error || "Error al eliminar");
+        setIsDeleting(true);
+        try {
+            const res = await softDeleteProduct(id);
+            if (res.success) {
+                toast.success("Producto eliminado");
+                router.push("/admin/dashboard/productos");
+            } else {
+                toast.error(res.error || "Error al eliminar");
+            }
+        } catch (error) {
+            toast.error("Error inesperado al eliminar");
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -127,10 +135,11 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                     <Button
                         variant="outline"
                         onClick={handleDelete}
-                        className="rounded-full border-zinc-200 text-red-500 hover:text-red-600 hover:bg-red-50 transition-all font-medium h-11 px-6 shadow-sm"
+                        disabled={isDeleting}
+                        className="rounded-full border-zinc-200 text-red-500 hover:text-red-600 hover:bg-red-50 transition-all font-medium h-11 px-6 shadow-sm disabled:opacity-50"
                     >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Eliminar
+                        {isDeleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                        {isDeleting ? "Eliminando..." : "Eliminar"}
                     </Button>
                     <Link href={`/admin/dashboard/productos/${product.id}/editar`}>
                         <Button className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 transition-all font-medium h-11 px-8 shadow-md">
@@ -307,6 +316,100 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                         </div>
                     </div>
                 </div>
+
+                {/* Configurable Options Panel */}
+                {product.catalogRole === "CONFIGURABLE_BASE" && (
+                    <div className="lg:col-span-3 space-y-6 mt-2">
+                        <div className="bg-white rounded-[2.5rem] border border-zinc-200 shadow-sm overflow-hidden h-full">
+                            <div className="p-8 border-b border-zinc-100 flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-bold text-zinc-900 text-lg">Configuración de Producto</h3>
+                                    <p className="text-xs text-zinc-400 font-medium uppercase tracking-widest mt-1">Grupos y Opciones</p>
+                                </div>
+                                <div className="h-10 w-10 bg-zinc-50 rounded-2xl flex items-center justify-center border border-zinc-100">
+                                    <ListTree className="h-5 w-5 text-zinc-400" />
+                                </div>
+                            </div>
+                            
+                            <div className="p-8 space-y-8 bg-zinc-50/30">
+                                {product.optionGroupAssignments?.length > 0 ? (
+                                    product.optionGroupAssignments.map((assignment: any) => (
+                                        <div key={assignment.groupId} className="bg-white border border-zinc-200 rounded-3xl overflow-hidden shadow-sm">
+                                            <div className="bg-zinc-50 px-6 py-4 flex items-center justify-between border-b border-zinc-100">
+                                                <div className="flex items-center gap-3">
+                                                    <h4 className="font-bold text-zinc-900">{assignment.group.nombre}</h4>
+                                                    <Badge variant="outline" className={`${assignment.group.required ? 'border-orange-200 text-orange-600' : 'border-zinc-200 text-zinc-500'} bg-white text-[0.65rem] uppercase`}>
+                                                        {assignment.group.required ? "Requerido" : "Opcional"}
+                                                    </Badge>
+                                                    <Badge variant="secondary" className="bg-white text-zinc-500 text-[0.65rem] uppercase">
+                                                        Modo: {assignment.group.priceMode}
+                                                    </Badge>
+                                                </div>
+                                                <span className="text-xs font-bold text-zinc-400">ORDEN: {assignment.orden}</span>
+                                            </div>
+                                            
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-sm">
+                                                    <thead className="bg-white border-b border-zinc-50">
+                                                        <tr>
+                                                            <th className="px-6 py-4 text-left font-bold text-[0.6rem] uppercase tracking-widest text-zinc-400">Opción</th>
+                                                            <th className="px-6 py-4 text-center font-bold text-[0.6rem] uppercase tracking-widest text-zinc-400">Estado global</th>
+                                                            <th className="px-6 py-4 text-center font-bold text-[0.6rem] uppercase tracking-widest text-zinc-400">Estado en base</th>
+                                                            <th className="px-6 py-4 text-right font-bold text-[0.6rem] uppercase tracking-widest text-zinc-400">Precio / Adicional</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-zinc-50">
+                                                        {assignment.group.options?.length > 0 ? (
+                                                            assignment.group.options.map((option: any) => {
+                                                                const link = product.optionLinksAsBase?.find((l: any) => l.optionId === option.id);
+                                                                return (
+                                                                    <tr key={option.id} className="hover:bg-zinc-50/50 transition-colors">
+                                                                        <td className="px-6 py-4 font-semibold text-zinc-900">{option.label}</td>
+                                                                        <td className="px-6 py-4 text-center">
+                                                                            <Badge variant="outline" className={`${option.activo ? 'text-emerald-600 border-emerald-200 bg-emerald-50' : 'text-red-600 border-red-200 bg-red-50'} border-none text-[0.6rem] uppercase px-2`}>
+                                                                                {option.activo ? "Activo" : "Inactivo"}
+                                                                            </Badge>
+                                                                        </td>
+                                                                        <td className="px-6 py-4 text-center">
+                                                                            {link ? (
+                                                                                <Badge variant="outline" className={`${link.activo ? 'text-emerald-600 border-emerald-200' : 'text-red-600 border-red-200'} text-[0.6rem] uppercase px-2`}>
+                                                                                    {link.activo ? "Vinculado" : "Pausado"}
+                                                                                </Badge>
+                                                                            ) : (
+                                                                                <Badge variant="outline" className="text-zinc-400 border-zinc-200 text-[0.6rem] uppercase px-2 bg-zinc-50">
+                                                                                    No vinculado
+                                                                                </Badge>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-6 py-4 text-right font-bold text-zinc-900 font-mono">
+                                                                            {link && link.price > 0 ? `+ $${Number(link.price).toFixed(2)}` : (link ? "Gratis" : "-")}
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })
+                                                        ) : (
+                                                            <tr>
+                                                                <td colSpan={4} className="px-6 py-8 text-center text-zinc-400 font-medium text-xs">
+                                                                    Este grupo no tiene opciones creadas.
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-white rounded-3xl border border-zinc-200 border-dashed">
+                                        <ListTree className="h-10 w-10 text-zinc-300 mb-3" />
+                                        <p className="font-semibold text-zinc-500">Este producto es configurable pero no tiene grupos asignados.</p>
+                                        <p className="text-xs text-zinc-400 mt-1 max-w-sm">Ve a "Editar Producto" para agregar configuraciones de opciones.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

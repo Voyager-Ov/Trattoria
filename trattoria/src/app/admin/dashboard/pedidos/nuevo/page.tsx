@@ -163,6 +163,7 @@ export default function NuevoPedidoPage() {
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [cart, setCart] = useState<CartItem[]>([]);
+    const [isCartOpen, setIsCartOpen] = useState(false);
 
     // Search Customers
     useEffect(() => {
@@ -482,7 +483,7 @@ export default function NuevoPedidoPage() {
                     </div>
 
                     {/* Products Grid */}
-                    <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-10 scrollbar-thin scrollbar-thumb-zinc-200 scrollbar-track-transparent">
+                    <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-24 scrollbar-thin scrollbar-thumb-zinc-200 scrollbar-track-transparent">
                         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 auto-rows-max">
                             {loadingCatalog ? (
                                 Array(8).fill(0).map((_, i) => (
@@ -518,8 +519,8 @@ export default function NuevoPedidoPage() {
                     </div>
                 </div>
 
-                {/* Right: Cart Summary */}
-                <div className="w-full md:w-96 bg-white border-l border-zinc-100 flex flex-col z-10">
+                {/* Right: Cart Summary (desktop) */}
+                <div className="hidden md:flex md:w-96 bg-white border-l border-zinc-100 flex-col z-10">
                     <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
                         <h2 className="font-bold text-lg text-zinc-900">Carrito</h2>
                         <Badge variant="outline" className="rounded-full">{cart.length} items</Badge>
@@ -589,6 +590,86 @@ export default function NuevoPedidoPage() {
                             </div>
                         </div>
                     </div>
+                </div>
+
+                {/* Mobile: floating cart button + sheet */}
+                <div className="md:hidden">
+                    <div className="fixed inset-x-4 bottom-[calc(var(--admin-mobile-nav-height)+1rem)] z-40 flex justify-center">
+                        <button
+                            onClick={() => setIsCartOpen(true)}
+                            className="w-full max-w-lg rounded-2xl bg-zinc-900 text-white px-4 py-3 font-black flex items-center justify-between shadow-lg"
+                        >
+                            <div className="flex items-center gap-3">
+                                <ShoppingBag className="h-5 w-5" />
+                                <span>Ver carrito</span>
+                            </div>
+                            <div className="text-sm font-bold">{cart.length} · ${(total).toLocaleString("es-CL")}</div>
+                        </button>
+                    </div>
+
+                    <ResponsivePanel open={isCartOpen} onOpenChange={setIsCartOpen} title="Carrito" mobileSide="bottom">
+                        <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
+                            <h2 className="font-bold text-lg text-zinc-900">Carrito</h2>
+                            <Badge variant="outline" className="rounded-full">{cart.length} items</Badge>
+                        </div>
+
+                        <div className="p-6">
+                            {cart.length === 0 ? (
+                                <div className="h-48 flex flex-col items-center justify-center text-center space-y-4">
+                                    <div className="h-16 w-16 bg-zinc-50 border border-zinc-100 rounded-full flex items-center justify-center">
+                                        <ShoppingBag className="h-8 w-8 text-zinc-300" />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-zinc-900">El carrito está vacío</p>
+                                        <p className="text-sm text-zinc-500">Agrega productos del menú para comenzar.</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {cart.map(item => (
+                                        <div key={item.id} className="flex gap-4 items-center bg-zinc-50/50 p-3 rounded-2xl border border-zinc-100">
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="font-bold text-sm text-zinc-900 truncate">{item.nombre}</h4>
+                                                <p className="text-xs text-zinc-500 font-medium">${(item.precio).toLocaleString("es-CL")} c/u</p>
+                                            </div>
+                                            <div className="flex items-center gap-2 bg-white p-1 rounded-full border border-zinc-200 shadow-sm">
+                                                <button
+                                                    onClick={() => updateQuantity(item.id, -1)}
+                                                    className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-zinc-100 text-zinc-600 transition-colors"
+                                                >
+                                                    <Minus className="h-3 w-3" />
+                                                </button>
+                                                <span className="text-sm font-bold w-6 text-center">{item.cantidad}</span>
+                                                <button
+                                                    onClick={() => updateQuantity(item.id, 1)}
+                                                    className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-zinc-100 text-zinc-600 transition-colors"
+                                                >
+                                                    <Plus className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                            <button
+                                                onClick={() => removeFromCart(item.id)}
+                                                className="h-8 w-8 flex items-center justify-center rounded-full text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="mt-6 p-4 bg-zinc-50/50 border-t border-zinc-100 space-y-4 rounded-2xl">
+                                <div className="flex items-center justify-between text-zinc-500 font-medium">
+                                    <span>Subtotal</span>
+                                    <span>${(total).toLocaleString("es-CL")}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-xl font-black text-zinc-900">
+                                    <span>Total</span>
+                                    <span>${(total).toLocaleString("es-CL")}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </ResponsivePanel>
                 </div>
             </div>
 

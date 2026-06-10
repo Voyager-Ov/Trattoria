@@ -70,7 +70,7 @@ export default function ProfitabilitySection({ dateRange, basis }: Profitability
             setLoading(true);
 
             try {
-                const year = new Date().getFullYear();
+                const year = dateRange.from.getFullYear();
                 const [categoryResult, roiResult] = await Promise.all([
                     getProfitabilityByCategoryData(dateRange.from, dateRange.to, basis),
                     getMonthlyROI(year),
@@ -151,7 +151,7 @@ export default function ProfitabilitySection({ dateRange, basis }: Profitability
                                             borderRadius: "12px",
                                             padding: "12px",
                                         }}
-                                        formatter={(value: number | string | undefined) => formatCurrency(Number(value || 0))}
+                                        formatter={(value: any) => formatCurrency(Number(value || 0))}
                                     />
                                     {!isMobile ? <Legend wrapperStyle={{ fontSize: 12 }} /> : null}
                                     <Bar dataKey="ingresos" fill="#10b981" name="Ingresos" radius={[8, 8, 0, 0]} />
@@ -259,7 +259,7 @@ export default function ProfitabilitySection({ dateRange, basis }: Profitability
                                             borderRadius: "12px",
                                             padding: "12px",
                                         }}
-                                        formatter={(value: number | string | undefined, name?: string) => {
+                                        formatter={(value: any, name: any) => {
                                             if (name === "ROI") {
                                                 return [`${Number(value || 0).toFixed(1)}%`, "ROI"];
                                             }

@@ -7,6 +7,8 @@ import { getSessionCookie, verifySessionCookie } from "@/lib/auth";
 import { registerCashboxPayment, voidCashboxPaymentForCancellation } from "@/app/actions/cashboxActions";
 import { serializePrisma } from "@/lib/utils";
 import { getSystemNow } from "@/lib/system-time";
+import { triggerOrderSignal } from "@/lib/trigger-signal";
+import { requireEmployee } from "@/lib/serverAuth";
 
 type RecipeSupply = {
     supplyId: string;
@@ -174,6 +176,7 @@ export async function updateOrderStatus(
     deductStock?: boolean
 ) {
     try {
+        await requireEmployee();
         const { actorId, actorName, actorRole } = await resolveActor();
 
         const currentOrder = await prisma.order.findUnique({
@@ -201,8 +204,8 @@ export async function updateOrderStatus(
 
                 const insumosRequeridos = buildInsumosMap(order);
 
-                // Solo restauramos stock si NO queremos descontar merma
-                if (!deductStock) {
+                // Solo restauramos stock si estaba FINALIZADO y no se marcó como merma.
+                if (order.estado === "FINALIZADO" && !deductStock) {
                     for (const [supplyId, { supply, cantidadTotal }] of insumosRequeridos) {
                         const nuevoStock = Number(supply.stockActual) + cantidadTotal;
                         await tx.supply.update({
@@ -217,6 +220,26 @@ export async function updateOrderStatus(
                                 stockResultante: nuevoStock,
                                 orderId: id,
                                 motivo: `Restauración de stock por cancelación de pedido ${order.numero}`,
+                            },
+                        });
+                    }
+                } else if (order.estado !== "FINALIZADO" && deductStock) {
+                    // Si no estaba FINALIZADO, el stock NO se había descontado aún.
+                    // Al marcarlo como merma, debemos descontarlo en este momento.
+                    for (const [supplyId, { supply, cantidadTotal }] of insumosRequeridos) {
+                        const nuevoStock = Number(supply.stockActual) - cantidadTotal;
+                        await tx.supply.update({
+                            where: { id: supplyId },
+                            data: { stockActual: nuevoStock },
+                        });
+                        await tx.stockMovement.create({
+                            data: {
+                                supplyId,
+                                tipo: "OUT",
+                                cantidad: cantidadTotal,
+                                stockResultante: nuevoStock,
+                                orderId: id,
+                                motivo: `Merma por cancelación de pedido ${order.numero}`,
                             },
                         });
                     }
@@ -285,24 +308,56 @@ export async function updateOrderStatus(
 
         // ── ALL OTHER STATE TRANSITIONS ─────────────────────────────────────
         } else {
-            await prisma.order.update({
-                where: { id },
-                data: {
-                    estado: status,
-                    ...(status === "EN_PREPARACION" ? { enPreparacionEn: getSystemNow() } : {}),
-                    ...(status === "LISTO" ? { listoEn: getSystemNow() } : {}),
-                    ...(status === "FINALIZADO" ? { finalizadoEn: getSystemNow() } : {}),
-                    events: {
-                        create: {
-                            tipo: "CAMBIO_ESTADO",
-                            descripcion: `Estado cambiado a ${status}`,
-                            actorId,
-                            actorName,
+            await prisma.$transaction(async (tx) => {
+                const order = await tx.order.findUnique({
+                    where: { id },
+                    include: itemsWithSuppliesInclude,
+                });
+                if (!order) throw new Error("Pedido no encontrado");
+
+                if (status === "FINALIZADO" && order.estado !== "FINALIZADO") {
+                    const insumosRequeridos = buildInsumosMap(order);
+
+                    for (const [supplyId, { supply, cantidadTotal }] of insumosRequeridos) {
+                        const nuevoStock = Number(supply.stockActual) - cantidadTotal;
+                        await tx.supply.update({
+                            where: { id: supplyId },
+                            data: { stockActual: nuevoStock },
+                        });
+                        await tx.stockMovement.create({
+                            data: {
+                                supplyId,
+                                tipo: "OUT",
+                                cantidad: cantidadTotal,
+                                stockResultante: nuevoStock,
+                                orderId: id,
+                                motivo: `Consumo por finalización de pedido ${order.numero}`,
+                            },
+                        });
+                    }
+                }
+
+                await tx.order.update({
+                    where: { id },
+                    data: {
+                        estado: status,
+                        ...(status === "EN_PREPARACION" ? { enPreparacionEn: getSystemNow() } : {}),
+                        ...(status === "LISTO" ? { listoEn: getSystemNow() } : {}),
+                        ...(status === "FINALIZADO" ? { finalizadoEn: getSystemNow() } : {}),
+                        events: {
+                            create: {
+                                tipo: "CAMBIO_ESTADO",
+                                descripcion: `Estado cambiado a ${status}`,
+                                actorId,
+                                actorName,
+                            },
                         },
                     },
-                },
+                });
             });
         }
+
+        triggerOrderSignal().catch(console.error);
 
         revalidatePath("/admin/dashboard/pedidos");
         revalidatePath("/empleado/pedidos");
@@ -330,6 +385,7 @@ export async function toggleOrderPayment(
     metodoPago?: string,
 ) {
     try {
+        await requireEmployee();
         if (!cobrado) {
             throw new Error("No se puede quitar el pago manualmente; cancela el pedido para anular el cobro");
         }
@@ -344,6 +400,7 @@ export async function toggleOrderPayment(
             throw new Error(result.error || "Error al registrar el cobro");
         }
 
+        triggerOrderSignal().catch(console.error);
         revalidatePath("/admin/dashboard/pedidos");
         revalidatePath("/empleado/pedidos");
         return { success: true, order: result.data };
@@ -383,7 +440,7 @@ export async function searchCustomers(query: string) {
 // createOrder
 //
 // Rules enforced:
-//   - Stock is deducted immediately upon order creation (not on finalization).
+//   - Stock is NO LONGER deducted on creation. It is deducted ONLY upon order finalization.
 // ============================================================================
 export async function createOrder(data: {
     customerId?: string | null;
@@ -409,6 +466,7 @@ export async function createOrder(data: {
     notas?: string;
 }) {
     try {
+        await requireEmployee();
         let createdByUserId: string | null = null;
         let createdByUserName: string | null = null;
         try {
@@ -438,16 +496,16 @@ export async function createOrder(data: {
         );
         const total = subtotal;
 
-        // Get or generate order number
-        const seq = await prisma.appSequence.upsert({
-            where: { tipo: "order" },
-            update: { ultimo: { increment: 1 } },
-            create: { tipo: "order", prefijo: "ORD-", ultimo: 1 },
-        });
-        const numeroOrden = `${seq.prefijo}${seq.ultimo.toString().padStart(4, "0")}`;
-
-        // Create order + deduct stock in a single atomic transaction
+        // Create order in a single atomic transaction.
+        // The sequence nextval is called INSIDE the transaction so that if it
+        // rolls back (FK error, timeout, etc.) the order number is NOT wasted
+        // and the client does not need to retry with a gap in the sequence.
         const newOrder = await prisma.$transaction(async (tx) => {
+            // Consume the sequence inside the transaction
+            const seqResult = await tx.$queryRaw<{next_val: bigint}[]>`SELECT nextval('order_numero_seq') as next_val`;
+            const nextVal = Number(seqResult[0].next_val);
+            const numeroOrden = `ORD-${nextVal.toString().padStart(4, "0")}`;
+
             const orderData: Prisma.OrderCreateInput = {
                 numero: numeroOrden,
                 origen: "INTERNO",
@@ -492,42 +550,22 @@ export async function createOrder(data: {
                 orderData.customer = { connect: { id: data.customerId } };
             }
 
-            // Create the order and load its items with full recipe data for stock deduction
             const order = await tx.order.create({
                 data: orderData,
                 include: itemsWithSuppliesInclude,
             });
 
-            // ── Deduct stock immediately on creation ────────────────────────
-            const insumosRequeridos = buildInsumosMap(order);
-
-            for (const [supplyId, { supply, cantidadTotal }] of insumosRequeridos) {
-                const nuevoStock = Number(supply.stockActual) - cantidadTotal;
-                await tx.supply.update({
-                    where: { id: supplyId },
-                    data: { stockActual: nuevoStock },
-                });
-                await tx.stockMovement.create({
-                    data: {
-                        supplyId,
-                        tipo: "OUT",
-                        cantidad: cantidadTotal,
-                        stockResultante: nuevoStock,
-                        orderId: order.id,
-                        motivo: `Consumo por creación de pedido ${order.numero}`,
-                    },
-                });
-            }
-
             return order;
         });
 
+        triggerOrderSignal().catch(console.error);
         revalidatePath("/admin/dashboard/pedidos");
         revalidatePath("/empleado/pedidos");
         return { success: true, data: JSON.parse(JSON.stringify(newOrder)) };
     } catch (error) {
         console.error("Error creating order:", error);
-        return { success: false, error: "No se pudo crear el pedido" };
+        const message = error instanceof Error ? error.message : "No se pudo crear el pedido";
+        return { success: false, error: message };
     }
 }
 
@@ -639,7 +677,11 @@ export async function getAdminCatalog() {
                 orderBy: { orden: 'asc' }
             }),
             prisma.product.findMany({
-                where: { deletedAt: null, activo: true },
+                where: { 
+                    deletedAt: null, 
+                    activo: true,
+                    catalogRole: { in: ['STANDARD', 'CONFIGURABLE_BASE'] }
+                },
                 include: {
                     ...publicCatalogProductInclude,
                     category: true

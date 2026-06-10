@@ -117,23 +117,28 @@ export default function NuevoProductoPage() {
 
     useEffect(() => {
         async function loadData() {
-            const [catRes, supRes, groupsRes] = await Promise.all([
-                getCategories(),
-                getSupplies(),
-                getProductOptionGroups(),
-            ]);
+            try {
+                const [catRes, supRes, groupsRes] = await Promise.all([
+                    getCategories(),
+                    getSupplies(),
+                    getProductOptionGroups(),
+                ]);
 
-            if (catRes.success && catRes.data) {
-                // Filter categories that are NOT promotions
-                setCategories((catRes.data as any[]).filter((c: any) => !c.esPromocion));
-            }
+                if (catRes.success && catRes.data) {
+                    // Filter categories that are NOT promotions
+                    setCategories((catRes.data as any[]).filter((c: any) => !c.esPromocion));
+                }
 
-            if (supRes.success && supRes.data) {
-                setSupplies(supRes.data as Supply[]);
-            }
+                if (supRes.success && supRes.data) {
+                    setSupplies(supRes.data as Supply[]);
+                }
 
-            if (groupsRes.success && groupsRes.data) {
-                setOptionGroups(groupsRes.data as ProductOptionGroupWithOptions[]);
+                if (groupsRes.success && groupsRes.data) {
+                    setOptionGroups(groupsRes.data as ProductOptionGroupWithOptions[]);
+                }
+            } catch (error) {
+                console.error("Error cargando datos iniciales:", error);
+                toast.error("Error al cargar los datos. Intenta recargar la página.");
             }
         }
         loadData();
