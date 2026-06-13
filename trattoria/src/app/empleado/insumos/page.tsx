@@ -6,14 +6,9 @@ import {
     Search,
     Filter,
     MoreVertical,
-    AlertTriangle,
-    Beaker,
-    TrendingUp,
-    Package,
     History,
     ChevronDown,
-    Loader2,
-    LucideIcon
+    Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,9 +20,10 @@ import {
     DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { getSupplies, softDeleteSupply } from "./actions";
+import { getSupplies, softDeleteSupply, archiveSupply, unarchiveSupply } from "./actions";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -54,38 +50,7 @@ interface Supply {
     } | null;
 }
 
-interface MetricCardProps {
-    title: string;
-    value: string | number;
-    change?: string;
-    headerColor: string;
-    icon?: LucideIcon;
-}
 
-// Metric Card - Exact Match with Admin Page
-function MetricCard({ title, value, change, headerColor, icon: Icon }: MetricCardProps) {
-    return (
-        <div className="bg-white rounded-[2rem] border border-zinc-200 shadow-sm overflow-hidden flex flex-col h-full group hover:shadow-md transition-shadow duration-300">
-            {/* Colored Header Strip */}
-            <div className={`h-12 ${headerColor} flex items-center px-6 text-white font-medium text-sm capitalize`}>
-                {title}
-                {Icon && <div className="ml-auto opacity-80"><Icon className="w-4 h-4" /></div>}
-            </div>
-            {/* Body */}
-            <div className="p-6 flex flex-col justify-between flex-grow">
-                <div className="flex items-end gap-3">
-                    <span className="text-3xl font-bold text-zinc-900 tracking-tight">{value}</span>
-                    {change && (
-                        <span className={`mb-1 px-3 py-1 rounded-full text-[0.65rem] font-bold uppercase tracking-wider ${change === 'REVISAR' ? 'bg-amber-50 text-amber-600' : 'bg-zinc-100 text-zinc-600'
-                            }`}>
-                            {change}
-                        </span>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
 
 export default function InsumosPage() {
     const [supplies, setSupplies] = useState<Supply[]>([]);
@@ -139,27 +104,45 @@ export default function InsumosPage() {
         };
     }, []);
 
-    const filteredSupplies = supplies.filter(s =>
-        s.nombre.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const [selectedCategory, setSelectedCategory] = useState<string>("Todas");
+    const [statusFilter, setStatusFilter] = useState<string>("Todos los estados");
 
-    const stats = {
-        total: supplies.length,
-        lowStock: supplies.filter(s => Number(s.stockActual) <= Number(s.stockMinimo)).length,
-        totalValue: supplies.reduce((acc, s) => acc + (Number(s.stockActual) * Number(s.costoUnitario)), 0),
-        active: supplies.filter(s => s.activo).length
-    };
+    const categories = Array.from(new Set(supplies.map(s => s.category?.nombre).filter(Boolean))) as string[];
+
+    const filteredSupplies = supplies.filter(s => {
+        const matchesSearch = s.nombre.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesCategory = selectedCategory === "Todas" || s.category?.nombre === selectedCategory;
+        const matchesStatus = statusFilter === "Todos los estados" 
+            || (statusFilter === "Activos" && s.activo)
+            || (statusFilter === "Stock Bajo" && Number(s.stockActual) <= Number(s.stockMinimo));
+        return matchesSearch && matchesCategory && matchesStatus;
+    });
+
+
+
+    const router = useRouter();
 
     const handleDelete = async () => {
         if (!deleteId) return;
         const result = await softDeleteSupply(deleteId);
         if (result.success) {
-            toast.success("Insumo eliminado correctamente");
+            toast.success("Insumo archivado correctamente");
             loadSupplies();
         } else {
-            toast.error(result.error || "Error al eliminar el insumo");
+            toast.error(result.error || "Error al archivar el insumo");
         }
         setDeleteId(null);
+    };
+
+    const handleToggleStatus = async (id: string, currentStatus: boolean) => {
+        const action = currentStatus ? archiveSupply : unarchiveSupply;
+        const result = await action(id);
+        if (result.success) {
+            toast.success(currentStatus ? "Insumo desactivado" : "Insumo activado");
+            loadSupplies();
+        } else {
+            toast.error(result.error);
+        }
     };
 
     const truncateId = (id: string) => {
@@ -171,45 +154,29 @@ export default function InsumosPage() {
         <div className="flex flex-col gap-8 p-8 bg-zinc-50 min-h-screen">
             <div className="flex justify-between items-end">
                 <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20 shadow-sm">
-                            <Package size={20} />
-                        </div>
-                        <h2 className="text-3xl font-black tracking-tighter text-zinc-900 uppercase">Gestión de Insumos</h2>
-                    </div>
-                    <p className="text-zinc-500 font-medium ml-12">Controla el stock y gestiona el inventario.</p>
+                    <h2 className="text-3xl font-black tracking-tighter text-zinc-900 uppercase">Gestión de Insumos</h2>
+                    <p className="text-zinc-500 font-medium mt-1">Controla el stock y gestiona el inventario.</p>
                 </div>
             </div>
 
-            {/* Metrics Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard
-                    title="Total insumos"
-                    value={stats.total}
-                    change="+12%"
-                    headerColor="bg-blue-600"
-                    icon={Package}
-                />
-                <MetricCard
-                    title="Insumos activos"
-                    value={stats.active}
-                    change="+5%"
-                    headerColor="bg-orange-500"
-                    icon={Beaker}
-                />
-                <MetricCard
-                    title="Inversión total"
-                    value={`$${stats.totalValue.toLocaleString('es-AR', { minimumFractionDigits: 0 })}`}
-                    headerColor="bg-amber-400"
-                    icon={TrendingUp}
-                />
-                <MetricCard
-                    title="Stock crítico"
-                    value={stats.lowStock}
-                    change={stats.lowStock > 0 ? "REVISAR" : undefined}
-                    headerColor="bg-emerald-500"
-                    icon={AlertTriangle}
-                />
+            {/* KPIs */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-[1.5rem] border border-zinc-200 shadow-sm flex flex-col justify-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400">Total Insumos</p>
+                    <p className="mt-2 text-3xl font-black tracking-tighter text-zinc-900">{supplies.length}</p>
+                </div>
+                <div className="bg-white p-5 rounded-[1.5rem] border border-zinc-200 shadow-sm flex flex-col justify-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400">Activos</p>
+                    <p className="mt-2 text-3xl font-black tracking-tighter text-emerald-600">{supplies.filter(s => s.activo).length}</p>
+                </div>
+                <div className="bg-white p-5 rounded-[1.5rem] border border-zinc-200 shadow-sm flex flex-col justify-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400">Stock Crítico</p>
+                    <p className="mt-2 text-3xl font-black tracking-tighter text-amber-500">{supplies.filter(s => Number(s.stockActual) <= Number(s.stockMinimo)).length}</p>
+                </div>
+                <div className="bg-white p-5 rounded-[1.5rem] border border-zinc-200 shadow-sm flex flex-col justify-center">
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-zinc-400">Categorías</p>
+                    <p className="mt-2 text-3xl font-black tracking-tighter text-blue-600">{new Set(supplies.map(s => s.category?.nombre).filter(Boolean)).size}</p>
+                </div>
             </div>
 
             {/* Search and Filters */}
@@ -226,23 +193,34 @@ export default function InsumosPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                        <Button variant="outline" className="h-12 rounded-full px-6 border-zinc-200 hover:bg-zinc-50 text-zinc-600 font-medium">
-                            <Filter className="mr-2 h-4 w-4" />
-                            Categorías
-                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="h-12 rounded-full px-6 border-zinc-200 hover:bg-zinc-50 text-zinc-600 font-medium capitalize">
+                                    <Filter className="mr-2 h-4 w-4 opacity-50" />
+                                    {selectedCategory === "Todas" ? "Categorías" : selectedCategory}
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100 max-h-60 overflow-y-auto">
+                                <DropdownMenuLabel className="px-3 pb-2 text-[0.65rem] font-bold uppercase tracking-widest text-zinc-400">Filtrar por Categoría</DropdownMenuLabel>
+                                <DropdownMenuItem onClick={() => setSelectedCategory("Todas")} className="rounded-xl my-0.5">Todas</DropdownMenuItem>
+                                {categories.map(cat => (
+                                    <DropdownMenuItem key={cat} onClick={() => setSelectedCategory(cat)} className="rounded-xl my-0.5">{cat}</DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" className="h-12 rounded-full px-6 border-zinc-200 hover:bg-zinc-50 text-zinc-600 font-medium capitalize">
-                                    Todos los estados
+                                    {statusFilter === "Todos los estados" ? "Todos los estados" : statusFilter}
                                     <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-xl border-zinc-100">
                                 <DropdownMenuLabel className="px-3 pb-2 text-[0.65rem] font-bold uppercase tracking-widest text-zinc-400">Filtrar por Estado</DropdownMenuLabel>
-                                <DropdownMenuItem className="rounded-xl my-0.5">Todos los estados</DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-xl my-0.5">Activos</DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-xl my-0.5">Stock Bajo</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setStatusFilter("Todos los estados")} className="rounded-xl my-0.5">Todos los estados</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setStatusFilter("Activos")} className="rounded-xl my-0.5">Activos</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setStatusFilter("Stock Bajo")} className="rounded-xl my-0.5">Stock Bajo</DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
 
@@ -272,29 +250,17 @@ export default function InsumosPage() {
                         <table className="w-full">
                             <thead className="bg-zinc-50/50 border-b border-zinc-100">
                                 <tr>
-                                    <th className="text-left p-6 w-[50px]">
-                                        <input
-                                            type="checkbox"
-                                            className="rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-900 h-4 w-4"
-                                        />
-                                    </th>
-                                    <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
-                                        Código
-                                    </th>
                                     <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
                                         Insumo
+                                    </th>
+                                    <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
+                                        Categoría
                                     </th>
                                     <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
                                         Stock Actual
                                     </th>
                                     <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
                                         Unidad
-                                    </th>
-                                    <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
-                                        Costo Unit.
-                                    </th>
-                                    <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
-                                        Valor Inv.
                                     </th>
                                     <th className="text-left px-6 py-5 font-semibold text-[0.65rem] uppercase tracking-widest text-zinc-500">
                                         Estado
@@ -307,7 +273,7 @@ export default function InsumosPage() {
                             <tbody className="divide-y divide-zinc-100">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={9} className="text-center py-20">
+                                        <td colSpan={6} className="text-center py-20">
                                             <div className="flex flex-col items-center gap-3">
                                                 <Loader2 className="h-8 w-8 text-zinc-300 animate-spin" />
                                                 <p className="text-zinc-500 font-medium">Sincronizando inventario...</p>
@@ -316,7 +282,7 @@ export default function InsumosPage() {
                                     </tr>
                                 ) : filteredSupplies.length === 0 ? (
                                     <tr>
-                                        <td colSpan={9} className="text-center py-20">
+                                        <td colSpan={6} className="text-center py-20">
                                             <div className="flex flex-col items-center gap-3">
                                                 <div className="h-16 w-16 bg-zinc-50 rounded-full flex items-center justify-center">
                                                     <Search className="h-8 w-8 text-zinc-300" />
@@ -328,33 +294,16 @@ export default function InsumosPage() {
                                 ) : (
                                     filteredSupplies.map((supply) => {
                                         const isLowStock = Number(supply.stockActual) <= Number(supply.stockMinimo);
-                                        const totalVal = Number(supply.stockActual) * Number(supply.costoUnitario);
 
                                         return (
                                             <tr key={supply.id} className="group border-b border-zinc-100 hover:bg-zinc-50/50 transition-all duration-150">
-                                                <td className="p-6">
-                                                    <input
-                                                        type="checkbox"
-                                                        className="rounded-md border-zinc-300 text-zinc-900 focus:ring-zinc-900 h-4 w-4"
-                                                    />
+                                                <td className="px-6 py-4">
+                                                    <span className="font-black text-zinc-900 text-sm whitespace-nowrap">{supply.nombre}</span>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className="font-mono text-[0.7rem] text-zinc-400 group-hover:text-zinc-600 transition-colors">
-                                                        {truncateId(supply.id)}
+                                                    <span className="text-[0.7rem] text-zinc-500 uppercase tracking-widest font-black bg-zinc-100/50 px-3 py-1.5 rounded-lg border border-zinc-200">
+                                                        {supply.category?.nombre || "Sin categoria"}
                                                     </span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`h-10 w-10 rounded-xl flex items-center justify-center border border-zinc-100 ${isLowStock ? 'bg-amber-50 text-amber-500' : 'bg-zinc-50 text-zinc-300'}`}>
-                                                            {isLowStock ? <AlertTriangle className="h-5 w-5" /> : <Beaker className="h-5 w-5" />}
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="font-semibold text-zinc-900 text-sm">{supply.nombre}</span>
-                                                            <span className="text-[0.7rem] text-zinc-400 mt-0.5 capitalize">
-                                                                {supply.category?.nombre || "Sin categoria"}
-                                                            </span>
-                                                        </div>
-                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex flex-col">
@@ -368,14 +317,6 @@ export default function InsumosPage() {
                                                     <Badge variant="outline" className="border-zinc-200 text-zinc-500 font-medium text-[0.6rem] uppercase tracking-tighter px-2 py-0">
                                                         {supply.unidad}
                                                     </Badge>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className="font-bold text-zinc-900 text-sm">${Number(supply.costoUnitario).toFixed(2)}</span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className="text-xs font-bold text-zinc-500 bg-zinc-50 px-2 py-1 rounded-md">
-                                                        ${totalVal.toLocaleString('es-AR', { minimumFractionDigits: 0 })}
-                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <Badge
@@ -397,11 +338,17 @@ export default function InsumosPage() {
                                                             </Button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end" className="w-48 rounded-2xl p-2 shadow-xl border-zinc-100">
-                                                            <DropdownMenuItem className="rounded-xl my-0.5">Configurar Insumo</DropdownMenuItem>
-                                                            <DropdownMenuItem className="rounded-xl my-0.5">Ver Historial</DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => router.push(`/empleado/insumos/${supply.id}/editar`)} className="rounded-xl my-0.5 cursor-pointer">Configurar Insumo</DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => router.push(`/empleado/insumos/${supply.id}`)} className="rounded-xl my-0.5 cursor-pointer">Ver Historial</DropdownMenuItem>
                                                             <div className="h-px bg-zinc-50 my-1 mx-1" />
                                                             <DropdownMenuItem
-                                                                className="text-red-500 focus:text-red-600 rounded-xl my-0.5 font-medium"
+                                                                className="rounded-xl my-0.5 font-medium cursor-pointer"
+                                                                onClick={() => handleToggleStatus(supply.id, supply.activo)}
+                                                            >
+                                                                {supply.activo ? "Desactivar" : "Activar"}
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                className="text-red-500 focus:text-red-600 rounded-xl my-0.5 font-medium cursor-pointer"
                                                                 onClick={() => setDeleteId(supply.id)}
                                                             >
                                                                 Archivar

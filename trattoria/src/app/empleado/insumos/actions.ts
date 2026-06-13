@@ -325,6 +325,36 @@ export async function softDeleteSupply(id: string) {
     }
 }
 
+export async function archiveSupply(id: string) {
+    try {
+        await requireEmployee();
+        await prisma.supply.update({
+            where: { id },
+            data: { activo: false },
+        });
+        revalidatePath("/empleado/insumos");
+        return { success: true };
+    } catch (error) {
+        console.error("Error archiving supply:", error);
+        return { success: false, error: "Error al desactivar el insumo" };
+    }
+}
+
+export async function unarchiveSupply(id: string) {
+    try {
+        await requireEmployee();
+        await prisma.supply.update({
+            where: { id },
+            data: { activo: true },
+        });
+        revalidatePath("/empleado/insumos");
+        return { success: true };
+    } catch (error) {
+        console.error("Error unarchiving supply:", error);
+        return { success: false, error: "Error al activar el insumo" };
+    }
+}
+
 export async function getSupplyCategories() {
     try {
         const categories = await prisma.supplyCategory.findMany({
@@ -334,5 +364,42 @@ export async function getSupplyCategories() {
     } catch (error) {
         console.error("Error fetching supply categories:", error);
         return { success: false, error: "Error al obtener categorias" };
+    }
+}
+
+export async function updateSupply(id: string, data: {
+    nombre?: string;
+    unidad?: UnidadMedida;
+    stockMinimo?: number;
+    costoUnitario?: number;
+    categoryId?: string;
+    descripcion?: string;
+    activo?: boolean;
+}) {
+    try {
+        await requireEmployee();
+        const supply = await prisma.supply.update({
+            where: { id },
+            data: {
+                nombre: data.nombre,
+                unidad: data.unidad,
+                stockMinimo: data.stockMinimo,
+                costoUnitario: data.costoUnitario,
+                descripcion: data.descripcion,
+                activo: data.activo,
+                category: data.categoryId
+                    ? { connect: { id: data.categoryId } }
+                    : { disconnect: true },
+            },
+            include: {
+                category: true,
+            }
+        });
+        revalidatePath("/empleado/insumos");
+        revalidatePath(`/empleado/insumos/${id}`);
+        return { success: true, data: serializePrisma(supply) };
+    } catch (error) {
+        console.error("Error updating supply:", error);
+        return { success: false, error: "Error al actualizar el insumo" };
     }
 }

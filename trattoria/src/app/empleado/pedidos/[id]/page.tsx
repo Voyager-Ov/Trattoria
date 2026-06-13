@@ -20,7 +20,8 @@ import {
     Calendar,
     LucideIcon,
     TrendingUp,
-    DollarSign
+    DollarSign,
+    RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -28,7 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { EstadoPedido, TipoEventoPedido } from "@prisma/client";
-import { updateOrderStatus, toggleOrderPayment, getOrderSuppliesAndCost } from "@/app/admin/dashboard/pedidos/actions";
+import { updateOrderStatus, toggleOrderPayment } from "@/app/admin/dashboard/pedidos/actions";
 import { getCurrentCashbox } from "@/app/actions/cashboxActions";
 import {
     Sheet,
@@ -39,6 +40,8 @@ import {
     SheetTitle,
 } from "@/components/ui/sheet";
 import { getConfigs } from "@/app/actions/configActions";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
     Select,
     SelectContent,
@@ -174,19 +177,12 @@ export default function EmpleadoOrderDetailPage() {
     const [paymentMethods, setPaymentMethods] = useState<{ id: string; label: string; enabled: boolean }[]>([]);
     const [hasOpenCashbox, setHasOpenCashbox] = useState(false);
     const [isCashboxGateOpen, setIsCashboxGateOpen] = useState(false);
-    const [suppliesData, setSuppliesData] = useState<{
-        insumos: Array<{
-            nombre: string;
-            unidad: string;
-            cantidadTotal: number;
-            costoUnitario: number;
-            costoTotal: number;
-        }>;
-        costoTotal: number;
-        totalPedido: number;
-        ganancia: number;
-        margenGanancia: number;
-    } | null>(null);
+    
+    // Cancellation Sheet State
+    const [isCancelSheetOpen, setIsCancelSheetOpen] = useState(false);
+    const [cancelMotive, setCancelMotive] = useState("");
+    const [cancelDeductStock, setCancelDeductStock] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
 
     useEffect(() => {
         void fetchOrderDetail();
@@ -237,17 +233,6 @@ export default function EmpleadoOrderDetailPage() {
         }
     };
 
-    const loadSuppliesData = async () => {
-        try {
-            const result = await getOrderSuppliesAndCost(orderId);
-            if (result.success && result.data) {
-                setSuppliesData(result.data);
-            }
-        } catch (error) {
-            console.error("Error loading supplies data:", error);
-        }
-    };
-
     const fetchOrderDetail = async () => {
         try {
             setIsLoading(true);
@@ -256,7 +241,6 @@ export default function EmpleadoOrderDetailPage() {
 
             if (data.success) {
                 setOrder(data.order);
-                void loadSuppliesData();
             } else {
                 toast.error("No se pudo cargar el pedido");
                 router.push("/empleado/pedidos");
@@ -286,6 +270,29 @@ export default function EmpleadoOrderDetailPage() {
             toast.error("Error al actualizar el estado");
         } finally {
             setIsUpdating(false);
+        }
+    };
+
+    const handleConfirmCancel = async () => {
+        if (!order || !cancelMotive.trim()) {
+            toast.error("Debes ingresar un motivo");
+            return;
+        }
+
+        setIsCancelling(true);
+        try {
+            const result = await updateOrderStatus(order.id, 'CANCELADO', cancelMotive, cancelDeductStock);
+            if (result.success) {
+                toast.success("Pedido cancelado");
+                setIsCancelSheetOpen(false);
+                fetchOrderDetail();
+            } else {
+                toast.error(result.error || "Error al cancelar");
+            }
+        } catch {
+            toast.error("Error al cancelar el pedido");
+        } finally {
+            setIsCancelling(false);
         }
     };
 
@@ -464,71 +471,6 @@ export default function EmpleadoOrderDetailPage() {
                             </div>
                         </Card>
 
-                        {/* Supplies and Cost Card */}
-                        {suppliesData && suppliesData.insumos.length > 0 && (
-                            <Card className="rounded-[2.5rem] border-zinc-200 shadow-xl shadow-zinc-200/50 overflow-hidden bg-white">
-                                <div className="p-8">
-                                    <h3 className="text-lg font-black uppercase tracking-tight text-zinc-900 mb-6">Insumos Necesarios</h3>
-                                    <div className="space-y-3">
-                                        {suppliesData.insumos.map((insumo, index) => (
-                                            <div key={index} className={cn(
-                                                "flex items-center justify-between py-3",
-                                                index !== suppliesData.insumos.length - 1 && "border-b border-zinc-100"
-                                            )}>
-                                                <div className="flex-1">
-                                                    <p className="font-bold text-zinc-900">{insumo.nombre}</p>
-                                                    <p className="text-sm text-zinc-500 font-medium mt-0.5">
-                                                        {insumo.cantidadTotal.toFixed(2)} {insumo.unidad.toLowerCase()}
-                                                        {insumo.costoUnitario > 0 && (
-                                                            <span className="ml-2">× ${insumo.costoUnitario.toLocaleString('es-AR')}</span>
-                                                        )}
-                                                    </p>
-                                                </div>
-                                                {insumo.costoTotal > 0 && (
-                                                    <div className="text-right">
-                                                        <p className="font-bold text-zinc-700 text-sm">
-                                                            ${insumo.costoTotal.toLocaleString('es-AR')}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {suppliesData.costoTotal > 0 && (
-                                        <div className="mt-6 pt-6 border-t border-zinc-200 space-y-3">
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-zinc-600 font-medium flex items-center gap-2">
-                                                    <DollarSign className="h-4 w-4" />
-                                                    Costo Total de Insumos
-                                                </span>
-                                                <span className="font-bold text-red-600">
-                                                    ${suppliesData.costoTotal.toLocaleString('es-AR')}
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-zinc-600 font-medium flex items-center gap-2">
-                                                    <TrendingUp className="h-4 w-4" />
-                                                    Ganancia Estimada
-                                                </span>
-                                                <span className="font-bold text-green-600">
-                                                    ${suppliesData.ganancia.toLocaleString('es-AR')}
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between pt-3 border-t border-zinc-200">
-                                                <span className="text-base font-black uppercase tracking-tight text-zinc-900">
-                                                    Margen de Ganancia
-                                                </span>
-                                                <span className="text-xl font-black text-emerald-600 tracking-tight">
-                                                    {suppliesData.margenGanancia.toFixed(1)}%
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </Card>
-                        )}
-
                         {/* Timeline Card */}
                         <Card className="rounded-[2.5rem] border-zinc-200 shadow-xl shadow-zinc-200/50 overflow-hidden bg-white">
                             <div className="p-8">
@@ -656,6 +598,24 @@ export default function EmpleadoOrderDetailPage() {
                                             </p>
                                         ) : null}
                                     </div>
+                                    
+                                    {order.estado !== 'FINALIZADO' && order.estado !== 'CANCELADO' && (
+                                        <div className="pt-3 border-t border-zinc-100">
+                                            <Button
+                                                variant="outline"
+                                                className="w-full h-11 rounded-xl font-bold text-xs uppercase tracking-wider text-red-600 border-red-200 hover:bg-red-50 transition-all"
+                                                onClick={() => {
+                                                    setCancelMotive("");
+                                                    setCancelDeductStock(false);
+                                                    setIsCancelSheetOpen(true);
+                                                }}
+                                                disabled={isUpdating}
+                                            >
+                                                <XCircle className="h-4 w-4 mr-2" />
+                                                Cancelar Pedido
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </Card>

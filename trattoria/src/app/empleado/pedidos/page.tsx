@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useOptimistic } from "react";
+import React, { useState, useEffect, useCallback, useOptimistic, useMemo } from "react";
 import { useSessionState } from "@/hooks/useSessionState";
 import { useRouter } from "next/navigation";
 import {
@@ -63,6 +63,8 @@ import { formatSystemDateTime } from "@/lib/system-time";
 import { CashboxBlockedDialog } from "@/components/dashboard/cashbox/CashboxBlockedDialog";
 import { PedidosMobileList } from "./components/PedidosMobileList";
 import type { OrderListItem } from "@/app/admin/dashboard/pedidos/components/pedido-shared";
+import { PedidosKpiStrip } from "@/app/admin/dashboard/pedidos/components/PedidosKpiStrip";
+import { PedidosHero } from "@/app/admin/dashboard/pedidos/components/PedidosHero";
 
 type Order = OrderListItem;
 
@@ -233,6 +235,16 @@ export default function EmpleadoPedidosPage() {
         return () => clearTimeout(timeout);
     }, [searchQuery]);
 
+    const metrics = useMemo(
+        () => ({
+            received: orders.filter((order) => order.estado === "RECIBIDO").length,
+            pending: orders.filter((order) => order.estado === "PENDIENTE").length,
+            preparing: orders.filter((order) => order.estado === "EN_PREPARACION").length,
+            ready: orders.filter((order) => order.estado === "LISTO").length,
+        }),
+        [orders]
+    );
+
     const getPaymentLabel = useCallback((order: Order) => {
         if (order.payment.isPaid) {
             return order.payment.method || "No especificado";
@@ -308,6 +320,7 @@ export default function EmpleadoPedidosPage() {
         const result = await updateOrderStatus(id, newStatus);
         if (result.success) {
             toast.success("Estado actualizado");
+            void fetchOrders(true);
         } else {
             toast.error(result.error || "Error al actualizar");
             void fetchOrders(true);
@@ -325,6 +338,7 @@ export default function EmpleadoPedidosPage() {
         if (result.success) {
             toast.success("Pedido cancelado");
             setIsCancelSheetOpen(false);
+            void fetchOrders(true);
         } else {
             toast.error(result.error || "Error al cancelar");
         }
@@ -360,6 +374,7 @@ export default function EmpleadoPedidosPage() {
             toast.success("Pedido cobrado");
             setIsPaymentSheetOpen(false);
             await syncCashboxState();
+            void fetchOrders(true);
         } else {
             if ((result.error || "").toLowerCase().includes("abrir una caja")) {
                 setIsPaymentSheetOpen(false);
@@ -397,24 +412,13 @@ export default function EmpleadoPedidosPage() {
         <div className="flex flex-col min-h-screen">
             {/* Header Section */}
             <div className="px-8 pt-8 pb-4 space-y-4">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20 shadow-sm">
-                                <ShoppingBag size={20} />
-                            </div>
-                            <h2 className="text-3xl font-black tracking-tighter text-zinc-900 uppercase">Gestión de Pedidos</h2>
-                        </div>
-                        <p className="text-zinc-500 font-medium ml-12">Monitorea y despacha las órdenes en tiempo real.</p>
-                    </div>
-
-                    <Link href="/empleado/pedidos/nuevo">
-                        <Button className="bg-zinc-900 hover:bg-zinc-800 text-white rounded-[1.2rem] px-6 h-12 gap-2 shadow-lg shadow-zinc-200 transition-all active:scale-95">
-                            <Plus size={18} />
-                            <span className="font-bold tracking-tight">Nuevo Pedido</span>
-                        </Button>
-                    </Link>
-                </div>
+                <PedidosHero
+                    isLoading={isLoading}
+                    onRefresh={() => void fetchOrders()}
+                    onCreate={() => router.push("/empleado/pedidos/nuevo")}
+                />
+                
+                <PedidosKpiStrip metrics={metrics} />
 
                 {/* Filters Row */}
                 <div className="mt-8 flex flex-col md:flex-row gap-4 items-end md:items-center justify-between">

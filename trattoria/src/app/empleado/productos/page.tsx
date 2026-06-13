@@ -21,15 +21,8 @@ import { toast } from "sonner";
 import Image from "next/image";
 import {
     toggleProductAvailability,
-    softDeleteProduct,
-    createProduct,
-    deletePromotion,
-    reorderCategories
 } from "@/app/admin/dashboard/productos/actions";
 import { UnidadMedida } from "@prisma/client";
-import { CreateCategorySheet } from "@/app/admin/dashboard/productos/components/CreateCategorySheet";
-import { CreateProductSheet } from "@/app/admin/dashboard/productos/components/CreateProductSheet";
-import { CreatePromotionSheet } from "@/app/admin/dashboard/productos/components/CreatePromotionSheet";
 
 // Types
 interface MenuItem {
@@ -79,12 +72,6 @@ export default function EmpleadoProductosPage() {
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    // Sheets state
-    const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);
-    const [isProductSheetOpen, setIsProductSheetOpen] = useState(false);
-    const [isPromotionSheetOpen, setIsPromotionSheetOpen] = useState(false);
 
     const refreshData = useCallback(async () => {
         setIsLoading(true);
@@ -171,36 +158,7 @@ export default function EmpleadoProductosPage() {
         }
     };
 
-    const handleDuplicate = async (product: MenuItem) => {
-        setIsSubmitting(true);
-        const { id, createdAt, updatedAt, deletedAt, ...rest } = product;
-        const res = await createProduct({
-            ...rest,
-            descripcion: rest.descripcion ?? undefined,
-            nombre: `${rest.nombre} (Copia)`,
-        });
-        if (res.success) {
-            toast.success("Producto duplicado");
-            refreshData();
-        } else {
-            toast.error(res.error || "Error al duplicar");
-        }
-        setIsSubmitting(false);
-    };
 
-    const handleDelete = async (item: MenuItem) => {
-        if (!confirm(`¿Estás seguro de eliminar esta ${item.type.toLowerCase()}?`)) return;
-        const res = item.type === 'PRODUCTO'
-            ? await softDeleteProduct(item.id)
-            : await deletePromotion(item.id);
-
-        if (res.success) {
-            toast.success("Eliminado correctamente");
-            refreshData();
-        } else {
-            toast.error(res.error || "Error al eliminar");
-        }
-    };
 
     const stats = {
         total: menuItems.filter(i => i.type === 'PRODUCTO').length,
@@ -209,37 +167,7 @@ export default function EmpleadoProductosPage() {
         promos: menuItems.filter(i => i.type === 'PROMOCION').length
     };
 
-    const handleReorder = async (categoryId: string, direction: 'up' | 'down') => {
-        const index = categories.findIndex(c => c.id === categoryId);
-        if (index === -1) return;
 
-        const newCategories = [...categories];
-        const targetIndex = direction === 'up' ? index - 1 : index + 1;
-
-        if (targetIndex < 0 || targetIndex >= categories.length) return;
-
-        // Swap
-        const temp = newCategories[index];
-        newCategories[index] = newCategories[targetIndex];
-        newCategories[targetIndex] = temp;
-
-        // Prepare updates for backend
-        const updates = newCategories.map((cat, i) => ({
-            id: cat.id,
-            orden: i
-        }));
-
-        // Optimistic update
-        setCategories(newCategories);
-
-        const res = await reorderCategories(updates);
-        if (!res.success) {
-            toast.error(res.error || "Error al reordenar");
-            refreshData(); // Rollback
-        } else {
-            toast.success("Orden actualizado");
-        }
-    };
 
     const hasActiveFilters = searchQuery !== "" || selectedCategories.length > 0 || statusFilter !== "todos";
 
@@ -265,64 +193,13 @@ export default function EmpleadoProductosPage() {
 
                             <div className="max-h-[300px] overflow-y-auto px-1 py-1">
                                 {categories.map((cat, index) => (
-                                    <div key={cat.id} className="flex items-center justify-between p-2 hover:bg-zinc-50 rounded-xl group transition-colors">
+                                    <div key={cat.id} className="flex items-center justify-between p-2 hover:bg-zinc-50 rounded-xl transition-colors">
                                         <span className="text-sm font-medium text-zinc-700">{cat.nombre}</span>
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-7 w-7 rounded-lg hover:bg-zinc-100"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleReorder(cat.id, 'up');
-                                                }}
-                                                disabled={index === 0}
-                                            >
-                                                <ChevronUp className="h-3.5 w-3.5" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-7 w-7 rounded-lg hover:bg-zinc-100"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleReorder(cat.id, 'down');
-                                                }}
-                                                disabled={index === categories.length - 1}
-                                            >
-                                                <ChevronDown className="h-3.5 w-3.5" />
-                                            </Button>
-                                        </div>
                                     </div>
                                 ))}
                             </div>
-
-                            <DropdownMenuSeparator className="bg-zinc-100 mx-2 my-2" />
-                            <DropdownMenuItem
-                                className="rounded-xl cursor-pointer font-semibold text-orange-600 focus:text-orange-600 focus:bg-orange-50 py-2.5 mx-1"
-                                onClick={() => setIsCategorySheetOpen(true)}
-                            >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Nueva Categoría
-                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-
-                    <Button
-                        onClick={() => setIsPromotionSheetOpen(true)}
-                        className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 transition-all font-medium text-sm h-11 px-6 shadow-md"
-                    >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Nueva Promoción
-                    </Button>
-
-                    <Button
-                        onClick={() => setIsProductSheetOpen(true)}
-                        className="rounded-full bg-orange-500 text-white hover:bg-orange-600 shadow-md transition-all font-medium text-sm h-11 px-6"
-                    >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Nuevo Producto
-                    </Button>
                 </div>
             </div>
 
@@ -551,13 +428,6 @@ export default function EmpleadoProductosPage() {
                                                         {item.activo ? 'Desactivar producto' : 'Activar producto'}
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator className="bg-zinc-50" />
-                                                    {item.type === 'PRODUCTO' && (
-                                                        <DropdownMenuItem onClick={() => handleDuplicate(item)} className="rounded-xl py-2 cursor-pointer transition-colors hover:text-blue-600">
-                                                            <Copy className="h-3.5 w-3.5 mr-2" />
-                                                            Duplicar
-                                                        </DropdownMenuItem>
-                                                    )}
-
                                                     {/* Usar rutas específicas de empleado para edición */}
                                                     <Link href={item.type === 'PRODUCTO' ? `/empleado/productos/${item.id}/editar` : `/empleado/productos/promociones/${item.id}/editar`}>
                                                         <DropdownMenuItem className="rounded-xl py-2 cursor-pointer">
@@ -565,12 +435,6 @@ export default function EmpleadoProductosPage() {
                                                             Editar
                                                         </DropdownMenuItem>
                                                     </Link>
-
-                                                    <DropdownMenuSeparator className="bg-zinc-50" />
-                                                    <DropdownMenuItem onClick={() => handleDelete(item)} className="rounded-xl py-2 cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600">
-                                                        <Trash2 className="h-3.5 w-3.5 mr-2" />
-                                                        Eliminar
-                                                    </DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </td>
@@ -581,11 +445,6 @@ export default function EmpleadoProductosPage() {
                     </table>
                 </div>
             </div>
-
-            {/* Sheets */}
-            <CreateCategorySheet open={isCategorySheetOpen} onOpenChange={setIsCategorySheetOpen} onSuccess={refreshData} />
-            <CreateProductSheet open={isProductSheetOpen} onOpenChange={setIsProductSheetOpen} onSuccess={refreshData} />
-            <CreatePromotionSheet open={isPromotionSheetOpen} onOpenChange={setIsPromotionSheetOpen} onSuccess={refreshData} />
         </div>
     );
 }

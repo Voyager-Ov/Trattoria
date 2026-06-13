@@ -23,7 +23,7 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select";
-import { getSupplies, registerStockEntry, registerStockMovement } from "../actions";
+import { getSupplies, registerStockMovement } from "../actions";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { TipoMovimientoStock } from "@prisma/client";
@@ -80,28 +80,12 @@ function RegistrarStockContent() {
 
         setLoading(true);
 
-        let result;
-
-        if (formData.tipo === "IN") {
-            const qty = parseFloat(formData.cantidad);
-            const total = parseFloat(formData.costoTotal) || 0;
-            const unitCost = qty > 0 ? total / qty : 0;
-
-            result = await registerStockEntry({
-                supplyId: formData.supplyId,
-                cantidad: qty,
-                costoUnitario: unitCost,
-                motivo: formData.motivo,
-                proveedor: formData.proveedor || undefined,
-            });
-        } else {
-            result = await registerStockMovement({
-                supplyId: formData.supplyId,
-                cantidad: parseFloat(formData.cantidad),
-                tipo: formData.tipo,
-                motivo: formData.motivo,
-            });
-        }
+        const result = await registerStockMovement({
+            supplyId: formData.supplyId,
+            cantidad: parseFloat(formData.cantidad),
+            tipo: formData.tipo,
+            motivo: formData.motivo,
+        });
 
         if (result.success) {
             toast.success("Movimiento registrado correctamente");
@@ -166,7 +150,7 @@ function RegistrarStockContent() {
                                         setFormData({
                                             ...formData,
                                             tipo: val,
-                                            motivo: val === "IN" ? "Compra de Insumos" : val === "OUT" ? "Consumo / Merma" : "Ajuste de Inventario"
+                                            motivo: val === "IN" ? "Entrada Manual" : val === "OUT" ? "Consumo / Merma" : "Ajuste de Inventario"
                                         });
                                     }}
                                 >
@@ -174,7 +158,7 @@ function RegistrarStockContent() {
                                         <SelectValue placeholder="Seleccionar tipo" />
                                     </SelectTrigger>
                                     <SelectContent className="rounded-2xl shadow-xl border-zinc-100 p-2">
-                                        <SelectItem value="IN" className="rounded-xl py-3 font-bold text-emerald-600">ENTRADA (COMPRA)</SelectItem>
+                                        <SelectItem value="IN" className="rounded-xl py-3 font-bold text-emerald-600">ENTRADA MANUAL</SelectItem>
                                         <SelectItem value="OUT" className="rounded-xl py-3 font-bold text-amber-600">SALIDA (MERMA/CONSUMO)</SelectItem>
                                         <SelectItem value="AJUSTE" className="rounded-xl py-3 font-bold text-blue-600">AJUSTE MANUAL</SelectItem>
                                     </SelectContent>
@@ -213,7 +197,7 @@ function RegistrarStockContent() {
 
                             <div className="space-y-3">
                                 <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">
-                                    {formData.tipo === "IN" ? "Cantidad Comprada" : "Cantidad a Movilizar"}
+                                    {formData.tipo === "IN" ? "Cantidad a Ingresar" : "Cantidad a Movilizar"}
                                 </Label>
                                 <div className="relative">
                                     <Input
@@ -232,22 +216,7 @@ function RegistrarStockContent() {
                                 </div>
                             </div>
 
-                            {formData.tipo === "IN" && (
-                                <div className="space-y-3">
-                                    <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Costo Total de Compra ($)</Label>
-                                    <div className="relative">
-                                        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-zinc-400 font-bold">$</span>
-                                        <Input
-                                            type="number"
-                                            step="any"
-                                            placeholder="0.00"
-                                            className="pl-10 h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-bold px-6 shadow-none"
-                                            value={formData.costoTotal}
-                                            onChange={(e) => setFormData({ ...formData, costoTotal: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-                            )}
+
 
                             <div className="space-y-3 md:col-span-2">
                                 <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Motivo o Referencia</Label>
@@ -259,17 +228,7 @@ function RegistrarStockContent() {
                                 />
                             </div>
 
-                            {formData.tipo === "IN" && (
-                                <div className="space-y-3 md:col-span-2">
-                                    <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Proveedor (Opcional)</Label>
-                                    <Input
-                                        placeholder="Ej: Distribuidora San Juan, Mayorista Central..."
-                                        className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-medium px-6 shadow-none"
-                                        value={formData.proveedor}
-                                        onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
-                                    />
-                                </div>
-                            )}
+
                         </div>
                     </div>
                 </div>

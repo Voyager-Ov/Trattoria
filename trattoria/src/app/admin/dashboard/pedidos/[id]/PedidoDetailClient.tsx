@@ -25,7 +25,8 @@ import {
     Share2,
     Save,
     Store,
-    Loader2
+    Loader2,
+    RefreshCw
 } from "lucide-react";
 import { EstadoPedido } from "@prisma/client";
 import { toast } from "sonner";
@@ -44,6 +45,8 @@ import {
     SheetTitle 
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { getOrderDeliveryLabel, getOrderDisplayAddress } from "@/lib/orderDelivery";
 import { formatSystemDateTime } from "@/lib/system-time";
 import { cn } from "@/lib/utils";
@@ -80,6 +83,12 @@ export function PedidoDetailClient({ order: initialOrder }: PedidoDetailClientPr
     const [isPaymentSheetOpen, setIsPaymentSheetOpen] = useState(false);
     const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
+
+    // Cancellation Sheet State
+    const [isCancelSheetOpen, setIsCancelSheetOpen] = useState(false);
+    const [cancelMotive, setCancelMotive] = useState("");
+    const [cancelDeductStock, setCancelDeductStock] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
 
     const statusConfig = STATUS_CONFIG[order.estado as EstadoPedido] || STATUS_CONFIG.PENDIENTE;
     const StatusIcon = statusConfig.icon;
@@ -122,6 +131,30 @@ export function PedidoDetailClient({ order: initialOrder }: PedidoDetailClientPr
             toast.error(result.error || "Error al actualizar");
         }
         setIsUpdating(false);
+    };
+
+    const handleConfirmCancel = async () => {
+        if (!order || !cancelMotive.trim()) {
+            toast.error("Debes ingresar un motivo");
+            return;
+        }
+
+        setIsCancelling(true);
+        try {
+            const result = await updateOrderStatus(order.id, 'CANCELADO', cancelMotive, cancelDeductStock);
+            if (result.success) {
+                toast.success("Pedido cancelado");
+                setIsCancelSheetOpen(false);
+                setOrder({ ...order, estado: 'CANCELADO' });
+                router.refresh();
+            } else {
+                toast.error(result.error || "Error al cancelar");
+            }
+        } catch {
+            toast.error("Error al cancelar el pedido");
+        } finally {
+            setIsCancelling(false);
+        }
     };
 
     const handleRegisterPayment = async () => {
@@ -473,6 +506,24 @@ export function PedidoDetailClient({ order: initialOrder }: PedidoDetailClientPr
                                             {order.payment.isPaid ? "Cobro registrado (Anular)" : "Marcar como Cobrado"}
                                         </Button>
                                     </div>
+
+                                    {order.estado !== 'FINALIZADO' && order.estado !== 'CANCELADO' && (
+                                        <div className="pt-3 border-t border-zinc-100">
+                                            <Button
+                                                variant="outline"
+                                                className="w-full h-11 rounded-xl font-bold text-xs uppercase tracking-wider text-red-600 border-red-200 hover:bg-red-50 transition-all"
+                                                onClick={() => {
+                                                    setCancelMotive("");
+                                                    setCancelDeductStock(false);
+                                                    setIsCancelSheetOpen(true);
+                                                }}
+                                                disabled={isUpdating}
+                                            >
+                                                <XCircle className="h-4 w-4 mr-2" />
+                                                Cancelar Pedido
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </Card>
@@ -638,6 +689,59 @@ export function PedidoDetailClient({ order: initialOrder }: PedidoDetailClientPr
                         >
                             {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Marcar como Cobrado
+                        </Button>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
+
+            {/* Cancellation Sheet */}
+            <Sheet open={isCancelSheetOpen} onOpenChange={setIsCancelSheetOpen}>
+                <SheetContent className="sm:max-w-md">
+                    <SheetHeader>
+                        <SheetTitle className="text-2xl font-black uppercase tracking-tight text-red-600">Cancelar Pedido</SheetTitle>
+                        <SheetDescription className="font-medium">
+                            Por favor ingresa el motivo de la cancelación. Esta acción es definitiva.
+                        </SheetDescription>
+                    </SheetHeader>
+                    <div className="py-6 space-y-6">
+                        <div className="space-y-2">
+                            <Label htmlFor="motive" className="text-xs font-bold uppercase text-zinc-400 tracking-wider text-left block">
+                                Motivo de Cancelación
+                            </Label>
+                            <Textarea
+                                id="motive"
+                                placeholder="Ej: Error en el pedido, Cliente canceló, Sin stock..."
+                                className="min-h-[120px] rounded-2xl border-zinc-200 focus:ring-red-500"
+                                value={cancelMotive}
+                                onChange={(e) => setCancelMotive(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-zinc-50/50 rounded-2xl border border-zinc-200">
+                            <div className="space-y-0.5">
+                                <Label className="text-sm font-bold text-zinc-700">Descontar insumos (Merma)</Label>
+                                <p className="text-xs text-zinc-500">Registrar como pérdida en el inventario</p>
+                            </div>
+                            <Switch
+                                checked={cancelDeductStock}
+                                onCheckedChange={setCancelDeductStock}
+                            />
+                        </div>
+                    </div>
+                    <SheetFooter className="flex-col sm:flex-col gap-2">
+                        <Button
+                            onClick={handleConfirmCancel}
+                            disabled={isCancelling || !cancelMotive.trim()}
+                            className="bg-red-600 hover:bg-red-700 text-white rounded-2xl w-full h-12 font-black uppercase tracking-wider shadow-lg shadow-red-100"
+                        >
+                            {isCancelling ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+                            Confirmar Cancelación
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            onClick={() => setIsCancelSheetOpen(false)}
+                            className="rounded-2xl w-full h-12 font-bold text-zinc-400 hover:text-zinc-600"
+                        >
+                            Volver
                         </Button>
                     </SheetFooter>
                 </SheetContent>
