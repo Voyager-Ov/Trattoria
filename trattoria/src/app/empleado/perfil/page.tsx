@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
+import { LinkedAccountsCard } from "./linked-accounts-card";
 import { ProfileForm } from "./profile-form";
 import { SecurityCard } from "./security-card";
 
@@ -56,26 +57,42 @@ export default function EmpleadoProfilePage() {
                     <ProfileForm user={user} />
                 </article>
 
-                <article className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
-                    <div className="flex items-center gap-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
-                            <KeyRound className="h-5 w-5" />
+                <div className="flex flex-col gap-5">
+                    <article className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+                        <div className="flex items-center gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                                <KeyRound className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black tracking-tight text-zinc-950">Seguridad</h2>
+                                <p className="mt-1 text-sm text-zinc-500">Gestiona la contrasena asociada a tu cuenta.</p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 className="text-xl font-black tracking-tight text-zinc-950">Seguridad</h2>
-                            <p className="mt-1 text-sm text-zinc-500">Gestiona la contrasena asociada a tu cuenta.</p>
-                        </div>
-                    </div>
-                    <Separator className="my-6" />
-                    <SecurityCard />
+                        <Separator className="my-6" />
+                        <SecurityCard />
 
-                    <div className="mt-6 rounded-[1.5rem] border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm leading-6 text-emerald-900">
-                        <div className="flex items-start gap-3">
-                            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
-                            <p>Mantener actualizados tus datos y credenciales ayuda a sostener el acceso operativo del turno sin depender del admin.</p>
+                        <div className="mt-6 rounded-[1.5rem] border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm leading-6 text-emerald-900">
+                            <div className="flex items-start gap-3">
+                                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
+                                <p>Mantener actualizados tus datos y credenciales ayuda a sostener el acceso operativo del turno sin depender del admin.</p>
+                            </div>
                         </div>
-                    </div>
-                </article>
+                    </article>
+
+                    <article className="rounded-[2rem] border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+                        <div className="flex items-center gap-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                                <ShieldCheck className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black tracking-tight text-zinc-950">Cuentas vinculadas</h2>
+                                <p className="mt-1 text-sm text-zinc-500">Gestiona los metodos que usas para iniciar sesion.</p>
+                            </div>
+                        </div>
+                        <Separator className="my-6" />
+                        <LinkedAccountsCard />
+                    </article>
+                </div>
             </section>
         </div>
     );
