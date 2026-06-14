@@ -23,7 +23,7 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select";
-import { getSupplies, registerStockMovement } from "../actions";
+import { getSupplies, registerStockMovement, registerStockEntry } from "../actions";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { TipoMovimientoStock } from "@prisma/client";
@@ -73,19 +73,35 @@ function RegistrarStockContent() {
             toast.error("Seleccione un insumo");
             return;
         }
-        if (!formData.cantidad || parseFloat(formData.cantidad) <= 0) {
+        
+        const quantity = parseFloat(formData.cantidad);
+        const totalCost = parseFloat(formData.costoTotal) || 0;
+
+        if (!quantity || quantity <= 0) {
             toast.error("La cantidad debe ser mayor a 0");
             return;
         }
 
         setLoading(true);
 
-        const result = await registerStockMovement({
-            supplyId: formData.supplyId,
-            cantidad: parseFloat(formData.cantidad),
-            tipo: formData.tipo,
-            motivo: formData.motivo,
-        });
+        let result;
+
+        if (formData.tipo === "IN") {
+            result = await registerStockEntry({
+                supplyId: formData.supplyId,
+                cantidad: quantity,
+                costoUnitario: quantity > 0 ? totalCost / quantity : 0,
+                motivo: formData.motivo,
+                proveedor: formData.proveedor || undefined,
+            });
+        } else {
+            result = await registerStockMovement({
+                supplyId: formData.supplyId,
+                cantidad: quantity,
+                tipo: formData.tipo,
+                motivo: formData.motivo,
+            });
+        }
 
         if (result.success) {
             toast.success("Movimiento registrado correctamente");
@@ -215,6 +231,24 @@ function RegistrarStockContent() {
                                     )}
                                 </div>
                             </div>
+
+                            {formData.tipo === "IN" && (
+                                <div className="space-y-3">
+                                    <Label className="text-xs font-black uppercase tracking-widest text-zinc-400 ml-1">Costo total</Label>
+                                    <div className="relative">
+                                        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-400">$</span>
+                                        <Input
+                                            type="number"
+                                            step="any"
+                                            inputMode="decimal"
+                                            placeholder="0.00"
+                                            className="h-16 bg-zinc-50 border-transparent rounded-[1.5rem] focus:bg-white focus:border-zinc-200 focus:ring-0 transition-all text-base font-bold px-10 shadow-none"
+                                            value={formData.costoTotal}
+                                            onChange={(event) => setFormData((current) => ({ ...current, costoTotal: event.target.value }))}
+                                        />
+                                    </div>
+                                </div>
+                            )}
 
 
 
