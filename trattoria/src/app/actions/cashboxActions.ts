@@ -452,16 +452,14 @@ export async function getCurrentCashbox() {
 }
 
 export async function getCashboxHistory(limit: number = 20) {
-    // Note: requireEmployee validates the session but we don't filter by user.
-    // ADMIN sees all cashboxes from all employees (global view).
-    await requireEmployee();
+    const user = await requireEmployee();
 
     try {
         await ensureCashboxSchemaReady(prisma);
 
         const methods = await getPaymentMethodOptions();
         const history = await prisma.caja.findMany({
-            // No usuarioId filter — return all cashboxes across all users
+            where: user.rol === "EMPLEADO" ? { usuarioId: user.id } : undefined,
             include: CASHBOX_INCLUDE,
             orderBy: {
                 fechaApertura: "desc",
