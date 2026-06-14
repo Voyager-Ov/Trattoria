@@ -25,14 +25,34 @@ export default function LoginPage() {
         setError("");
 
         try {
-            // Mock login logic
-            if (email === "admin@trattoria.com" && password === "admin") {
-                router.push("/admin/dashboard");
-            } else {
-                throw new Error("Credenciales inválidas");
+            const { signInWithEmailAndPassword } = await import("firebase/auth");
+            const result = await signInWithEmailAndPassword(auth, email, password);
+            const idToken = await result.user.getIdToken();
+
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ idToken }),
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || "No tienes permisos para acceder al sistema");
             }
+
+            router.push("/admin/dashboard");
         } catch (err: any) {
-            setError(err.message || "Error al iniciar sesión");
+            console.error("Error logging in with Email/Password", err);
+            // Firebase Auth error mappings
+            if (err.code === 'auth/invalid-credential') {
+                setError("Credenciales inválidas");
+            } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+                setError("Correo o contraseña incorrectos");
+            } else {
+                setError(err.message || "Error al iniciar sesión");
+            }
         } finally {
             setLoading(false);
         }
