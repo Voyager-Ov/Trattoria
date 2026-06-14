@@ -673,13 +673,14 @@ export async function getAdminCatalog() {
         const { publicCatalogProductInclude, mapPublicCatalogProduct } = await import("@/lib/catalog-config");
         const [categories, productsRecord, promotions] = await Promise.all([
             prisma.category.findMany({
-                where: { deletedAt: null },
+                where: { deletedAt: null, activo: true },
                 orderBy: { orden: 'asc' }
             }),
             prisma.product.findMany({
                 where: { 
                     deletedAt: null, 
                     activo: true,
+                    category: { activo: true, deletedAt: null },
                     catalogRole: { in: ['STANDARD', 'CONFIGURABLE_BASE'] }
                 },
                 include: {
