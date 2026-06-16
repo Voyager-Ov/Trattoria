@@ -43,7 +43,7 @@ type Supply = Prisma.SupplyGetPayload<{ select: { id: true; nombre: true; descri
 
 interface RecipeItem {
     supplyId: string;
-    qtyPerUnit: number;
+    qtyPerUnit: number | string;
     unidad: UnidadMedida;
     supplyName?: string;
     costoUnitarioIndividual?: number;
@@ -106,7 +106,8 @@ export function CreateProductSheet({ open, onOpenChange, onSuccess }: CreateProd
     // Automatically calculate suggested unit cost
     useEffect(() => {
         const totalCost = recipeItems.reduce((acc, item) => {
-            const itemCost = (item.costoUnitarioIndividual || 0) * (item.qtyPerUnit || 0);
+            const qty = Number(item.qtyPerUnit) || 0;
+            const itemCost = (item.costoUnitarioIndividual || 0) * qty;
             return acc + itemCost;
         }, 0);
 
@@ -139,7 +140,7 @@ export function CreateProductSheet({ open, onOpenChange, onSuccess }: CreateProd
             ...prev,
             {
                 supplyId: supply.id,
-                qtyPerUnit: 1,
+                qtyPerUnit: "1",
                 unidad: supply.unidad,
                 supplyName: supply.nombre,
                 costoUnitarioIndividual: Number(supply.costoUnitario)
@@ -153,9 +154,8 @@ export function CreateProductSheet({ open, onOpenChange, onSuccess }: CreateProd
     };
 
     const updateRecipeItemQty = (supplyId: string, value: string) => {
-        const qty = parseFloat(value);
         setRecipeItems(prev => prev.map(item =>
-            item.supplyId === supplyId ? { ...item, qtyPerUnit: isNaN(qty) ? 0 : qty } : item
+            item.supplyId === supplyId ? { ...item, qtyPerUnit: value } : item
         ));
     };
 
@@ -171,7 +171,7 @@ export function CreateProductSheet({ open, onOpenChange, onSuccess }: CreateProd
                 { ...formData, unidad: "UNIDAD" },
                 recipeItems.map(({ supplyId, qtyPerUnit, unidad }) => ({
                     supplyId,
-                    qtyPerUnit,
+                    qtyPerUnit: Number(qtyPerUnit) || 0,
                     unidad
                 }))
             );
@@ -371,7 +371,7 @@ export function CreateProductSheet({ open, onOpenChange, onSuccess }: CreateProd
                                         <div key={item.supplyId} className="flex items-center gap-4 p-4 bg-zinc-50 rounded-2xl border border-zinc-100 group">
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-bold text-sm text-zinc-900 truncate">{item.supplyName}</p>
-                                                <p className="text-[0.65rem] text-zinc-400 uppercase font-bold tracking-tighter">Costo: ${(item.costoUnitarioIndividual! * item.qtyPerUnit).toFixed(2)}</p>
+                                                <p className="text-[0.65rem] text-zinc-400 uppercase font-bold tracking-tighter">Costo: ${(item.costoUnitarioIndividual! * (Number(item.qtyPerUnit) || 0)).toFixed(2)}</p>
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <div className="relative w-24">

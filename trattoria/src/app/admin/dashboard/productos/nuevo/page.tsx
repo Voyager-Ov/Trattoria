@@ -49,7 +49,7 @@ type Supply = Prisma.SupplyGetPayload<{ select: { id: true; nombre: true; descri
 
 interface RecipeItem {
     supplyId: string;
-    qtyPerUnit: number;
+    qtyPerUnit: number | string;
     unidad: UnidadMedida;
     supplyName?: string;
     costoUnitarioIndividual?: number;
@@ -105,7 +105,8 @@ export default function NuevoProductoPage() {
     // Automatically calculate suggested unit cost
     useEffect(() => {
         const totalCost = recipeItems.reduce((acc, item) => {
-            const itemCost = (item.costoUnitarioIndividual || 0) * (item.qtyPerUnit || 0);
+            const qty = Number(item.qtyPerUnit) || 0;
+            const itemCost = (item.costoUnitarioIndividual || 0) * qty;
             return acc + itemCost;
         }, 0);
 
@@ -165,7 +166,7 @@ export default function NuevoProductoPage() {
             ...prev,
             {
                 supplyId: supply.id,
-                qtyPerUnit: 1,
+                qtyPerUnit: "1",
                 unidad: supply.unidad,
                 supplyName: supply.nombre,
                 costoUnitarioIndividual: Number(supply.costoUnitario)
@@ -179,9 +180,8 @@ export default function NuevoProductoPage() {
     };
 
     const updateRecipeItemQty = (supplyId: string, value: string) => {
-        const qty = parseFloat(value);
         setRecipeItems(prev => prev.map(item =>
-            item.supplyId === supplyId ? { ...item, qtyPerUnit: isNaN(qty) ? 0 : qty } : item
+            item.supplyId === supplyId ? { ...item, qtyPerUnit: value } : item
         ));
     };
 
@@ -283,7 +283,7 @@ export default function NuevoProductoPage() {
                     { ...formData, unidad: "UNIDAD" },
                     recipeItems.map(({ supplyId, qtyPerUnit, unidad }) => ({
                         supplyId,
-                        qtyPerUnit,
+                        qtyPerUnit: Number(qtyPerUnit) || 0,
                         unidad
                     }))
                 );
@@ -315,7 +315,7 @@ export default function NuevoProductoPage() {
                     catalogRole,
                     recipeItems: recipeItems.map(({ supplyId, qtyPerUnit, unidad }) => ({
                         supplyId,
-                        qtyPerUnit,
+                        qtyPerUnit: Number(qtyPerUnit) || 0,
                         unidad,
                     })),
                     groupAssignments: groupAssignmentsPayload,
