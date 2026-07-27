@@ -37,12 +37,16 @@ export default function LoginPage() {
                 body: JSON.stringify({ idToken }),
             });
 
+            const data = await response.json();
             if (!response.ok) {
-                const data = await response.json();
                 throw new Error(data.error || "No tienes permisos para acceder al sistema");
             }
 
-            router.push("/admin/dashboard");
+            if (data.user?.rol === 'EMPLEADO') {
+                router.push("/empleado");
+            } else {
+                router.push("/admin/dashboard");
+            }
         } catch (err: any) {
             console.error("Error logging in with Email/Password", err);
             // Firebase Auth error mappings
@@ -73,12 +77,16 @@ export default function LoginPage() {
                 body: JSON.stringify({ idToken }),
             });
 
+            const data = await response.json();
             if (!response.ok) {
-                const data = await response.json();
                 throw new Error(data.error || "No tienes permisos para acceder al sistema");
             }
 
-            router.push("/admin/dashboard");
+            if (data.user?.rol === 'EMPLEADO') {
+                router.push("/empleado");
+            } else {
+                router.push("/admin/dashboard");
+            }
         } catch (error: any) {
             console.error("Error logging in with Google", error);
             setError(error.message || "Error al iniciar sesión con Google");

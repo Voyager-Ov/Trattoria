@@ -323,7 +323,7 @@ export default function NuevoPedidoPage() {
     );
 
     return (
-        <div className="flex flex-col h-[calc(100vh-2rem)] bg-zinc-50/30 overflow-hidden rounded-[2rem]">
+        <div className="flex flex-col min-h-[calc(100vh-2rem)] bg-zinc-50/30 rounded-[2rem]">
             {/* Header */}
             <header className="p-6 flex items-center justify-between bg-white border-b border-zinc-100">
                 <div className="flex items-center gap-4">
@@ -347,9 +347,9 @@ export default function NuevoPedidoPage() {
                 </Button>
             </header>
 
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+            <div className="flex-1 flex flex-col md:flex-row">
                 {/* Left: Products Selection */}
-                <div className="flex-1 flex flex-col min-w-0 bg-zinc-50/50 p-6 overflow-hidden">
+                <div className="flex-1 flex flex-col min-w-0 bg-zinc-50/50 p-6">
                     
                     {/* Search & Customer Section */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -483,7 +483,7 @@ export default function NuevoPedidoPage() {
                     </div>
 
                     {/* Products Grid */}
-                    <div className="flex-1 overflow-y-auto -mx-2 px-2 pb-24 scrollbar-thin scrollbar-thumb-zinc-200 scrollbar-track-transparent">
+                    <div className="flex-1 -mx-2 px-2 pb-24">
                         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 auto-rows-max">
                             {loadingCatalog ? (
                                 Array(8).fill(0).map((_, i) => (
@@ -520,7 +520,7 @@ export default function NuevoPedidoPage() {
                 </div>
 
                 {/* Right: Cart Summary (desktop) */}
-                <div className="hidden md:flex md:w-96 bg-white border-l border-zinc-100 flex-col z-10">
+                <div className="hidden md:flex md:w-96 bg-white border-l border-zinc-100 flex-col z-10 sticky top-4 h-[calc(100vh-10rem)] self-start rounded-2xl shadow-sm mb-4">
                     <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
                         <h2 className="font-bold text-lg text-zinc-900">Carrito</h2>
                         <Badge variant="outline" className="rounded-full">{cart.length} items</Badge>
