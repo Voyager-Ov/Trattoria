@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef, use } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
     ChevronLeft,
@@ -21,8 +21,7 @@ import {
     DollarSign,
     Percent,
     Upload,
-    Minus,
-    Trash2
+    Minus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,19 +30,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { getCategories, getProducts, updatePromotion, getPromotionById, deletePromotion } from "../../../actions";
+import { getCategories, getProducts, createPromotion } from "../../actions";
 import Link from "next/link";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 
 interface SelectionItem {
     id: string;
@@ -51,16 +39,6 @@ interface SelectionItem {
     precio: number;
     imagen?: string | null;
     categoryId: string;
-    recipeItems?: {
-        id: string;
-        qtyPerUnit: number;
-        unidad: string;
-        supply: {
-            id: string;
-            nombre: string;
-            costoUnitario: number;
-        };
-    }[];
 }
 
 interface SelectedProduct {
@@ -78,13 +56,11 @@ const DAYS = [
     { label: "Dom", value: "D" },
 ];
 
-export default function EditarPromocionPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+export default function NuevaPromocionPage() {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [loading, setLoading] = useState(false);
     const [fetchingData, setFetchingData] = useState(true);
-    const [isDeleting, setIsDeleting] = useState(false);
 
     const [categories, setCategories] = useState<any[]>([]);
     const [products, setProducts] = useState<SelectionItem[]>([]);
@@ -110,74 +86,21 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
     const fetchData = useCallback(async () => {
         try {
             setFetchingData(true);
-            const [catRes, prodRes] = await Promise.all([
-                getCategories(),
-                getProducts(),
-            ]);
-            const promoRes = await getPromotionById(id);
-
+            const [catRes, prodRes] = await Promise.all([getCategories(), getProducts()]);
             if (catRes.success && catRes.data) {
                 const promoCats = (catRes.data as any[]).filter((c: any) =>
                     c.nombre.toLowerCase().includes("promo")
                 );
                 setCategories(promoCats.length > 0 ? promoCats : (catRes.data as any[]));
             }
-
-            if (prodRes.success && prodRes.data) {
-                setProducts(prodRes.data as SelectionItem[]);
-            }
-
-            if (promoRes.success && promoRes.data) {
-                const promo = promoRes.data as any;
-
-                // Calculate original total price to deduce the finalPrice from discountValue if needed
-                // But usually we save the finalPrice or discountValue.
-                // Based on NuevaPromocionPage, it saves discountValue = totalOriginal - finalPrice
-                // So finalPrice = totalOriginal - discountValue
-
-                const initialSelectedProducts = promo.items.map((item: any) => ({
-                    id: item.productId,
-                    quantity: item.quantity
-                }));
-
-                setSelectedProducts(initialSelectedProducts);
-
-                // Calculate total original price of these items
-                let totalOrig = 0;
-                initialSelectedProducts.forEach((sp: any) => {
-                    const product = (prodRes.data as SelectionItem[]).find(p => p.id === sp.id);
-                    if (product) totalOrig += Number(product.precio) * sp.quantity;
-                });
-
-                const finalPrice = promo.discountType === 'PERCENTAGE'
-                    ? totalOrig * (1 - Number(promo.discountValue) / 100)
-                    : totalOrig - Number(promo.discountValue);
-
-                setFormData({
-                    name: promo.name || "",
-                    description: promo.description || "",
-                    code: promo.code || "",
-                    finalPrice: finalPrice.toString(),
-                    startDate: promo.startDate ? new Date(promo.startDate).toISOString().split('T')[0] : "",
-                    endDate: promo.endDate ? new Date(promo.endDate).toISOString().split('T')[0] : "",
-                    imagen: promo.imagen || "",
-                    isActive: promo.isActive,
-                });
-
-                if (promo.imagen) setPreviewImage(promo.imagen);
-                if (promo.daysOfWeek) setSelectedDays(promo.daysOfWeek.split(","));
-                if (promo.categories) setSelectedCategories(promo.categories.map((c: any) => c.id));
-            } else {
-                toast.error(promoRes.error || "No se pudo encontrar la promoción");
-                router.push("/empleado/productos");
-            }
+            if (prodRes.success && prodRes.data) setProducts(prodRes.data as SelectionItem[]);
         } catch (error) {
             console.error("Error fetching data:", error);
             toast.error("Error al cargar datos necesarios");
         } finally {
             setFetchingData(false);
         }
-    }, [id, router]);
+    }, []);
 
     useEffect(() => {
         fetchData();
@@ -192,7 +115,7 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
 
     const calculatedDiscount = useMemo(() => {
         const final = Number(formData.finalPrice) || 0;
-        if (totalOriginalPrice === 0) return 0;
+        if (totalOriginalPrice === 0 || final === 0) return 0;
         return Math.max(0, totalOriginalPrice - final);
     }, [totalOriginalPrice, formData.finalPrice]);
 
@@ -200,24 +123,6 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
         if (totalOriginalPrice === 0 || calculatedDiscount === 0) return 0;
         return Math.round((calculatedDiscount / totalOriginalPrice) * 100);
     }, [totalOriginalPrice, calculatedDiscount]);
-
-    const totalSuppliesCost = useMemo(() => {
-        return selectedProducts.reduce((total, sp) => {
-            const product = products.find(p => p.id === sp.id);
-            if (!product || !product.recipeItems) return total;
-            
-            const itemRecipeCost = product.recipeItems.reduce((acc, ri) => 
-                acc + (Number(ri.qtyPerUnit) * Number(ri.supply.costoUnitario || 0)), 0);
-            
-            return total + (itemRecipeCost * sp.quantity);
-        }, 0);
-    }, [selectedProducts, products]);
-
-    const profitabilityMargin = useMemo(() => {
-        const final = Number(formData.finalPrice) || 0;
-        if (final <= 0) return 0;
-        return ((final - totalSuppliesCost) / final) * 100;
-    }, [formData.finalPrice, totalSuppliesCost]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -233,11 +138,8 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
 
         setLoading(true);
         try {
-            const res = await updatePromotion(id, {
+            const res = await createPromotion({
                 ...formData,
-                // Convert empty date strings to null so existing dates can be cleared
-                startDate: formData.startDate || null,
-                endDate: formData.endDate || null,
                 discountType: "FIXED_AMOUNT",
                 discountValue: calculatedDiscount,
                 daysOfWeek: selectedDays.length > 0 ? selectedDays.join(",") : null,
@@ -246,32 +148,15 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
             });
 
             if (res.success) {
-                toast.success("Promoción actualizada satisfactoriamente");
+                toast.success("Promoción creada satisfactoriamente");
                 router.push("/empleado/productos");
             } else {
-                toast.error(res.error || "Error al actualizar la promoción");
+                toast.error(res.error || "Error al crear la promoción");
             }
         } catch (error) {
             toast.error("Error inesperado");
         } finally {
             setLoading(false);
-        }
-    };
-
-    const handleDelete = async () => {
-        setIsDeleting(true);
-        try {
-            const res = await deletePromotion(id);
-            if (res.success) {
-                toast.success("Promoción eliminada");
-                router.push("/empleado/productos");
-            } else {
-                toast.error(res.error || "Error al eliminar");
-            }
-        } catch (error) {
-            toast.error("Error de conexión");
-        } finally {
-            setIsDeleting(false);
         }
     };
 
@@ -341,49 +226,27 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
                         <ChevronLeft className="h-7 w-7 text-zinc-900" />
                     </Button>
                     <div>
-                        <h1 className="text-4xl font-black text-zinc-900 tracking-tight">Editar Promoción</h1>
-                        <p className="text-zinc-500 text-lg font-medium opacity-70 italic">Perfecciona tu oferta para atraer más clientes</p>
+                        <h1 className="text-4xl font-black text-zinc-900 tracking-tight">Nueva Promoción</h1>
+                        <p className="text-zinc-500 text-lg font-medium opacity-70 italic">Diseña una oferta irresistible para tu menú</p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-4 w-full lg:w-auto">
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="flex-1 lg:flex-none rounded-[2rem] border-red-100 text-red-500 hover:bg-red-50 hover:border-red-200 transition-all font-bold h-14 px-8 text-lg"
-                            >
-                                <Trash2 className="h-5 w-5 mr-2" />
-                                Eliminar
-                            </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="rounded-[2rem] p-8 border-none shadow-2xl">
-                            <AlertDialogHeader>
-                                <AlertDialogTitle className="text-2xl font-black text-zinc-900">¿Estás completamente seguro?</AlertDialogTitle>
-                                <AlertDialogDescription className="text-zinc-500 font-medium text-lg">
-                                    Esta acción no se puede deshacer. La promoción se marcará como eliminada y no aparecerá más en el catálogo.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter className="mt-6 gap-3">
-                                <AlertDialogCancel className="rounded-2xl h-12 px-6 font-bold border-zinc-200">Cancelar</AlertDialogCancel>
-                                <AlertDialogAction
-                                    onClick={handleDelete}
-                                    className="rounded-2xl h-12 px-8 font-black bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-200"
-                                >
-                                    Sí, eliminar promoción
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => router.back()}
+                        className="flex-1 lg:flex-none rounded-[2rem] border-zinc-200 text-zinc-500 hover:bg-white transition-all font-bold h-14 px-10 text-lg"
+                    >
+                        Descartar
+                    </Button>
                     <Button
                         type="submit"
                         disabled={loading}
                         className="flex-1 lg:flex-none rounded-[2rem] bg-zinc-900 text-white hover:bg-zinc-800 transition-all font-black h-14 px-12 text-lg shadow-2xl shadow-zinc-300 transform motion-safe:hover:-translate-y-1 active:scale-95"
                     >
                         {loading ? <Loader2 className="h-6 w-6 animate-spin mr-3" /> : <Save className="h-6 w-6 mr-3" />}
-                        Guardar Cambios
+                        Publicar Oferta
                     </Button>
                 </div>
             </div>
@@ -394,7 +257,7 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
                     {/* Basic Info */}
                     <Card className="rounded-[3rem] border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden bg-white">
                         <CardHeader className="p-10 pb-0">
-                            <Badge className="w-fit bg-zinc-900 text-white font-black px-4 py-1 rounded-full text-xs">CONFIGURACIÓN</Badge>
+                            <Badge className="w-fit bg-zinc-900 text-white font-black px-4 py-1 rounded-full text-xs">PASO 1</Badge>
                             <h2 className="text-2xl font-black text-zinc-900">Información General</h2>
                         </CardHeader>
                         <CardContent className="p-10 space-y-8">
@@ -514,7 +377,7 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
                     <div className="flex justify-between items-end px-2">
                         <div>
                             <h2 className="text-4xl font-black text-zinc-900 tracking-tight">Selección de Productos</h2>
-                            <p className="text-zinc-500 font-bold">Añade o retira productos de la promoción</p>
+                            <p className="text-zinc-500 font-bold">Toca para añadir y ajusta cantidades con los controles</p>
                         </div>
                         <div className="bg-white p-2 rounded-2xl border border-zinc-100 flex items-center gap-3 shadow-sm">
                             <Search className="h-5 w-5 text-zinc-400 ml-2" />
@@ -632,12 +495,12 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
                                     </div>
                                     <div>
                                         <CardTitle className="text-3xl font-black uppercase tracking-tighter">Precio Final</CardTitle>
-                                        <CardDescription className="text-zinc-400 font-bold">Ajusta el precio de venta</CardDescription>
+                                        <CardDescription className="text-zinc-400 font-bold">Define cuánto pagará el cliente</CardDescription>
                                     </div>
                                 </div>
 
                                 <div className="space-y-4">
-                                    <Label className="text-[0.65rem] font-black text-zinc-500 uppercase tracking-[0.3em] ml-2">Precio de Venta</Label>
+                                    <Label className="text-[0.65rem] font-black text-zinc-500 uppercase tracking-[0.3em] ml-2">Precio de Venta Sugerido</Label>
                                     <div className="relative">
                                         <div className="absolute left-8 top-1/2 -translate-y-1/2 text-white/20 font-black text-5xl">$</div>
                                         <Input
@@ -674,31 +537,13 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
                                     </div>
                                 </div>
 
-                                <div className="p-6 bg-white/50 rounded-[2rem] border border-emerald-200 flex flex-col gap-4">
-                                    <div className="flex gap-4 items-center">
-                                        <div className="h-12 w-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
-                                            <Info className="h-6 w-6" />
-                                        </div>
-                                        <p className="text-xs font-bold text-emerald-800 leading-tight">
-                                            Esta oferta representa un beneficio directo de **${calculatedDiscount.toLocaleString()}** para tus clientes habituales.
-                                        </p>
+                                <div className="p-6 bg-white/50 rounded-[2rem] border border-emerald-200 flex gap-4 items-center">
+                                    <div className="h-12 w-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                                        <Info className="h-6 w-6" />
                                     </div>
-
-                                    {/* Cost Analysis */}
-                                    {totalSuppliesCost > 0 && (
-                                        <div className="mt-2 pt-4 border-t border-emerald-200/50 space-y-3">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-[0.65rem] font-black text-emerald-700 uppercase tracking-widest">Costo Producción (Insumos)</span>
-                                                <span className="font-black text-emerald-900">${totalSuppliesCost.toLocaleString('es-CL')}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-[0.65rem] font-black text-emerald-700 uppercase tracking-widest">Margen Bruto Estimado</span>
-                                                <span className={`font-black px-3 py-1 rounded-lg text-xs ${profitabilityMargin > 30 ? 'bg-emerald-200 text-emerald-800' : 'bg-amber-200 text-amber-800'}`}>
-                                                    {profitabilityMargin.toFixed(1)}%
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
+                                    <p className="text-xs font-bold text-emerald-800 leading-tight">
+                                        Esta oferta representa un beneficio directo de **${calculatedDiscount.toLocaleString()}** para tus clientes habituales.
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -718,3 +563,4 @@ export default function EditarPromocionPage({ params }: { params: Promise<{ id: 
         </form>
     );
 }
+

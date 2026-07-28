@@ -21,10 +21,10 @@ export default function EmpleadoClientLayout({
                     <main className="app-shell-main">
                         {children}
                     </main>
+
+                    <EmployeeMobileNav />
                 </div>
             </SidebarInset>
-
-            <EmployeeMobileNav />
         </SidebarProvider>
     );
 }

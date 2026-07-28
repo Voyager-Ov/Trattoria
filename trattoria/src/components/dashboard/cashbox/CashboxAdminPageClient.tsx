@@ -273,7 +273,7 @@ export function CashboxAdminPageClient() {
     async function loadCashboxData() {
         setIsLoading(true);
         try {
-            const [currentResult, historyResult] = await Promise.all([getCurrentCashbox(), getCashboxHistory(12)]);
+            const [currentResult, historyResult] = await Promise.all([getCurrentCashbox(), getCashboxHistory(50)]);
 
             if (!currentResult.success) {
                 toast.error(currentResult.error || "No se pudo cargar la caja");
@@ -789,58 +789,101 @@ export function CashboxAdminPageClient() {
             )}
 
             <ReportSurface
-                title="Historial de cajas"
-                description="Sesiones de todos los operadores, ordenadas por apertura más reciente."
+                title="Sesiones de caja"
+                description="Cajas de todos los operadores. Revisa la actividad en curso o histórica."
                 data-cashbox-reveal=""
             >
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {history.length === 0 ? (
-                        <div className="rounded-[1.5rem] border border-zinc-200 bg-zinc-50 px-5 py-10 text-center text-sm font-medium text-zinc-500">
-                            Todavia no hay historial de cajas registrado.
-                        </div>
-                    ) : (
-                        history.map((cashbox) => (
-                            <button
-                                key={cashbox.id}
-                                type="button"
-                                onClick={() => setSelectedHistory(cashbox)}
-                                className="rounded-[1.75rem] border-2 border-zinc-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-px hover:border-zinc-300 hover:shadow-md md:rounded-[2rem]"
-                            >
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                                            {cashbox.usuarioNombre}
-                                        </p>
-                                        <p className="font-black tracking-tight text-zinc-900">
-                                            {cashbox.estado === "ABIERTA" ? "Caja activa" : "Caja cerrada"}
-                                        </p>
-                                        <p className="text-sm text-zinc-500">{formatDateTime(cashbox.fechaApertura)}</p>
-                                    </div>
-                                    <Badge
-                                        className={cn(
-                                            "rounded-full border-none px-2.5 py-1 text-[11px] font-bold",
-                                            cashbox.estado === "ABIERTA" ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-700"
-                                        )}
-                                    >
-                                        {cashbox.estado}
-                                    </Badge>
+                {history.length === 0 ? (
+                    <div className="rounded-[1.5rem] border border-zinc-200 bg-zinc-50 px-5 py-10 text-center text-sm font-medium text-zinc-500">
+                        Todavía no hay historial de cajas registrado.
+                    </div>
+                ) : (
+                    <div className="space-y-8">
+                        {history.filter((c) => c.estado === "ABIERTA").length > 0 && (
+                            <div className="space-y-3">
+                                <h3 className="text-sm font-black uppercase tracking-[0.16em] text-zinc-400">Cajas Activas (En curso)</h3>
+                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                    {history
+                                        .filter((c) => c.estado === "ABIERTA")
+                                        .map((cashbox) => (
+                                        <button
+                                            key={cashbox.id}
+                                            type="button"
+                                            onClick={() => setSelectedHistory(cashbox)}
+                                            className="rounded-[1.75rem] border-2 border-emerald-200 bg-emerald-50/30 p-4 text-left shadow-sm transition-all hover:-translate-y-px hover:border-emerald-300 hover:shadow-md md:rounded-[2rem]"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-emerald-600">
+                                                        {cashbox.usuarioNombre}
+                                                    </p>
+                                                    <p className="font-black tracking-tight text-zinc-900">Caja activa</p>
+                                                    <p className="text-sm text-zinc-500">{formatDateTime(cashbox.fechaApertura)}</p>
+                                                </div>
+                                                <Badge className="rounded-full border-none bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                                                    ABIERTA
+                                                </Badge>
+                                            </div>
+                                            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                                                <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200/50">
+                                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Cobrado</p>
+                                                    <p className="mt-1 font-bold text-zinc-900">{formatCurrency(cashbox.totalCobrado)}</p>
+                                                </div>
+                                                <div className="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-zinc-200/50">
+                                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Esperado</p>
+                                                    <p className="mt-1 font-bold text-zinc-900">{formatCurrency(cashbox.efectivoEsperado)}</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
                                 </div>
-                                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                                    <div className="rounded-2xl bg-zinc-50 p-3">
-                                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Cobrado</p>
-                                        <p className="mt-1 font-bold text-zinc-900">{formatCurrency(cashbox.totalCobrado)}</p>
-                                    </div>
-                                    <div className="rounded-2xl bg-zinc-50 p-3">
-                                        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Diferencia</p>
-                                        <p className={cn("mt-1 font-bold", (cashbox.diferenciaEfectivo || 0) === 0 ? "text-zinc-900" : "text-amber-700")}>
-                                            {formatCurrency(cashbox.diferenciaEfectivo || 0)}
-                                        </p>
-                                    </div>
+                            </div>
+                        )}
+
+                        {history.filter((c) => c.estado === "CERRADA").length > 0 && (
+                            <div className="space-y-3">
+                                <h3 className="text-sm font-black uppercase tracking-[0.16em] text-zinc-400">Cajas Cerradas (Histórico)</h3>
+                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                    {history
+                                        .filter((c) => c.estado === "CERRADA")
+                                        .map((cashbox) => (
+                                        <button
+                                            key={cashbox.id}
+                                            type="button"
+                                            onClick={() => setSelectedHistory(cashbox)}
+                                            className="rounded-[1.75rem] border-2 border-zinc-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-px hover:border-zinc-300 hover:shadow-md md:rounded-[2rem]"
+                                        >
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">
+                                                        {cashbox.usuarioNombre}
+                                                    </p>
+                                                    <p className="font-black tracking-tight text-zinc-900">Caja cerrada</p>
+                                                    <p className="text-sm text-zinc-500">{formatDateTime(cashbox.fechaApertura)}</p>
+                                                </div>
+                                                <Badge className="rounded-full border-none bg-zinc-100 px-2.5 py-1 text-[11px] font-bold text-zinc-700">
+                                                    CERRADA
+                                                </Badge>
+                                            </div>
+                                            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                                                <div className="rounded-2xl bg-zinc-50 p-3">
+                                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Cobrado</p>
+                                                    <p className="mt-1 font-bold text-zinc-900">{formatCurrency(cashbox.totalCobrado)}</p>
+                                                </div>
+                                                <div className="rounded-2xl bg-zinc-50 p-3">
+                                                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Diferencia</p>
+                                                    <p className={cn("mt-1 font-bold", (cashbox.diferenciaEfectivo || 0) === 0 ? "text-zinc-900" : "text-amber-700")}>
+                                                        {formatCurrency(cashbox.diferenciaEfectivo || 0)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
                                 </div>
-                            </button>
-                        ))
-                    )}
-                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
             </ReportSurface>
 
             <ResponsivePanel
@@ -886,36 +929,45 @@ export function CashboxAdminPageClient() {
                         </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label className="text-sm font-bold text-zinc-700">Categoria</Label>
-                            <select
-                                value={expenseForm.categoria}
-                                onChange={(event) =>
-                                    setExpenseForm((current) => ({ ...current, categoria: event.target.value as CategoriaEgreso }))
-                                }
-                                className="h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700"
-                            >
-                                {EXPENSE_CATEGORIES.map((category) => (
-                                    <option key={category.id} value={category.id}>
-                                        {category.label}
-                                    </option>
-                                ))}
-                            </select>
+                    <div className="space-y-3">
+                        <Label className="text-sm font-bold text-zinc-700">Categoria</Label>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            {EXPENSE_CATEGORIES.map((category) => (
+                                <button
+                                    key={category.id}
+                                    type="button"
+                                    onClick={() => setExpenseForm((current) => ({ ...current, categoria: category.id }))}
+                                    className={cn(
+                                        "rounded-xl border-2 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all",
+                                        expenseForm.categoria === category.id
+                                            ? "border-zinc-900 bg-zinc-900 text-white"
+                                            : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-zinc-200 hover:bg-zinc-100"
+                                    )}
+                                >
+                                    {category.label}
+                                </button>
+                            ))}
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-sm font-bold text-zinc-700">Metodo de pago</Label>
-                            <select
-                                value={expenseForm.metodoPago}
-                                onChange={(event) => setExpenseForm((current) => ({ ...current, metodoPago: event.target.value }))}
-                                className="h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700"
-                            >
-                                {paymentMethods.map((method) => (
-                                    <option key={method.id} value={method.id}>
-                                        {method.label}
-                                    </option>
-                                ))}
-                            </select>
+                    </div>
+
+                    <div className="space-y-3">
+                        <Label className="text-sm font-bold text-zinc-700">Metodo de pago</Label>
+                        <div className="flex flex-wrap gap-2">
+                            {paymentMethods.map((method) => (
+                                <button
+                                    key={method.id}
+                                    type="button"
+                                    onClick={() => setExpenseForm((current) => ({ ...current, metodoPago: method.id }))}
+                                    className={cn(
+                                        "rounded-xl border-2 px-4 py-2 text-sm font-bold transition-all",
+                                        expenseForm.metodoPago === method.id
+                                            ? "border-zinc-900 bg-zinc-900 text-white"
+                                            : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-zinc-200 hover:bg-zinc-100"
+                                    )}
+                                >
+                                    {method.label}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
@@ -1046,22 +1098,46 @@ export function CashboxAdminPageClient() {
                         <div className="space-y-3">
                             <div className="flex items-center gap-2">
                                 <History className="h-4 w-4 text-zinc-500" />
-                                <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">Movimientos</p>
+                                <p className="text-sm font-black uppercase tracking-[0.16em] text-zinc-500">
+                                    Movimientos ({selectedHistory.movements.length})
+                                </p>
                             </div>
-                            {selectedHistory.movements.slice(0, 8).map((movement) => (
-                                <div key={movement.id} className="rounded-[1.25rem] border border-zinc-200 bg-zinc-50/70 p-4">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                            <p className="font-bold text-zinc-900">{movement.title}</p>
-                                            <p className="text-sm text-zinc-500">{movement.description}</p>
-                                        </div>
-                                        <p className="text-sm font-black text-zinc-900">{formatCurrency(movement.amount)}</p>
-                                    </div>
-                                    <p className="mt-2 text-xs font-medium text-zinc-500">
-                                        {formatDateTime(movement.happenedAt)} · {movement.methodId || "Sin metodo"}
+                            <div className="max-h-[50vh] space-y-3 overflow-y-auto pr-2 pb-2">
+                                {selectedHistory.movements.length === 0 ? (
+                                    <p className="rounded-[1.25rem] bg-zinc-50 px-4 py-6 text-sm font-medium text-zinc-500">
+                                        No hay movimientos en esta caja.
                                     </p>
-                                </div>
-                            ))}
+                                ) : (
+                                    selectedHistory.movements.map((movement) => {
+                                        const tone = getMovementTone(movement.type);
+                                        const MovementIcon = tone.icon;
+                                        return (
+                                            <div key={movement.id} className="flex items-start gap-3 rounded-[1.4rem] border border-zinc-200 bg-zinc-50/70 p-4">
+                                                <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl", tone.iconWrap)}>
+                                                    <MovementIcon className="h-5 w-5" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <p className="font-black tracking-tight text-zinc-900">{movement.title}</p>
+                                                        <Badge className={cn("rounded-full border-none px-2.5 py-1 text-[11px] font-bold", tone.chip)}>
+                                                            {movement.type.replaceAll("_", " ")}
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="mt-1 text-sm text-zinc-500">{movement.description}</p>
+                                                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-medium text-zinc-500">
+                                                        <span>{formatDateTime(movement.happenedAt)}</span>
+                                                        {movement.methodId ? <span>Método: {movement.methodId}</span> : null}
+                                                    </div>
+                                                </div>
+                                                <p className={cn("shrink-0 text-sm font-black", tone.amount)}>
+                                                    {movement.type === "EGRESO" || movement.type === "ANULACION_COBRO" ? "-" : "+"}
+                                                    {formatCurrency(movement.amount)}
+                                                </p>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
                         </div>
                     </div>
                 ) : null}

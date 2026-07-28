@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, use } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
     ChevronLeft,
@@ -27,13 +27,12 @@ import {
 import {
     getCategories,
     getSupplies,
-    getProductWithConfiguration,
-    updateProductWithRecipe,
-    updateConfigurableProduct,
+    createProductWithRecipe,
     createCategory,
+    createConfigurableProduct,
     getProductOptionGroups,
     ProductOptionGroupWithOptions,
-} from "../../actions";
+} from "../actions";
 import { toast } from "sonner";
 import { Prisma, ProductCatalogRole, ProductOptionPriceMode, UnidadMedida } from "@prisma/client";
 import {
@@ -47,18 +46,6 @@ import {
 
 type Category = Prisma.CategoryGetPayload<{ select: { id: true; nombre: true; esPromocion: true } }>;
 type Supply = Prisma.SupplyGetPayload<{ select: { id: true; nombre: true; descripcion: true; costoUnitario: true; unidad: true; stockActual: true; stockMinimo: true; createdAt: true; updatedAt: true; deletedAt: true } }>;
-type ProductWithConfiguration = Prisma.ProductGetPayload<{
-    include: {
-        category: true;
-        recipeItems: { include: { supply: true } };
-        optionGroupAssignments: {
-            include: {
-                group: { include: { options: true } };
-            };
-        };
-        optionLinksAsBase: { include: { option: true } };
-    };
-}>;
 
 interface RecipeItem {
     supplyId: string;
@@ -87,15 +74,11 @@ interface GroupAssignmentState {
     options: OptionLinkState[];
 }
 
-export default function EditarProductoPage({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = use(params);
+export default function NuevoProductoPage() {
     const router = useRouter();
-
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const [categories, setCategories] = useState<Category[]>([]);
     const [supplies, setSupplies] = useState<Supply[]>([]);
-    const [optionGroups, setOptionGroups] = useState<ProductOptionGroupWithOptions[]>([]);
 
     // Product State
     const [formData, setFormData] = useState({
@@ -116,6 +99,7 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
     const [recipeItems, setRecipeItems] = useState<RecipeItem[]>([]);
     const [searchSupply, setSearchSupply] = useState("");
     const [catalogRole, setCatalogRole] = useState<ProductCatalogRole>("STANDARD");
+    const [optionGroups, setOptionGroups] = useState<ProductOptionGroupWithOptions[]>([]);
     const [groupAssignments, setGroupAssignments] = useState<GroupAssignmentState[]>([]);
 
     // Automatically calculate suggested unit cost
@@ -126,100 +110,40 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
             return acc + itemCost;
         }, 0);
 
-        if (totalCost > 0) {
-            setFormData(prev => {
-                const newCosto = totalCost.toFixed(2);
-                if (prev.costoUnitario === newCosto) return prev;
-                return { ...prev, costoUnitario: newCosto };
-            });
-        }
+        setFormData(prev => ({
+            ...prev,
+            costoUnitario: totalCost > 0 ? totalCost.toFixed(2) : prev.costoUnitario
+        }));
     }, [recipeItems]);
 
-    const loadData = useCallback(async () => {
-        try {
-            setIsLoading(true);
-            const [catRes, supRes, prodRes, groupsRes] = await Promise.all([
-                getCategories(),
-                getSupplies(),
-                getProductWithConfiguration(id),
-                getProductOptionGroups(),
-            ]);
-
-            if (catRes.success && catRes.data) {
-                setCategories((catRes.data as Category[]).filter(c => !c.esPromocion));
-            }
-
-            if (supRes.success && supRes.data) {
-                setSupplies(supRes.data as Supply[]);
-            }
-
-            if (groupsRes.success && groupsRes.data) {
-                setOptionGroups(groupsRes.data as ProductOptionGroupWithOptions[]);
-            }
-
-            if (prodRes.success && prodRes.data) {
-                const p = prodRes.data as ProductWithConfiguration;
-                setFormData({
-                    nombre: p.nombre,
-                    descripcion: p.descripcion || "",
-                    precio: p.precio.toString(),
-                    costoUnitario: p.costoUnitario?.toString() || "",
-                    categoryId: p.categoryId,
-                    imagen: p.imagen || null,
-                });
-                setCatalogRole(p.catalogRole ?? "STANDARD");
-
-                const loadedRecipe: RecipeItem[] = p.recipeItems.map((ri) => ({
-                    supplyId: ri.supplyId,
-                    qtyPerUnit: Number(ri.qtyPerUnit),
-                    unidad: ri.supply.unidad,
-                    supplyName: ri.supply.nombre,
-                    costoUnitarioIndividual: Number(ri.supply.costoUnitario)
-                }));
-                setRecipeItems(loadedRecipe);
-
-                const optionLinks = p.optionLinksAsBase ?? [];
-                const assignments: GroupAssignmentState[] = (p.optionGroupAssignments ?? []).map((assignment) => {
-                    const group = assignment.group;
-                    const options: OptionLinkState[] = group.options.map((option) => {
-                        const link = optionLinks.find((item) => item.optionId === option.id);
-                        return {
-                            optionId: option.id,
-                            label: option.label,
-                            slug: option.slug,
-                            price: link ? String(link.price ?? 0) : "0",
-                            activo: link ? Boolean(link.activo) : false,
-                            orden: link?.orden ?? option.orden,
-                        };
-                    });
-
-                    return {
-                        groupId: group.id,
-                        groupKey: group.key,
-                        groupNombre: group.nombre,
-                        priceMode: group.priceMode,
-                        required: group.required,
-                        orden: assignment.orden,
-                        options,
-                    };
-                });
-
-                setGroupAssignments(assignments);
-            } else {
-                toast.error("Producto no encontrado");
-                router.push("/empleado/productos");
-            }
-        } catch (error) {
-            toast.error("Error al cargar los datos");
-            console.error(error);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [id, router]);
-
     useEffect(() => {
+        async function loadData() {
+            try {
+                const [catRes, supRes, groupsRes] = await Promise.all([
+                    getCategories(),
+                    getSupplies(),
+                    getProductOptionGroups(),
+                ]);
+
+                if (catRes.success && catRes.data) {
+                    // Filter categories that are NOT promotions
+                    setCategories((catRes.data as any[]).filter((c: any) => !c.esPromocion));
+                }
+
+                if (supRes.success && supRes.data) {
+                    setSupplies(supRes.data as Supply[]);
+                }
+
+                if (groupsRes.success && groupsRes.data) {
+                    setOptionGroups(groupsRes.data as ProductOptionGroupWithOptions[]);
+                }
+            } catch (error) {
+                console.error("Error cargando datos iniciales:", error);
+                toast.error("Error al cargar los datos. Intenta recargar la página.");
+            }
+        }
         loadData();
-    }, [loadData]);
+    }, []);
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -351,12 +275,11 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
             }
         }
 
-        setIsSaving(true);
+        setIsLoading(true);
         try {
             let res;
             if (catalogRole === "STANDARD") {
-                res = await updateProductWithRecipe(
-                    id,
+                res = await createProductWithRecipe(
                     { ...formData, unidad: "UNIDAD" },
                     recipeItems.map(({ supplyId, qtyPerUnit, unidad }) => ({
                         supplyId,
@@ -381,7 +304,7 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
                         }))
                 );
 
-                res = await updateConfigurableProduct(id, {
+                res = await createConfigurableProduct({
                     nombre: formData.nombre,
                     descripcion: formData.descripcion || undefined,
                     precio: formData.precio,
@@ -401,19 +324,18 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
             }
 
             if (res.success) {
-                toast.success("Producto actualizado exitosamente");
+                toast.success("Producto creado exitosamente");
                 router.push("/empleado/productos");
                 router.refresh();
             } else {
-                toast.error(res.error || "Error al actualizar el producto");
+                toast.error(res.error || "Error al crear el producto");
             }
         } catch (error) {
             toast.error("Ocurrió un error inesperado");
         } finally {
-            setIsSaving(false);
+            setIsLoading(false);
         }
     };
-
     const handleCreateCategory = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newCategoryName.trim()) {
@@ -453,17 +375,6 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
 
     const assignedGroupIds = new Set(groupAssignments.map((assignment) => assignment.groupId));
 
-    if (isLoading) {
-        return (
-            <div className="flex h-[80vh] items-center justify-center bg-zinc-50">
-                <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="h-12 w-12 animate-spin text-zinc-300" />
-                    <p className="text-zinc-500 font-medium animate-pulse">Cargando producto...</p>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="flex min-h-screen flex-col gap-6 bg-zinc-50 px-4 py-4 md:gap-8 md:p-8">
             {/* Header */}
@@ -475,17 +386,17 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
                         </Button>
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Editar Producto</h1>
-                        <p className="text-zinc-500">Actualiza los detalles y la receta del producto.</p>
+                        <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Nuevo Producto</h1>
+                        <p className="text-zinc-500">Define los detalles y la receta del producto.</p>
                     </div>
                 </div>
                 <Button
                     onClick={handleSubmit}
-                    disabled={isSaving}
+                    disabled={isLoading}
                     className="w-full rounded-full bg-zinc-900 px-6 text-white hover:bg-zinc-800 sm:w-auto"
                 >
-                    {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Guardar Cambios
+                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Guardar Producto
                 </Button>
             </div>
 
@@ -581,18 +492,7 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
                                         <button
                                             key={option.value}
                                             type="button"
-                                            onClick={() => {
-                                                if (option.value === "STANDARD" && groupAssignments.length > 0) {
-                                                    const confirmed = window.confirm(
-                                                        "Cambiar a simple eliminara los grupos y opciones asignadas. Quieres continuar?"
-                                                    );
-                                                    if (!confirmed) {
-                                                        return;
-                                                    }
-                                                    setGroupAssignments([]);
-                                                }
-                                                setCatalogRole(option.value as ProductCatalogRole);
-                                            }}
+                                            onClick={() => setCatalogRole(option.value as ProductCatalogRole)}
                                             className={`rounded-[1.25rem] border px-4 py-3 text-left transition ${
                                                 catalogRole === option.value
                                                     ? "border-sky-200 bg-sky-50"
@@ -990,3 +890,4 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
         </div>
     );
 }
+

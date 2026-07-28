@@ -71,9 +71,9 @@ export function EmployeeMobileNav() {
     const currentLabel = getEmployeePageLabel(pathname);
 
     return (
-        <div className="md:hidden">
-            <nav aria-label="Navegación principal de empleado" className="app-mobile-nav pointer-events-none fixed inset-x-0 bottom-0 z-40">
-                <div className="pointer-events-auto mx-auto max-w-lg rounded-[1.75rem] border border-zinc-200 bg-white/95 p-2 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl app-mobile-nav-panel">
+        <div className="md:hidden flex-none bg-[#FCFBF8]">
+            <nav aria-label="Navegación principal de empleado" className="z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+                <div className="mx-auto max-w-lg rounded-[1.75rem] border border-zinc-200 bg-white p-2 shadow-sm app-mobile-nav-panel">
                     <div className="grid grid-cols-5 gap-1.5">
                         {EMPLOYEE_MOBILE_PRIMARY_ITEMS.map((item) => {
                             const isActive = isEmployeeItemActive(pathname, item);

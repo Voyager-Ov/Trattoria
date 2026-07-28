@@ -257,12 +257,11 @@ export function CreateEgresoDrawer({
             onOpenChange={onOpenChange}
             title={<span className="sr-only">{editingEgreso ? "Editar gasto" : "Registrar gasto"}</span>}
             description={<span className="sr-only">Formulario de carga y edicion de egresos</span>}
-            contentClassName="overflow-hidden border-zinc-100 bg-white px-0 pt-0 sm:max-w-xl"
-            desktopContentClassName="p-0"
+            contentClassName="border-zinc-100 bg-white sm:max-w-xl"
         >
-            <div className="flex h-full min-h-0 flex-col overflow-hidden">
-                <form onSubmit={handleSubmit} className="flex min-h-full flex-col">
-                    <div className="mb-6 px-5 pt-5 text-left md:mb-8 md:px-10 md:pt-10">
+            <div className="flex flex-col">
+                <form onSubmit={handleSubmit} className="flex flex-col">
+                    <div className="mb-6 text-left md:mb-8">
                         <div className="mb-4 flex items-center gap-4">
                             <div className="flex h-12 w-12 items-center justify-center rounded-[1.15rem] bg-red-600 text-white shadow-xl shadow-red-100 md:h-14 md:w-14 md:rounded-[1.25rem]">
                                 {editingEgreso ? <FileText size={24} /> : <TrendingDown size={18} />}
@@ -278,7 +277,7 @@ export function CreateEgresoDrawer({
                         </p>
                     </div>
 
-                    <div className="flex-1 space-y-6 overflow-y-auto px-5 pb-6 md:space-y-8 md:px-10 md:pb-8">
+                    <div className="space-y-6 md:space-y-8 pb-6">
                         <div className="space-y-3">
                             <Label className="text-sm font-bold uppercase tracking-widest text-zinc-400">
                                 Seleccionar categoria
@@ -650,7 +649,7 @@ export function CreateEgresoDrawer({
                         </div>
                     </div>
 
-                    <div className="mt-auto border-t border-zinc-100 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-6 md:px-10 md:pb-10 md:pt-8">
+                    <div className="mt-4 border-t border-zinc-100 pt-6">
                         <Button
                             type="submit"
                             className="w-full gap-3 rounded-[1.35rem] bg-red-600 text-base font-bold text-white shadow-xl shadow-red-100 transition-all hover:bg-red-700 disabled:grayscale md:rounded-[1.5rem] md:text-lg"

@@ -13,6 +13,9 @@ import {
     ReceiptText,
     TrendingDown,
     Wallet,
+    CheckCircle2,
+    ShieldAlert,
+    History,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -115,6 +118,46 @@ function formatDateTime(value: string | Date | null) {
         hour: "2-digit",
         minute: "2-digit",
     }).format(new Date(value));
+}
+
+function getMovementTone(type: CashboxMovement["type"]) {
+    switch (type) {
+        case "APERTURA":
+            return {
+                icon: Wallet,
+                chip: "bg-zinc-100 text-zinc-700",
+                iconWrap: "bg-zinc-100 text-zinc-700",
+                amount: "text-zinc-900",
+            };
+        case "COBRO":
+            return {
+                icon: CircleDollarSign,
+                chip: "bg-emerald-100 text-emerald-700",
+                iconWrap: "bg-emerald-100 text-emerald-700",
+                amount: "text-emerald-600",
+            };
+        case "ANULACION_COBRO":
+            return {
+                icon: ShieldAlert,
+                chip: "bg-amber-100 text-amber-700",
+                iconWrap: "bg-amber-100 text-amber-700",
+                amount: "text-amber-600",
+            };
+        case "EGRESO":
+            return {
+                icon: TrendingDown,
+                chip: "bg-red-100 text-red-700",
+                iconWrap: "bg-red-100 text-red-700",
+                amount: "text-red-600",
+            };
+        default:
+            return {
+                icon: CheckCircle2,
+                chip: "bg-blue-100 text-blue-700",
+                iconWrap: "bg-blue-100 text-blue-700",
+                amount: "text-blue-600",
+            };
+    }
 }
 
 function SummaryMetric({
@@ -460,68 +503,50 @@ export function CashboxEmployeePageClient() {
                         <div className="space-y-6">
                             <section className="rounded-[2rem] border border-zinc-200 bg-white p-6 shadow-sm">
                                 <div className="mb-4 flex items-center gap-3">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                                        <Banknote className="h-5 w-5" />
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                                        <History className="h-5 w-5" />
                                     </div>
                                     <div>
-                                        <h2 className="text-lg font-black tracking-tight text-zinc-900">Cobros recientes</h2>
-                                        <p className="text-sm text-zinc-500">Ingresos asociados a tu caja activa</p>
+                                        <h2 className="text-lg font-black tracking-tight text-zinc-900">Actividad del turno</h2>
+                                        <p className="text-sm text-zinc-500">
+                                            Todos los movimientos de tu caja activa ({currentCashbox.movements.length})
+                                        </p>
                                     </div>
                                 </div>
-                                <div className="space-y-3">
-                                    {recentPayments.length === 0 ? (
+                                <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-2 pb-2">
+                                    {currentCashbox.movements.length === 0 ? (
                                         <p className="rounded-[1.25rem] bg-zinc-50 px-4 py-6 text-sm font-medium text-zinc-500">
-                                            Aún no registraste cobros en esta caja.
+                                            Todavía no hay movimientos registrados en esta caja.
                                         </p>
                                     ) : (
-                                        recentPayments.map((movement) => (
-                                            <div key={movement.id} className="rounded-[1.25rem] border border-zinc-200 bg-zinc-50/70 p-4">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div>
-                                                        <p className="font-bold text-zinc-900">{movement.title}</p>
-                                                        <p className="text-sm text-zinc-500">{movement.description}</p>
+                                        currentCashbox.movements.map((movement) => {
+                                            const tone = getMovementTone(movement.type);
+                                            const MovementIcon = tone.icon;
+                                            return (
+                                                <div key={movement.id} className="flex items-start gap-3 rounded-[1.4rem] border border-zinc-200 bg-zinc-50/70 p-4">
+                                                    <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl", tone.iconWrap)}>
+                                                        <MovementIcon className="h-5 w-5" />
                                                     </div>
-                                                    <p className="text-sm font-black text-emerald-600">{formatCurrency(movement.amount)}</p>
-                                                </div>
-                                                <p className="mt-2 text-xs font-medium text-zinc-500">
-                                                    {formatDateTime(movement.happenedAt)} · {movement.methodId || "Sin método"}
-                                                </p>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            </section>
-
-                            <section className="rounded-[2rem] border border-zinc-200 bg-white p-6 shadow-sm">
-                                <div className="mb-4 flex items-center gap-3">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-100 text-red-700">
-                                        <TrendingDown className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-lg font-black tracking-tight text-zinc-900">Egresos recientes</h2>
-                                        <p className="text-sm text-zinc-500">Gastos operativos cargados desde caja</p>
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    {recentExpenses.length === 0 ? (
-                                        <p className="rounded-[1.25rem] bg-zinc-50 px-4 py-6 text-sm font-medium text-zinc-500">
-                                            No hay egresos registrados en esta caja.
-                                        </p>
-                                    ) : (
-                                        recentExpenses.map((movement) => (
-                                            <div key={movement.id} className="rounded-[1.25rem] border border-zinc-200 bg-zinc-50/70 p-4">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div>
-                                                        <p className="font-bold text-zinc-900">{movement.title}</p>
-                                                        <p className="text-sm text-zinc-500">{movement.description}</p>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <p className="font-black tracking-tight text-zinc-900">{movement.title}</p>
+                                                            <Badge className={cn("rounded-full border-none px-2.5 py-1 text-[11px] font-bold", tone.chip)}>
+                                                                {movement.type.replaceAll("_", " ")}
+                                                            </Badge>
+                                                        </div>
+                                                        <p className="mt-1 text-sm text-zinc-500">{movement.description}</p>
+                                                        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs font-medium text-zinc-500">
+                                                            <span>{formatDateTime(movement.happenedAt)}</span>
+                                                            {movement.methodId ? <span>Método: {movement.methodId}</span> : null}
+                                                        </div>
                                                     </div>
-                                                    <p className="text-sm font-black text-red-600">-{formatCurrency(movement.amount)}</p>
+                                                    <p className={cn("shrink-0 text-sm font-black", tone.amount)}>
+                                                        {movement.type === "EGRESO" || movement.type === "ANULACION_COBRO" ? "-" : "+"}
+                                                        {formatCurrency(movement.amount)}
+                                                    </p>
                                                 </div>
-                                                <p className="mt-2 text-xs font-medium text-zinc-500">
-                                                    {formatDateTime(movement.happenedAt)} · {movement.methodId || "Sin método"}
-                                                </p>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </div>
                             </section>
@@ -671,34 +696,45 @@ export function CashboxEmployeePageClient() {
                         </div>
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label className="text-sm font-bold text-zinc-700">Categoría</Label>
-                            <select
-                                value={expenseForm.categoria}
-                                onChange={(event) => setExpenseForm((current) => ({ ...current, categoria: event.target.value as CategoriaEgreso }))}
-                                className="h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700"
-                            >
-                                {EXPENSE_CATEGORIES.map((category) => (
-                                    <option key={category.id} value={category.id}>
-                                        {category.label}
-                                    </option>
-                                ))}
-                            </select>
+                    <div className="space-y-3">
+                        <Label className="text-sm font-bold text-zinc-700">Categoría</Label>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            {EXPENSE_CATEGORIES.map((category) => (
+                                <button
+                                    key={category.id}
+                                    type="button"
+                                    onClick={() => setExpenseForm((current) => ({ ...current, categoria: category.id }))}
+                                    className={cn(
+                                        "rounded-xl border-2 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all",
+                                        expenseForm.categoria === category.id
+                                            ? "border-zinc-900 bg-zinc-900 text-white"
+                                            : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-zinc-200 hover:bg-zinc-100"
+                                    )}
+                                >
+                                    {category.label}
+                                </button>
+                            ))}
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-sm font-bold text-zinc-700">Método</Label>
-                            <select
-                                value={expenseForm.metodoPago}
-                                onChange={(event) => setExpenseForm((current) => ({ ...current, metodoPago: event.target.value }))}
-                                className="h-12 w-full rounded-2xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700"
-                            >
-                                {paymentMethods.map((method) => (
-                                    <option key={method.id} value={method.id}>
-                                        {method.label}
-                                    </option>
-                                ))}
-                            </select>
+                    </div>
+
+                    <div className="space-y-3">
+                        <Label className="text-sm font-bold text-zinc-700">Método</Label>
+                        <div className="flex flex-wrap gap-2">
+                            {paymentMethods.map((method) => (
+                                <button
+                                    key={method.id}
+                                    type="button"
+                                    onClick={() => setExpenseForm((current) => ({ ...current, metodoPago: method.id }))}
+                                    className={cn(
+                                        "rounded-xl border-2 px-4 py-2 text-sm font-bold transition-all",
+                                        expenseForm.metodoPago === method.id
+                                            ? "border-zinc-900 bg-zinc-900 text-white"
+                                            : "border-zinc-100 bg-zinc-50 text-zinc-500 hover:border-zinc-200 hover:bg-zinc-100"
+                                    )}
+                                >
+                                    {method.label}
+                                </button>
+                            ))}
                         </div>
                     </div>
 

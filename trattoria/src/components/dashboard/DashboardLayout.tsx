@@ -19,10 +19,10 @@ export default function DashboardLayout({
                     <main className="app-shell-main">
                         {children}
                     </main>
+
+                    <AdminMobileNav />
                 </div>
             </SidebarInset>
-
-            <AdminMobileNav />
         </SidebarProvider>
     )
 }

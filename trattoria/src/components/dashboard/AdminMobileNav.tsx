@@ -87,14 +87,14 @@ export function AdminMobileNav() {
     );
 
     return (
-        <div className="md:hidden">
+        <div className="md:hidden flex-none bg-[#FCFBF8]">
             {/* Contextual sub-nav strip for Reportes sub-pages */}
             {isInsideReportes && reportesItem?.subItems && reportesItem.subItems.length > 0 && (
-                <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--admin-mobile-nav-offset)+0.5rem)] z-30 px-3">
-                    <div className="pointer-events-auto mx-auto max-w-lg">
+                <div className="px-3 pt-2">
+                    <div className="mx-auto max-w-lg">
                         <div className={cn(
                             "flex items-center gap-1.5 rounded-2xl border px-2 py-1.5",
-                            "border-rose-200/60 bg-white/95 shadow-[0_8px_24px_rgba(244,63,94,0.10)] backdrop-blur-xl"
+                            "border-rose-200/60 bg-white shadow-sm"
                         )}>
                             {reportesItem.subItems.map((sub) => {
                                 const SubIcon = sub.icon ?? reportesItem.icon;
@@ -124,9 +124,9 @@ export function AdminMobileNav() {
             {/* Main bottom navigation bar */}
             <nav
                 aria-label="Navegación principal de administrador"
-                className="app-mobile-nav pointer-events-none fixed inset-x-0 bottom-0 z-40"
+                className="z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
             >
-                <div className="pointer-events-auto mx-auto max-w-lg rounded-[1.75rem] border border-zinc-200 bg-white/95 p-2 shadow-[0_16px_40px_rgba(15,23,42,0.12)] backdrop-blur-xl app-mobile-nav-panel">
+                <div className="mx-auto max-w-lg rounded-[1.75rem] border border-zinc-200 bg-white p-2 shadow-sm app-mobile-nav-panel">
                     <div className="grid grid-cols-5 gap-1.5">
                         {ADMIN_MOBILE_PRIMARY_ITEMS.map((item) => {
                             const isActive = isAdminItemActive(pathname, item);

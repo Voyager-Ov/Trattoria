@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { UnidadMedida, Prisma, DiscountType, ProductCatalogRole, ProductOptionPriceMode } from "@prisma/client";
 import { serializePrisma } from "@/lib/utils";
-import { requireAdmin } from "@/lib/serverAuth";
+import { requireAdmin, requireEmployee } from "@/lib/serverAuth";
 
 type ProductActionData = {
     nombre: string;
@@ -232,7 +232,7 @@ export async function createProduct(data: ProductActionData) {
 
 export async function createCategory(data: CategoryCreateData) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         const slug = data.nombre
             .toLowerCase()
             .trim()
@@ -674,7 +674,7 @@ export async function createProductWithRecipe(productData: ProductActionData, re
 
 export async function updateProductWithRecipe(id: string, productData: ProductActionData, recipeItems: { supplyId: string; qtyPerUnit: number; unidad: UnidadMedida }[]) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         const result = await prisma.$transaction(async (tx) => {
             // Update product
             const product = await tx.product.update({
@@ -1096,7 +1096,7 @@ export async function createConfigurableProduct(data: ConfigurableProductPayload
 
 export async function updateConfigurableProduct(id: string, data: ConfigurableProductPayload) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         await prisma.$transaction(async (tx) => {
             // 1. Update product
             await tx.product.update({
