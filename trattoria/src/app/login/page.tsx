@@ -96,7 +96,7 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center bg-zinc-50/50 p-4 relative overflow-hidden font-sans">
+        <div className="min-h-screen w-full flex flex-col items-center justify-center bg-zinc-50/50 p-4 relative overflow-x-hidden font-sans">
             {/* Subtle background glow */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/[0.03] rounded-full blur-[120px] pointer-events-none" />
 
