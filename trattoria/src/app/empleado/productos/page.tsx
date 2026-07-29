@@ -219,8 +219,8 @@ export default function ProductosPage() {
 
         try {
             const [menuRes, catRes] = await Promise.all([
-                fetch("/api/empleado/productos").then((res) => res.json()),
-                fetch("/api/empleado/productos/categorias").then((res) => res.json()),
+                fetch("/api/admin/dashboard/productos").then((res) => res.json()),
+                fetch("/api/admin/dashboard/productos/categorias").then((res) => res.json()),
             ]);
 
             if (menuRes.success) {

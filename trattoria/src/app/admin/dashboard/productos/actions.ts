@@ -125,7 +125,8 @@ export async function getProductById(id: string) {
 }
 
 function revalidateProductSurfaces(id?: string) {
-    revalidatePath("/admin/dashboard/productos");
+    revalidatePath("/empleado/productos");
+        revalidatePath("/admin/dashboard/productos");
     revalidatePath("/empleado/productos");
     revalidatePath("/api/admin/dashboard/productos");
     revalidatePath("/api/productos");
@@ -139,7 +140,7 @@ function revalidateProductSurfaces(id?: string) {
 
 export async function toggleProductAvailability(id: string, currentStatus: boolean) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         await prisma.product.update({
             where: { id },
             data: { disponible: !currentStatus },
@@ -154,7 +155,7 @@ export async function toggleProductAvailability(id: string, currentStatus: boole
 
 export async function toggleProductActive(id: string, currentStatus: boolean) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         await prisma.product.update({
             where: { id },
             data: { activo: !currentStatus },
@@ -169,7 +170,7 @@ export async function toggleProductActive(id: string, currentStatus: boolean) {
 
 export async function updateProductRole(id: string, role: ProductCatalogRole) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         await prisma.$transaction(async (tx) => {
             // When switching away from CONFIGURABLE_BASE, orphaned relations must be removed
             // to avoid FK constraint violations and stale data.
@@ -192,7 +193,7 @@ export async function updateProductRole(id: string, role: ProductCatalogRole) {
 
 export async function softDeleteProduct(id: string) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         await prisma.product.update({
             where: { id },
             data: { deletedAt: new Date() },
@@ -207,7 +208,7 @@ export async function softDeleteProduct(id: string) {
 
 export async function createProduct(data: ProductActionData) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         const product = await prisma.product.create({
             data: {
                 nombre: data.nombre,
@@ -222,6 +223,7 @@ export async function createProduct(data: ProductActionData) {
                 stockMaximo: Number(data.stockMaximo) || 0,
             },
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
         return { success: true, data: serializePrisma(product) };
     } catch (error) {
@@ -251,7 +253,9 @@ export async function createCategory(data: CategoryCreateData) {
                 slug,
             },
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/categorias");
         return { success: true, data: serializePrisma(category) };
     } catch (error) {
@@ -264,7 +268,7 @@ export async function createCategory(data: CategoryCreateData) {
 }
 export async function updateProduct(id: string, data: ProductActionData) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         const product = await prisma.product.update({
             where: { id },
             data: {
@@ -280,6 +284,7 @@ export async function updateProduct(id: string, data: ProductActionData) {
                 stockMaximo: Number(data.stockMaximo) || 0,
             },
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
         return { success: true, data: serializePrisma(product) };
     } catch (error) {
@@ -289,7 +294,7 @@ export async function updateProduct(id: string, data: ProductActionData) {
 }
 export async function createPromotion(data: PromotionActionData) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         // Alíasing de campos del UI si es necesario
         const name = data.name || data.nombre || "";
         const description = data.description || data.descripcion || "";
@@ -371,7 +376,9 @@ export async function createPromotion(data: PromotionActionData) {
             }
         });
 
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/promociones");
         return { success: true, data: serializePrisma(promotion) };
     } catch (error) {
@@ -416,7 +423,7 @@ export async function getPromotionById(id: string) {
 
 export async function updatePromotion(id: string, data: PromotionActionData) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         const name = data.name || data.nombre || "";
         const description = data.description || data.descripcion || "";
         const discountType = (data.discountType as DiscountType) || DiscountType.FIXED_AMOUNT;
@@ -494,7 +501,9 @@ export async function updatePromotion(id: string, data: PromotionActionData) {
             });
         });
 
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/promociones");
         revalidatePath(`/admin/dashboard/productos/promociones/${id}`);
         return { success: true, data: serializePrisma(promotion) };
@@ -507,12 +516,14 @@ export async function updatePromotion(id: string, data: PromotionActionData) {
 
 export async function deletePromotion(id: string) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         await prisma.promotion.update({
             where: { id },
             data: { deletedAt: new Date() }
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/promociones");
         return { success: true };
     } catch (error) {
@@ -522,7 +533,7 @@ export async function deletePromotion(id: string) {
 }
 export async function updateCategory(id: string, data: CategoryUpdateData) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         // Recalculate slug when nombre changes but no explicit slug was provided
         let slug = data.slug;
         if (!slug && data.nombre) {
@@ -546,7 +557,9 @@ export async function updateCategory(id: string, data: CategoryUpdateData) {
                 orden: data.orden,
             },
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/categorias");
         revalidatePath("/categoria/[slug]", "page");
         return { success: true, data: serializePrisma(category) };
@@ -561,7 +574,7 @@ export async function updateCategory(id: string, data: CategoryUpdateData) {
 
 export async function softDeleteCategory(id: string) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         // Check if there are active products in this category
         const productsCount = await prisma.product.count({
             where: {
@@ -581,7 +594,9 @@ export async function softDeleteCategory(id: string) {
             where: { id },
             data: { deletedAt: new Date() },
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/categorias");
         return { success: true };
     } catch (error) {
@@ -592,7 +607,7 @@ export async function softDeleteCategory(id: string) {
 
 export async function reorderCategories(orders: { id: string; orden: number }[]) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         await prisma.$transaction(
             orders.map((item) =>
                 prisma.category.update({
@@ -601,7 +616,9 @@ export async function reorderCategories(orders: { id: string; orden: number }[])
                 })
             )
         );
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/categorias");
         return { success: true };
     } catch (error) {
@@ -630,7 +647,7 @@ export async function getSupplies() {
 
 export async function createProductWithRecipe(productData: ProductActionData, recipeItems: { supplyId: string; qtyPerUnit: number; unidad: UnidadMedida }[]) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         const result = await prisma.$transaction(async (tx) => {
             // Create product
             const product = await tx.product.create({
@@ -663,6 +680,7 @@ export async function createProductWithRecipe(productData: ProductActionData, re
             timeout: 20000,
         });
 
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
         return { success: true, data: serializePrisma(result) };
     } catch (error) {
@@ -713,6 +731,7 @@ export async function updateProductWithRecipe(id: string, productData: ProductAc
             timeout: 20000,
         });
 
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos");
         return { success: true, data: serializePrisma(result) };
     } catch (error) {
@@ -779,7 +798,7 @@ export async function createProductOptionGroup(data: {
     orden: number;
 }) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         const normalizedKey = data.key.trim();
         if (!/^[a-z0-9_]+$/.test(normalizedKey)) {
             return {
@@ -796,6 +815,7 @@ export async function createProductOptionGroup(data: {
                 orden: data.orden,
             },
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/opciones");
         return { success: true, data: serializePrisma(group) };
     } catch (error) {
@@ -817,7 +837,7 @@ export async function updateProductOptionGroup(
     }
 ) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         // key is immutable — not included in update
         const group = await prisma.productOptionGroup.update({
             where: { id },
@@ -828,6 +848,7 @@ export async function updateProductOptionGroup(
                 orden: data.orden,
             },
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/opciones");
         return { success: true, data: serializePrisma(group) };
     } catch (error) {
@@ -838,7 +859,7 @@ export async function updateProductOptionGroup(
 
 export async function deleteProductOptionGroup(id: string) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         // Guard: check if group has product assignments
         const group = await prisma.productOptionGroup.findUnique({
             where: { id },
@@ -858,6 +879,7 @@ export async function deleteProductOptionGroup(id: string) {
 
         // Safe to hard delete — cascade will delete options
         await prisma.productOptionGroup.delete({ where: { id } });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/opciones");
         return { success: true };
     } catch (error) {
@@ -882,7 +904,7 @@ export async function createProductOption(
     }
 ) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         const option = await prisma.productOption.create({
             data: {
                 groupId,
@@ -894,6 +916,7 @@ export async function createProductOption(
                 orden: data.orden,
             },
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/opciones");
         return { success: true, data: serializePrisma(option) };
     } catch (error) {
@@ -916,7 +939,7 @@ export async function updateProductOption(
     }
 ) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         // slug is immutable — not included in update
         const option = await prisma.productOption.update({
             where: { id },
@@ -928,6 +951,7 @@ export async function updateProductOption(
                 orden: data.orden,
             },
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/opciones");
         return { success: true, data: serializePrisma(option) };
     } catch (error) {
@@ -938,11 +962,12 @@ export async function updateProductOption(
 
 export async function softDeleteProductOption(id: string) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         await prisma.productOption.update({
             where: { id },
             data: { deletedAt: new Date() },
         });
+        revalidatePath("/empleado/productos");
         revalidatePath("/admin/dashboard/productos/opciones");
         return { success: true };
     } catch (error) {
@@ -1025,7 +1050,7 @@ export async function getProductWithConfiguration(id: string) {
 
 export async function createConfigurableProduct(data: ConfigurableProductPayload) {
     try {
-        await requireAdmin();
+        await requireEmployee();
         const result = await prisma.$transaction(async (tx) => {
             // 1. Create product
             const product = await tx.product.create({

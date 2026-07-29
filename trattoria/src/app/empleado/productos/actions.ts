@@ -127,11 +127,11 @@ export async function getProductById(id: string) {
 function revalidateProductSurfaces(id?: string) {
     revalidatePath("/empleado/productos");
     revalidatePath("/empleado/productos");
-    revalidatePath("/api/empleado/productos");
+    revalidatePath("/api/admin/dashboard/productos");
     revalidatePath("/api/productos");
     if (id) {
         revalidatePath(`/empleado/productos/${id}`);
-        revalidatePath(`/api/empleado/productos/${id}`);
+        revalidatePath(`/api/admin/dashboard/productos/${id}`);
     }
     revalidatePath("/categoria/[slug]", "page");
     revalidatePath("/");
