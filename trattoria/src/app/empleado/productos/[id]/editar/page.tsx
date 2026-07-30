@@ -225,6 +225,11 @@ export default function EditarProductoPage({ params }: { params: Promise<{ id: s
         const file = e.target.files?.[0];
         if (!file) return;
 
+        if (file.size > 10 * 1024 * 1024) {
+            toast.error("La imagen no puede superar los 10MB");
+            return;
+        }
+
         const reader = new FileReader();
         reader.onloadend = () => {
             setFormData(prev => ({ ...prev, imagen: reader.result as string }));
