@@ -704,9 +704,6 @@ export default function ProductosPage() {
                                         </div>
                                         <div className="text-right">
                                             <p className="text-base font-black text-zinc-900">{formatCurrency(Number(item.precio))}</p>
-                                            {item.costoUnitario ? (
-                                                <p className="text-xs text-zinc-400">Margen {calculateMargin(Number(item.precio), Number(item.costoUnitario)).toFixed(0)}%</p>
-                                            ) : null}
                                         </div>
                                     </div>
 
@@ -752,20 +749,7 @@ export default function ProductosPage() {
                                     Precio
                                     <SortIcon field="precio" currentField={sortField} currentDirection={sortDirection} />
                                 </th>
-                                <th
-                                    onClick={() => handleSort("costo")}
-                                    className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
-                                >
-                                    Costo
-                                    <SortIcon field="costo" currentField={sortField} currentDirection={sortDirection} />
-                                </th>
-                                <th
-                                    onClick={() => handleSort("margen")}
-                                    className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
-                                >
-                                    Margen
-                                    <SortIcon field="margen" currentField={sortField} currentDirection={sortDirection} />
-                                </th>
+
                                 <th
                                     onClick={() => handleSort("unidad")}
                                     className="cursor-pointer px-6 py-5 text-left text-[0.65rem] font-semibold uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-700"
@@ -854,16 +838,7 @@ export default function ProductosPage() {
                                         </td>
                                         <td className="px-6 py-4 text-xs font-medium text-zinc-500">{item.categoria}</td>
                                         <td className="px-6 py-4 text-sm font-bold text-zinc-900">{formatCurrency(Number(item.precio))}</td>
-                                        <td className="px-6 py-4 text-xs text-zinc-400">{item.costoUnitario ? formatCurrency(Number(item.costoUnitario)) : "-"}</td>
-                                        <td className="px-6 py-4">
-                                            {item.costoUnitario ? (
-                                                <span className="rounded-md bg-zinc-50 px-2 py-1 text-xs font-bold text-zinc-500">
-                                                    {calculateMargin(Number(item.precio), Number(item.costoUnitario)).toFixed(1)}%
-                                                </span>
-                                            ) : (
-                                                <span className="text-xs text-zinc-300">-</span>
-                                            )}
-                                        </td>
+
                                         <td className="px-6 py-4">
                                             <Badge variant="outline" className="border-zinc-200 text-zinc-500">
                                                 {item.unidad}
@@ -1115,18 +1090,7 @@ export default function ProductosPage() {
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="rounded-[1.25rem] bg-zinc-50 p-4">
-                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Costo</p>
-                                <p className="mt-1 text-sm font-bold text-zinc-900">
-                                    {selectedItem.costoUnitario ? formatCurrency(Number(selectedItem.costoUnitario)) : "-"}
-                                </p>
-                            </div>
-                            <div className="rounded-[1.25rem] bg-zinc-50 p-4">
-                                <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Margen</p>
-                                <p className="mt-1 text-sm font-bold text-zinc-900">
-                                    {selectedItem.costoUnitario ? `${calculateMargin(Number(selectedItem.precio), Number(selectedItem.costoUnitario)).toFixed(1)}%` : "-"}
-                                </p>
-                            </div>
+
                             <div className="rounded-[1.25rem] bg-zinc-50 p-4">
                                 <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-400">Unidad</p>
                                 <p className="mt-1 text-sm font-bold text-zinc-900">{selectedItem.unidad}</p>
