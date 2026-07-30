@@ -3,35 +3,17 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
-    ChevronLeft,
-    Save,
-    Tag,
-    Calendar,
-    Image as ImageIcon,
-    LayoutGrid,
-    Package,
-    Plus,
-    X,
-    Check,
-    Search,
-    Loader2,
-    AlertCircle,
-    Info,
-    Clock,
-    DollarSign,
-    Percent,
-    Upload,
-    Minus
+    ChevronLeft, Save, Tag, Clock,
+    Image as ImageIcon, Upload, Check, Search, Loader2,
+    Minus, Plus, Info, Package
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { getCategories, getProducts, createPromotion } from "../../actions";
-import Link from "next/link";
 
 interface SelectionItem {
     id: string;
@@ -149,12 +131,12 @@ export default function NuevaPromocionPage() {
 
             if (res.success) {
                 toast.success("Promoción creada satisfactoriamente");
-                router.push("/empleado/productos");
+                router.back();
             } else {
                 toast.error(res.error || "Error al crear la promoción");
             }
         } catch (error) {
-            toast.error("Error inesperado");
+            toast.error("Ocurrió un error inesperado");
         } finally {
             setLoading(false);
         }
@@ -190,6 +172,11 @@ export default function NuevaPromocionPage() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            if (file.size > 10 * 1024 * 1024) {
+                toast.error("La imagen supera los 10MB permitidos.");
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                return;
+            }
             const reader = new FileReader();
             reader.onloadend = () => {
                 setPreviewImage(reader.result as string);
@@ -212,257 +199,87 @@ export default function NuevaPromocionPage() {
     );
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-8 p-12 bg-[#F8F9FA] min-h-screen w-full">
-            {/* Header section - Full Width */}
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 sticky top-0 z-20 bg-[#F8F9FA]/90 backdrop-blur-xl py-6 -mt-12 border-b border-zinc-100">
-                <div className="flex items-center gap-6">
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => router.back()}
-                        className="h-14 w-14 rounded-[1.5rem] bg-white shadow-sm border border-zinc-200 hover:border-zinc-900 transition-all hover:scale-105 active:scale-95"
-                    >
-                        <ChevronLeft className="h-7 w-7 text-zinc-900" />
-                    </Button>
-                    <div>
-                        <h1 className="text-4xl font-black text-zinc-900 tracking-tight">Nueva Promoción</h1>
-                        <p className="text-zinc-500 text-lg font-medium opacity-70 italic">Diseña una oferta irresistible para tu menú</p>
+        <form onSubmit={handleSubmit} className="flex h-[calc(100vh-2rem)] md:h-[calc(100vh-6rem)] w-full overflow-hidden bg-zinc-50 rounded-[2rem] border border-zinc-200 shadow-sm">
+            
+            {/* LEFT PANEL - Configuration */}
+            <div className="w-full md:w-[450px] shrink-0 bg-white border-r border-zinc-200 flex flex-col relative z-10">
+                {/* Fixed Header */}
+                <div className="p-5 border-b border-zinc-100 flex items-center justify-between bg-white shrink-0">
+                    <div className="flex items-center gap-3">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => router.back()}
+                            className="h-10 w-10 rounded-xl bg-zinc-50 hover:bg-zinc-100"
+                        >
+                            <ChevronLeft className="h-5 w-5 text-zinc-900" />
+                        </Button>
+                        <div>
+                            <h1 className="text-xl font-black text-zinc-900 leading-none">Nueva Promoción</h1>
+                            <p className="text-xs text-zinc-500 font-medium mt-1">Configuración general</p>
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4 w-full lg:w-auto">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => router.back()}
-                        className="flex-1 lg:flex-none rounded-[2rem] border-zinc-200 text-zinc-500 hover:bg-white transition-all font-bold h-14 px-10 text-lg"
-                    >
-                        Descartar
-                    </Button>
-                    <Button
-                        type="submit"
-                        disabled={loading}
-                        className="flex-1 lg:flex-none rounded-[2rem] bg-zinc-900 text-white hover:bg-zinc-800 transition-all font-black h-14 px-12 text-lg shadow-2xl shadow-zinc-300 transform motion-safe:hover:-translate-y-1 active:scale-95"
-                    >
-                        {loading ? <Loader2 className="h-6 w-6 animate-spin mr-3" /> : <Save className="h-6 w-6 mr-3" />}
-                        Publicar Oferta
-                    </Button>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
-                {/* Left Column - Configuration (Basic Info & Vigencia) */}
-                <div className="xl:col-span-4 space-y-10">
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-5 space-y-8 custom-scrollbar">
+                    
                     {/* Basic Info */}
-                    <Card className="rounded-[3rem] border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden bg-white">
-                        <CardHeader className="p-10 pb-0">
-                            <Badge className="w-fit bg-zinc-900 text-white font-black px-4 py-1 rounded-full text-xs">PASO 1</Badge>
-                            <h2 className="text-2xl font-black text-zinc-900">Información General</h2>
-                        </CardHeader>
-                        <CardContent className="p-10 space-y-8">
-                            <div className="space-y-3">
-                                <Label className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] ml-2">Nombre de la Promo</Label>
-                                <Input
-                                    placeholder="Ej: Mega Combo Familiar"
-                                    className="h-16 rounded-[1.5rem] border-zinc-100 bg-zinc-50 font-bold text-xl px-6 focus:border-zinc-900 focus:ring-0"
-                                    value={formData.name}
-                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="space-y-3">
-                                <Label className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] ml-2">Descripción</Label>
-                                <Textarea
-                                    placeholder="Cuéntale a tus clientes qué incluye..."
-                                    className="min-h-[120px] rounded-[2rem] border-zinc-100 bg-zinc-50 font-medium p-6 text-lg focus:border-zinc-900 focus:ring-0 italic"
-                                    value={formData.description}
-                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="space-y-4">
-                                <Label className="text-xs font-black text-zinc-400 uppercase tracking-[0.2em] ml-2">Imagen Publicitaria</Label>
-                                <div
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="relative h-64 w-full rounded-[2.5rem] border-4 border-dashed border-zinc-100 hover:border-zinc-900 transition-all bg-zinc-50 flex flex-col items-center justify-center gap-4 cursor-pointer overflow-hidden group"
-                                >
-                                    {previewImage ? (
-                                        <>
-                                            <img src={previewImage} alt="Preview" className="h-full w-full object-cover" />
-                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center transition-all">
-                                                <Upload className="h-10 w-10 text-white" />
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="h-20 w-20 bg-white rounded-3xl shadow-lg flex items-center justify-center">
-                                                <Upload className="h-10 w-10 text-zinc-400" />
-                                            </div>
-                                            <div className="text-center">
-                                                <p className="font-black text-zinc-900">Seleccionar Archivo</p>
-                                                <p className="text-xs text-zinc-400 font-bold uppercase tracking-widest mt-1">PNG, JPG hasta 5MB</p>
-                                            </div>
-                                        </>
-                                    )}
-                                    <input
-                                        type="file"
-                                        ref={fileInputRef}
-                                        className="hidden"
-                                        accept="image/*"
-                                        onChange={handleFileChange}
-                                    />
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Vigencia & Días */}
-                    <Card className="rounded-[3rem] border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] overflow-hidden bg-white">
-                        <CardHeader className="p-10 pb-0">
-                            <div className="flex flex-col gap-2">
-                                <Badge className="w-fit bg-zinc-900 text-white font-black px-4 py-1 rounded-full text-xs">VIGENCIA</Badge>
-                                <h2 className="text-2xl font-black text-zinc-900">¿Cuándo se activa?</h2>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-10 space-y-10">
-                            <div className="grid grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <Label className="text-[0.65rem] font-black text-zinc-400 uppercase tracking-widest ml-1">Fecha Desde</Label>
-                                    <Input
-                                        type="date"
-                                        className="h-14 rounded-[1.2rem] border-zinc-100 bg-zinc-50 font-bold px-4"
-                                        value={formData.startDate}
-                                        onChange={e => setFormData({ ...formData, startDate: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[0.65rem] font-black text-zinc-400 uppercase tracking-widest ml-1">Fecha Hasta</Label>
-                                    <Input
-                                        type="date"
-                                        className="h-14 rounded-[1.2rem] border-zinc-100 bg-zinc-50 font-bold px-4 focus:ring-zinc-900"
-                                        value={formData.endDate}
-                                        onChange={e => setFormData({ ...formData, endDate: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                <Label className="text-[0.65rem] font-black text-zinc-400 uppercase tracking-widest ml-1 flex items-center gap-2">
-                                    <Clock className="h-3 w-3" />
-                                    Días específicos
-                                </Label>
-                                <div className="flex flex-wrap gap-2">
-                                    {DAYS.map(day => (
-                                        <button
-                                            key={day.value}
-                                            type="button"
-                                            onClick={() => toggleDay(day.value)}
-                                            className={`h-11 w-11 rounded-xl font-black text-xs transition-all border-2 ${selectedDays.includes(day.value)
-                                                ? 'bg-zinc-900 text-white border-zinc-900 shadow-xl shadow-zinc-200'
-                                                : 'bg-white text-zinc-400 border-zinc-50 hover:border-zinc-200'
-                                                }`}
-                                        >
-                                            {day.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Right Column - Product Grid Selection, Categories & Price */}
-                <div className="xl:col-span-8 space-y-10">
-                    <div className="flex justify-between items-end px-2">
-                        <div>
-                            <h2 className="text-4xl font-black text-zinc-900 tracking-tight">Selección de Productos</h2>
-                            <p className="text-zinc-500 font-bold">Toca para añadir y ajusta cantidades con los controles</p>
-                        </div>
-                        <div className="bg-white p-2 rounded-2xl border border-zinc-100 flex items-center gap-3 shadow-sm">
-                            <Search className="h-5 w-5 text-zinc-400 ml-2" />
+                    <div className="space-y-4">
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Nombre</Label>
                             <Input
-                                placeholder="Buscar platillo..."
-                                className="border-none bg-transparent h-10 w-64 focus-visible:ring-0 font-bold"
-                                value={productSearch}
-                                onChange={e => setProductSearch(e.target.value)}
+                                placeholder="Ej: Combo Familiar"
+                                className="h-11 rounded-xl border-zinc-200 bg-white font-bold text-sm px-4 focus:ring-zinc-900 focus:border-zinc-900"
+                                value={formData.name}
+                                onChange={e => setFormData({ ...formData, name: e.target.value })}
                             />
                         </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 2xl:grid-cols-4 gap-6">
-                        {filteredProducts.map(product => {
-                            const selected = selectedProducts.find(p => p.id === product.id);
-                            const isSelected = !!selected;
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Descripción</Label>
+                            <Textarea
+                                placeholder="¿Qué incluye esta oferta?"
+                                className="min-h-[80px] rounded-xl border-zinc-200 bg-white font-medium p-4 text-sm focus:ring-zinc-900 focus:border-zinc-900 resize-none"
+                                value={formData.description}
+                                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                            />
+                        </div>
 
-                            return (
-                                <div
-                                    key={product.id}
-                                    className={`group relative rounded-[2.5rem] border-4 transition-all overflow-hidden bg-white flex flex-col ${isSelected
-                                        ? 'border-zinc-900 ring-4 ring-zinc-100'
-                                        : 'border-transparent shadow-sm hover:shadow-xl hover:border-zinc-100'
-                                        }`}
-                                >
-                                    <div
-                                        onClick={() => toggleProduct(product.id)}
-                                        className="h-32 w-full bg-zinc-50 flex items-center justify-center overflow-hidden cursor-pointer relative"
-                                    >
-                                        {product.imagen ? (
-                                            <img src={product.imagen} alt={product.nombre} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                                        ) : (
-                                            <ImageIcon className="h-10 w-10 text-zinc-200" />
-                                        )}
-                                        {isSelected && (
-                                            <div className="absolute top-3 right-3 bg-zinc-900 text-white rounded-full p-1.5 shadow-xl">
-                                                <Check className="h-3 w-3 stroke-[4px]" />
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="p-5 flex-1 flex flex-col justify-between">
-                                        <div>
-                                            <h4 className="font-black text-lg text-zinc-900 leading-tight uppercase tracking-tighter mb-1 line-clamp-1">
-                                                {product.nombre}
-                                            </h4>
-                                            <p className="text-zinc-400 text-[0.6rem] font-black uppercase tracking-widest leading-none mb-3">ID: {product.id.slice(-6)}</p>
-                                            <span className="text-xl font-black text-zinc-900 tracking-tight">${Number(product.precio).toLocaleString()}</span>
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center justify-between">
+                                <span>Imagen</span>
+                                <span className="text-[9px] text-zinc-300">Máx 10MB</span>
+                            </Label>
+                            <div
+                                onClick={() => fileInputRef.current?.click()}
+                                className="relative h-40 w-full rounded-xl border-2 border-dashed border-zinc-200 hover:border-zinc-900 transition-all bg-zinc-50 flex flex-col items-center justify-center cursor-pointer overflow-hidden group"
+                            >
+                                {previewImage ? (
+                                    <>
+                                        <img src={previewImage} alt="Preview" className="h-full w-full object-cover" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <Upload className="h-6 w-6 text-white" />
                                         </div>
-
-                                        {isSelected && (
-                                            <div className="mt-4 flex items-center justify-between p-1 bg-zinc-100 rounded-2xl">
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => { e.stopPropagation(); updateProductQuantity(product.id, -1); }}
-                                                    className="h-9 w-9 bg-white rounded-xl shadow-sm flex items-center justify-center hover:bg-zinc-50 active:scale-95 transition-all"
-                                                >
-                                                    <Minus className="h-4 w-4 text-zinc-900" />
-                                                </button>
-                                                <span className="font-black text-lg text-zinc-900">{selected.quantity}</span>
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => { e.stopPropagation(); updateProductQuantity(product.id, 1); }}
-                                                    className="h-9 w-9 bg-white rounded-xl shadow-sm flex items-center justify-center hover:bg-zinc-50 active:scale-95 transition-all"
-                                                >
-                                                    <Plus className="h-4 w-4 text-zinc-900" />
-                                                </button>
-                                            </div>
-                                        )}
+                                    </>
+                                ) : (
+                                    <div className="flex flex-col items-center gap-2">
+                                        <div className="h-10 w-10 bg-white rounded-full shadow-sm flex items-center justify-center">
+                                            <Upload className="h-4 w-4 text-zinc-400" />
+                                        </div>
+                                        <span className="text-xs font-bold text-zinc-500">Tocar para subir foto</span>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                )}
+                                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Categorías de Promo */}
-                    <Card className="rounded-[3rem] border-none shadow-[0_20px_50px_rgba(0,0,0,0.05)] bg-white overflow-hidden">
-                        <CardHeader className="p-10 pb-6 flex flex-row justify-between items-center">
-                            <div>
-                                <CardTitle className="text-xl font-black uppercase tracking-widest text-zinc-900">Categorías de Promo</CardTitle>
-                                <CardDescription className="font-bold">¿Dónde aparecerá esta oferta?</CardDescription>
-                            </div>
-                            <LayoutGrid className="h-8 w-8 text-zinc-200" />
-                        </CardHeader>
-                        <CardContent className="p-10 pt-0 flex flex-wrap gap-3">
+                    {/* Categories */}
+                    <div className="space-y-3">
+                        <Label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Categorías donde aparece</Label>
+                        <div className="flex flex-wrap gap-2">
                             {categories.map(cat => {
                                 const isSelected = selectedCategories.includes(cat.id);
                                 return (
@@ -472,95 +289,206 @@ export default function NuevaPromocionPage() {
                                         onClick={() => setSelectedCategories(prev =>
                                             prev.includes(cat.id) ? prev.filter(c => c !== cat.id) : [...prev, cat.id]
                                         )}
-                                        className={`px-8 py-4 rounded-[1.5rem] font-black text-sm transition-all border-2 flex items-center gap-3 ${isSelected
-                                            ? 'bg-zinc-900 text-white border-zinc-900 shadow-xl shadow-zinc-200'
-                                            : 'bg-zinc-50 text-zinc-500 border-zinc-100 hover:border-zinc-200'
-                                            }`}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                            isSelected 
+                                            ? 'bg-zinc-900 text-white border-zinc-900' 
+                                            : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'
+                                        }`}
                                     >
                                         {cat.nombre}
-                                        {isSelected && <Check className="h-4 w-4 stroke-[3px]" />}
                                     </button>
                                 );
                             })}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
 
-                    {/* Price & Discount logic Card (NOW AT THE BOTTOM) */}
-                    <Card className="rounded-[4rem] border-none shadow-[0_40px_80px_rgba(0,0,0,0.1)] overflow-hidden bg-white border-4 border-zinc-900/5">
-                        <div className="grid grid-cols-1 lg:grid-cols-2">
-                            <div className="p-12 space-y-8 bg-zinc-900 text-white">
-                                <div className="flex items-center gap-4">
-                                    <div className="h-16 w-16 bg-white/10 rounded-[2rem] flex items-center justify-center backdrop-blur-xl">
-                                        <Tag className="h-8 w-8 text-emerald-400" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-3xl font-black uppercase tracking-tighter">Precio Final</CardTitle>
-                                        <CardDescription className="text-zinc-400 font-bold">Define cuánto pagará el cliente</CardDescription>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <Label className="text-[0.65rem] font-black text-zinc-500 uppercase tracking-[0.3em] ml-2">Precio de Venta Sugerido</Label>
-                                    <div className="relative">
-                                        <div className="absolute left-8 top-1/2 -translate-y-1/2 text-white/20 font-black text-5xl">$</div>
-                                        <Input
-                                            type="number"
-                                            step="any"
-                                            placeholder="0.00"
-                                            className="h-28 rounded-[2.5rem] border-none bg-white/5 focus:bg-white/10 text-white pl-16 text-5xl font-black transition-all"
-                                            value={formData.finalPrice}
-                                            onChange={(e) => setFormData({ ...formData, finalPrice: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
+                    {/* Vigencia */}
+                    <div className="space-y-4">
+                        <Label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Vigencia (Opcional)</Label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label className="text-[9px] font-bold text-zinc-400">FECHA DESDE</Label>
+                                <Input type="date" className="h-10 rounded-xl bg-white border-zinc-200 text-xs px-3" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
                             </div>
-
-                            <div className="p-12 flex flex-col justify-center space-y-8 bg-emerald-50">
-                                <div className="space-y-6">
-                                    <div className="flex justify-between items-center text-emerald-900/40 font-black text-sm uppercase tracking-widest">
-                                        <span>Valor Total Productos</span>
-                                        <span className="line-through text-2xl">${totalOriginalPrice.toLocaleString()}</span>
-                                    </div>
-
-                                    <div className="h-px bg-emerald-200/50 w-full" />
-
-                                    <div className="flex justify-between items-end">
-                                        <div className="space-y-1">
-                                            <p className="text-xs font-black text-emerald-600 uppercase tracking-[0.2em]">Ahorro Real</p>
-                                            <h3 className="text-5xl font-black text-emerald-700 tracking-tighter">
-                                                -${calculatedDiscount.toLocaleString()}
-                                            </h3>
-                                        </div>
-                                        <div className="bg-emerald-600 text-white px-8 py-4 rounded-[2rem] font-black text-3xl shadow-2xl shadow-emerald-200">
-                                            {savingsPercentage}% OFF
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="p-6 bg-white/50 rounded-[2rem] border border-emerald-200 flex gap-4 items-center">
-                                    <div className="h-12 w-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg">
-                                        <Info className="h-6 w-6" />
-                                    </div>
-                                    <p className="text-xs font-bold text-emerald-800 leading-tight">
-                                        Esta oferta representa un beneficio directo de **${calculatedDiscount.toLocaleString()}** para tus clientes habituales.
-                                    </p>
-                                </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-[9px] font-bold text-zinc-400">FECHA HASTA</Label>
+                                <Input type="date" className="h-10 rounded-xl bg-white border-zinc-200 text-xs px-3" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} />
                             </div>
                         </div>
-                    </Card>
+                        <div className="pt-1">
+                            <Label className="text-[9px] font-bold text-zinc-400 mb-2 block">DÍAS ESPECÍFICOS (VACÍO = TODOS)</Label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {DAYS.map(day => (
+                                    <button
+                                        key={day.value}
+                                        type="button"
+                                        onClick={() => toggleDay(day.value)}
+                                        className={`h-8 w-8 rounded-lg font-bold text-[10px] transition-all border ${
+                                            selectedDays.includes(day.value)
+                                            ? 'bg-zinc-900 text-white border-zinc-900'
+                                            : 'bg-white text-zinc-400 border-zinc-200'
+                                        }`}
+                                    >
+                                        {day.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Fixed Footer with Price */}
+                <div className="border-t border-zinc-200 bg-zinc-50 shrink-0 p-5 space-y-4">
+                    <div className="bg-white rounded-2xl border border-zinc-200 p-4 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-2 opacity-10 pointer-events-none">
+                            <Tag className="h-16 w-16" />
+                        </div>
+                        <div className="flex justify-between items-center mb-3 relative z-10">
+                            <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Valor normal</span>
+                            <span className="text-sm font-bold text-zinc-400 line-through">${totalOriginalPrice.toLocaleString()}</span>
+                        </div>
+                        <div className="space-y-1.5 relative z-10">
+                            <Label className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Precio Final de Venta</Label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-bold">$</span>
+                                <Input
+                                    type="number"
+                                    step="any"
+                                    placeholder="0.00"
+                                    className="h-12 rounded-xl border-orange-200 bg-orange-50/50 pl-8 text-lg font-black text-zinc-900 focus:border-orange-500 focus:ring-orange-500/20"
+                                    value={formData.finalPrice}
+                                    onChange={(e) => setFormData({ ...formData, finalPrice: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        {calculatedDiscount > 0 && (
+                            <div className="mt-3 flex items-center justify-between text-[11px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 relative z-10">
+                                <span>Ahorro: ${calculatedDiscount.toLocaleString()}</span>
+                                <Badge className="bg-emerald-500 text-white hover:bg-emerald-600 border-none">{savingsPercentage}% OFF</Badge>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <Button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full h-12 rounded-xl bg-zinc-900 text-white font-black text-sm shadow-md hover:bg-zinc-800 transition-all hover:-translate-y-0.5 active:scale-95"
+                    >
+                        {loading ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Save className="h-5 w-5 mr-2" />}
+                        Publicar Promoción
+                    </Button>
+                </div>
+            </div>
+
+            {/* RIGHT PANEL - Products Catalog */}
+            <div className="flex-1 flex flex-col min-w-0 bg-[#F8F9FA] relative">
+                {/* Sticky Header */}
+                <div className="sticky top-0 z-10 p-5 bg-[#F8F9FA]/90 backdrop-blur-md border-b border-zinc-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
+                    <div>
+                        <h2 className="text-xl font-black text-zinc-900">Seleccionar Productos</h2>
+                        <p className="text-xs text-zinc-500 font-medium mt-1">
+                            {selectedProducts.length} items agregados al combo
+                        </p>
+                    </div>
+                    <div className="relative w-full sm:w-64">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                        <Input
+                            placeholder="Buscar en el menú..."
+                            className="h-10 rounded-xl border-zinc-200 bg-white pl-9 text-sm focus:border-zinc-900 focus:ring-0"
+                            value={productSearch}
+                            onChange={e => setProductSearch(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                {/* Grid */}
+                <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 pb-20">
+                        {filteredProducts.map(product => {
+                            const selected = selectedProducts.find(p => p.id === product.id);
+                            const isSelected = !!selected;
+
+                            return (
+                                <div
+                                    key={product.id}
+                                    className={`group relative rounded-[1.5rem] transition-all overflow-hidden bg-white flex flex-col border ${
+                                        isSelected
+                                        ? 'border-orange-500 shadow-lg shadow-orange-500/10 ring-1 ring-orange-500'
+                                        : 'border-zinc-200 shadow-sm hover:shadow-md hover:border-zinc-300'
+                                    }`}
+                                >
+                                    <div
+                                        onClick={() => toggleProduct(product.id)}
+                                        className="h-28 w-full bg-zinc-50 flex items-center justify-center overflow-hidden cursor-pointer relative shrink-0"
+                                    >
+                                        {product.imagen ? (
+                                            <img src={product.imagen} alt={product.nombre} className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                        ) : (
+                                            <ImageIcon className="h-8 w-8 text-zinc-300" />
+                                        )}
+                                        {isSelected && (
+                                            <div className="absolute top-2 right-2 bg-orange-500 text-white rounded-full p-1 shadow-md">
+                                                <Check className="h-3 w-3 stroke-[4px]" />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="p-3 flex-1 flex flex-col justify-between min-h-[5rem]">
+                                        <div>
+                                            <h4 className="font-bold text-xs text-zinc-900 leading-snug mb-1">
+                                                {product.nombre}
+                                            </h4>
+                                            <span className="text-sm font-black text-zinc-900">${Number(product.precio).toLocaleString()}</span>
+                                        </div>
+
+                                        {isSelected && (
+                                            <div className="mt-3 flex items-center justify-between p-1 bg-zinc-100 rounded-lg">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); updateProductQuantity(product.id, -1); }}
+                                                    className="h-7 w-7 bg-white rounded-md shadow-sm flex items-center justify-center hover:bg-zinc-50 transition-all"
+                                                >
+                                                    <Minus className="h-3 w-3 text-zinc-900" />
+                                                </button>
+                                                <span className="font-black text-sm text-zinc-900">{selected.quantity}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); updateProductQuantity(product.id, 1); }}
+                                                    className="h-7 w-7 bg-white rounded-md shadow-sm flex items-center justify-center hover:bg-zinc-50 transition-all"
+                                                >
+                                                    <Plus className="h-3 w-3 text-zinc-900" />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {filteredProducts.length === 0 && (
+                            <div className="col-span-full py-10 flex flex-col items-center justify-center text-zinc-400">
+                                <Package className="h-10 w-10 mb-2 opacity-50" />
+                                <p className="font-medium">No se encontraron productos</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
             <style jsx global>{`
-                body {
-                    background-color: #F8F9FA;
+                .custom-scrollbar::-webkit-scrollbar {
+                    width: 6px;
                 }
-                input[type="date"]::-webkit-calendar-picker-indicator {
-                    filter: invert(0);
-                    cursor: pointer;
+                .custom-scrollbar::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background-color: #e4e4e7;
+                    border-radius: 20px;
+                }
+                .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+                    background-color: #d4d4d8;
                 }
             `}</style>
         </form>
     );
 }
-
