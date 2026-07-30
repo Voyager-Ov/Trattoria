@@ -51,8 +51,15 @@ export function LinkedAccountsCard() {
             toast.success('Cuenta de Google vinculada correctamente');
         } catch (error: unknown) {
             console.error('Error linking Google:', error);
-            if (getFirebaseErrorCode(error) === 'auth/credential-already-in-use') {
-                toast.error('Esta cuenta ya esta en uso');
+            const code = getFirebaseErrorCode(error);
+            if (code === 'auth/credential-already-in-use') {
+                toast.error('Tu cuenta de Google ya está registrada. Si usás el mismo email, simplemente cerrá sesión y elegí "Continuar con Google".', { duration: 6000 });
+            } else if (code === 'auth/popup-closed-by-user') {
+                toast.info('Cancelaste la vinculación con Google');
+            } else if (code === 'auth/popup-blocked') {
+                toast.error('El navegador bloqueó la ventana emergente. Habilitá los popups para esta página.');
+            } else if (code === 'auth/operation-not-supported-in-this-environment') {
+                toast.error('Esta función no está soportada en este navegador (intenta usar Safari o Chrome normal).');
             } else {
                 toast.error(`Error: ${getErrorMessage(error)}`);
             }
